@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // อ่านค่า token จาก cookie
   const token = request.cookies.get('token')?.value;
   
@@ -26,7 +26,7 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// กำหนด path ที่จะให้ Middleware ทำงาน
+// กำหนด path ที่จะให้ Proxy ทำงาน
 export const config = {
   matcher: [
     '/((?!api|_next/static|_next/image|favicon.ico).*)',

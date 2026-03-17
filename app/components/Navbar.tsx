@@ -16,6 +16,7 @@ import { TbReportSearch } from 'react-icons/tb';
 import Link from 'next/link';
 import { CgPerformance } from 'react-icons/cg';
 import { LiaHospital } from 'react-icons/lia';
+import { PiVirusBold } from 'react-icons/pi';
 
 const Navbar = () => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -89,7 +90,7 @@ const Navbar = () => {
                                                 <div>
                                                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Software</h3>
                                                     <ul className="space-y-3">
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Web Development</Link></li>
+                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">IC : Infection Controls</Link></li>
                                                         <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Mobile Apps</Link></li>
                                                         <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Desktop Software</Link></li>
                                                         <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Enterprise Solutions</Link></li>
@@ -195,6 +196,34 @@ const Navbar = () => {
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <TbReportSearch   className="w-5 h-5 text-white" />
                             <span>รายงาน</span>
+                           </div>
+                        </Link>
+                        <div className="flex items-center gap-3 p-2 font-bold border-t border-b border-white/10 mb-2 mt-4">
+                            <PiVirusBold className="w-5 h-5" />
+                            <span>IC : Infection Controls</span>
+                        </div>
+                        <Link href="/ic/opd" onClick={onCloseLeft}>
+                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <TbReportSearch   className="w-5 h-5 text-white" />
+                            <span>OPD Daily</span>
+                           </div>
+                        </Link>
+                        <Link href="/ic/ipd" onClick={onCloseLeft}>
+                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <TbReportSearch   className="w-5 h-5 text-white" />
+                            <span>IPD Daily</span>
+                           </div>
+                        </Link>
+                         <Link href="/ic/follow-up" onClick={onCloseLeft}>
+                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <TbReportSearch   className="w-5 h-5 text-white" />
+                            <span>ติดตามผู้ป่วยผ่าตัด(T814,A499)</span>
+                           </div>
+                        </Link>
+                        <Link href="/ic/dashboard" onClick={onCloseLeft}>
+                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <TbReportSearch   className="w-5 h-5 text-white" />
+                            <span>IC Dashboard</span>
                            </div>
                         </Link>
                         {/* <div className="flex items-center gap-3 p-2 mt-3 font-bold border-t border-b border-white/10 mb-0">
