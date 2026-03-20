@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import { Card, Table, DatePicker, Button, message } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
@@ -36,6 +37,7 @@ const Page = () => {
     dayjs().subtract(30, 'day'), // ค่าเริ่มต้นย้อนหลัง 30 วัน
     dayjs()
   ]);
+  const router = useRouter();
 
   const fetchData = async () => {
     if (!dates || !dates[0] || !dates[1]) {
@@ -48,6 +50,7 @@ const Page = () => {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       if (!token) {
         message.error('ไม่พบ Token สำหรับการยืนยันตัวตน');
+        router.push('/');
         setLoading(false);
         return;
       }
@@ -65,9 +68,14 @@ const Page = () => {
       } else {
         message.error('ไม่สามารถดึงข้อมูลได้');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching followup data:', error);
-      message.error('เกิดข้อผิดพลาดในการดึงข้อมูล');
+      if (error.response?.status === 401) {
+        message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+        router.push('/');
+      } else {
+        message.error('เกิดข้อผิดพลาดในการดึงข้อมูล');
+      }
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Drawer } from 'antd';
+import { useRouter, usePathname } from 'next/navigation';
+import { Drawer, Menu, ConfigProvider } from 'antd';
 import {
     VscSignOut,
     VscAccount,
@@ -17,11 +17,17 @@ import Link from 'next/link';
 import { CgPerformance } from 'react-icons/cg';
 import { LiaHospital } from 'react-icons/lia';
 import { PiVirusBold } from 'react-icons/pi';
+import { FaShippingFast } from 'react-icons/fa';
+import { RiSurgicalMaskLine } from 'react-icons/ri';
+import { GiChemicalBolt } from 'react-icons/gi';
 
 const Navbar = () => {
     const [openLeft, setOpenLeft] = useState(false);
     const [openRight, setOpenRight] = useState(false);
     const router = useRouter();
+    const pathname = usePathname();
+
+    const openKey = pathname ? pathname.split('/')[1] : '';
 
     const showLeftDrawer = () => setOpenLeft(true);
     const onCloseLeft = () => setOpenLeft(false);
@@ -74,7 +80,7 @@ const Navbar = () => {
                         </div>
                         <div className="hidden sm:block sm:ml-6">
                             <div className="flex space-x-4">
-                                <Link href="#" className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium">Home</Link>
+                                <Link href="/main" className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium">Home</Link>
                                 {/* Products Dropdown Trigger */}
                                 <div className="group">
                                     <button className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium flex items-center">
@@ -152,100 +158,140 @@ const Navbar = () => {
             >
                 <div className="flex flex-col h-full bg-linear-to-b from-[#005a50] to-[#008f7f] p-4 text-white">
                     <div className="flex-1">
-                        <div className="flex items-center gap-3 p-2 font-bold border-t border-b border-white/10 mb-2">
-                            <VscAccount className="w-5 h-5" />
-                            <span>IPD</span>
-                        </div>
-                        <Link href="/ipd/register" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <GrUserAdd  className="w-5 h-5 text-white" />
-                            <span>รับผู้ป่วย / รับย้าย</span>
-                           </div>
-                        </Link>
-                        <Link href="/ipd/patients" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <SiWikibooks  className="w-5 h-5 text-white" />
-                            <span>ทะเบียนผู้ป่วย</span>
-                           </div>
-                        </Link>
-                        <Link href="#" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <GrWheelchairActive  className="w-5 h-5 text-white" />
-                            <span>จำหน่ายผู้ป่วย / ย้ายออก</span>
-                           </div>
-                        </Link>
-                        <Link href="#" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <IoFastFoodOutline  className="w-5 h-5 text-white" />
-                            <span>สั่งอาหาร</span>
-                           </div>
-                        </Link>
-                        <Link href="#" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <VscChecklist  className="w-5 h-5 text-white" />
-                            <span>สรุปยอดผู้ป่วยรายเวร / FTE</span>
-                           </div>
-                        </Link>
-                        <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <GrSchedulePlay    className="w-5 h-5 text-white" />
-                            <span>ตารางการปฏิบัติงาน</span>
-                           </div>
-                        </Link>
-                        <Link href="#" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <TbReportSearch   className="w-5 h-5 text-white" />
-                            <span>รายงาน</span>
-                           </div>
-                        </Link>
-                        <div className="flex items-center gap-3 p-2 font-bold border-t border-b border-white/10 mb-2 mt-4">
-                            <PiVirusBold className="w-5 h-5" />
-                            <span>IC : Infection Controls</span>
-                        </div>
-                        <Link href="/ic/opd" onClick={onCloseLeft}>
-                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <TbReportSearch   className="w-5 h-5 text-white" />
-                            <span>OPD Daily</span>
-                           </div>
-                        </Link>
-                        <Link href="/ic/ipd" onClick={onCloseLeft}>
-                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <TbReportSearch   className="w-5 h-5 text-white" />
-                            <span>IPD Daily</span>
-                           </div>
-                        </Link>
-                         <Link href="/ic/follow-up" onClick={onCloseLeft}>
-                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <TbReportSearch   className="w-5 h-5 text-white" />
-                            <span>ติดตามผู้ป่วยผ่าตัด(T814,A499)</span>
-                           </div>
-                        </Link>
-                        <Link href="/ic/dashboard" onClick={onCloseLeft}>
-                           <div className=" flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <TbReportSearch   className="w-5 h-5 text-white" />
-                            <span>IC Dashboard</span>
-                           </div>
-                        </Link>
-                        {/* <div className="flex items-center gap-3 p-2 mt-3 font-bold border-t border-b border-white/10 mb-0">
-                            <VscAccount className="w-5 h-5" />
-                            <span>OPD</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors">
-                            <TbReportSearch   className="w-5 h-5" />
-                            <span>รายงาน</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-2 mt-3 font-bold border-t border-b border-white/10 mb-0">
-                            <VscAccount className="w-5 h-5" />
-                            <span>ER</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors">
-                            <TbReportSearch   className="w-5 h-5" />
-                            <span>บันทึกข้อมูลสถิติการรักษา</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-2 mt-3 font-bold border-t border-b border-white/10 mb-2">
-                            <VscAccount className="w-5 h-5" />
-                            <span>OR</span>
-                        </div> */}
+                        <ConfigProvider
+                            theme={{
+                                components: {
+                                    Menu: {
+                                        darkItemBg: 'transparent',
+                                        darkSubMenuItemBg: 'transparent',
+                                        darkItemSelectedBg: 'rgba(255, 255, 255, 0.1)',
+                                        darkItemHoverBg: 'rgba(255, 255, 255, 0.1)',
+                                        darkItemColor: '#fff',
+                                        itemPaddingInline: 8,
+                                        itemMarginInline: 0,
+                                        itemBorderRadius: 4,
+                                    }
+                                }
+                            }}
+                        >
+                            <Menu
+                                mode="inline"
+                                theme="dark"
+                                inlineIndent={12}
+                                defaultOpenKeys={[openKey]}
+                                selectedKeys={[pathname]}
+                                style={{ background: 'transparent', borderRight: 'none', padding: 0 }}
+                                className="mt-2 [&_.ant-menu-submenu-title]:px-2 [&_.ant-menu-submenu-title]:border-t [&_.ant-menu-submenu-title]:border-b [&_.ant-menu-submenu-title]:border-white/10 [&_.ant-menu-submenu-title]:font-bold [&_.ant-menu-submenu-title]:text-white [&_.ant-menu-title-content]:text-left"
+                                items={[
+                                    {
+                                        key: 'ipd',
+                                        icon: <VscAccount className="w-5 h-5 text-white" />,
+                                        label: <span className="text-white text-left block w-full">IPD</span>,
+                                        children: [
+                                            {
+                                                key: 'register',
+                                                icon: <GrUserAdd className="w-5 h-5" />,
+                                                label: <Link href="/ipd/register" onClick={onCloseLeft} className="text-white block w-full text-left">รับผู้ป่วย / รับย้าย</Link>,
+                                            },
+                                            {
+                                                key: 'patients',
+                                                icon: <SiWikibooks className="w-5 h-5" />,
+                                                label: <Link href="/ipd/patients" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนผู้ป่วย</Link>,
+                                            },
+                                            {
+                                                key: 'ipd_discharge',
+                                                icon: <GrWheelchairActive className="w-5 h-5" />,
+                                                label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">จำหน่ายผู้ป่วย / ย้ายออก</Link>,
+                                            },
+                                            {
+                                                key: 'food_order',
+                                                icon: <IoFastFoodOutline className="w-5 h-5" />,
+                                                label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
+                                            },
+                                            {
+                                                key: 'patient_shift_summary',
+                                                icon: <VscChecklist className="w-5 h-5" />,
+                                                label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร / FTE</Link>,
+                                            },
+                                            {
+                                                key: 'employee_shift_schedule',
+                                                icon: <GrSchedulePlay className="w-5 h-5" />,
+                                                label: <Link href="/ipd/shift-configs" onClick={onCloseLeft} className="text-white block w-full text-left">ตารางการปฏิบัติงาน</Link>,
+                                            },
+                                            {
+                                                key: 'ipd_report',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">รายงาน</Link>,
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        key: 'ic',
+                                        icon: <PiVirusBold className="w-5 h-5 text-white" />,
+                                        label: <span className="text-white text-left block w-full">IC : Infection Controls</span>,
+                                        children: [
+                                            {
+                                                key: '/ic/opd',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/ic/opd" onClick={onCloseLeft} className="text-white block w-full text-left">OPD Daily</Link>,
+                                            },
+                                            {
+                                                key: '/ic/ipd',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/ic/ipd" onClick={onCloseLeft} className="text-white block w-full text-left">IPD Daily</Link>,
+                                            },
+                                            {
+                                                key: '/ic/follow-up',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/ic/follow-up" onClick={onCloseLeft} className="text-white block w-full text-left">ติดตามผู้ป่วยผ่าตัด(T814,A499)</Link>,
+                                            },
+                                            {
+                                                key: '/ic/dashboard',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/ic/dashboard" onClick={onCloseLeft} className="text-white block w-full text-left">IC Dashboard</Link>,
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        key: 'ER',
+                                        icon: <FaShippingFast  className="w-5 h-5 text-white" />,
+                                        label: <span className="text-white text-left block w-full">ER</span>,
+                                        children: [
+                                            {
+                                                key: '/er/statistics',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="text-white block w-full text-left">บันทึกข้อมูลสถิติการรักษา</Link>,
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        key: 'OR',
+                                        icon: <RiSurgicalMaskLine   className="w-5 h-5 text-white" />,
+                                        label: <span className="text-white text-left block w-full">OR</span>,
+                                        children: [
+                                            {
+                                                key: '/or/statistics',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="text-white block w-full text-left">บันทึกข้อมูลสถิติการรักษา</Link>,
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        key: 'CHEMO',
+                                        icon: <GiChemicalBolt    className="w-5 h-5 text-white" />,
+                                        label: <span className="text-white text-left block w-full">CHEMO</span>,
+                                        children: [
+                                            {
+                                                key: '/chemo/statistics',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/chemo/statistics" onClick={onCloseLeft} className="text-white block w-full text-left">บันทึกข้อมูลสถิติการรักษา</Link>,
+                                            },
+                                        ]
+                                    },
+                                ]}
+                            />
+                        </ConfigProvider>
+
                     </div>
 
                 </div>

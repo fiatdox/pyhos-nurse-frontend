@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import * as echarts from 'echarts';
 import axios from 'axios';
 import { message, Spin } from 'antd';
@@ -15,6 +16,7 @@ interface InfectionResult {
 const LineSmooth = () => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     let chartInstance: echarts.ECharts | null = null;
@@ -25,6 +27,7 @@ const LineSmooth = () => {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) {
           message.error('ไม่พบ Token');
+          router.push('/');
           setLoading(false);
           return;
         }
@@ -81,8 +84,13 @@ const LineSmooth = () => {
             chartInstance.setOption(option);
           }
         }
-      } catch (error) {
-        message.error('เกิดข้อผิดพลาดในการดึงข้อมูล');
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+          router.push('/');
+        } else {
+          message.error('เกิดข้อผิดพลาดในการดึงข้อมูล');
+        }
       } finally {
         setLoading(false);
       }
@@ -98,7 +106,7 @@ const LineSmooth = () => {
   }, []);
 
   return (
-    <div className="relative w-full h-full min-h-[400px]">
+    <div className="relative w-full h-full min-h-100">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
           <Spin />

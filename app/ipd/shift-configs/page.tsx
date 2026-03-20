@@ -30,6 +30,7 @@ interface Ward {
 }
 
 export default function ShiftMatrix() {
+  const [messageApi, contextHolder] = message.useMessage();
   const [currentDate, setCurrentDate] = useState(dayjs());
   const daysInMonth = currentDate.daysInMonth();
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -55,11 +56,11 @@ export default function ShiftMatrix() {
         setWards(wardList);
       } catch (error) {
         console.error("Error fetching wards:", error);
-        message.error("ไม่สามารถดึงข้อมูลหอผู้ป่วยได้");
+        messageApi.error("ไม่สามารถดึงข้อมูลหอผู้ป่วยได้");
       }
     };
     fetchWards();
-  }, []);
+  }, [messageApi]);
 
   // โหลดรายชื่อเจ้าหน้าที่เมื่อเลือก ward
   const handleWardChange = async (value: string) => {
@@ -82,7 +83,7 @@ export default function ShiftMatrix() {
       setDataSource(staffRecords);
     } catch (error) {
       console.error("Error fetching ward staffs:", error);
-      message.error("ไม่สามารถดึงรายชื่อเจ้าหน้าที่ได้");
+      messageApi.error("ไม่สามารถดึงรายชื่อเจ้าหน้าที่ได้");
     } finally {
       setLoadingStaff(false);
     }
@@ -95,8 +96,33 @@ export default function ShiftMatrix() {
     setIsModalOpen(true);
   };
 
-  const handleModalOk = () => {
+  const handleModalOk = async () => {
     if (editingCell) {
+      // 1. จัดเตรียมข้อมูล JSON Payload
+      const payload = {
+        ward_id: selectedWard,
+        staff_id: editingCell.empId,
+        shift_date: currentDate.date(editingCell.day).format('YYYY-MM-DD'),
+        shift_types: tempShifts
+      };
+
+      // console.log("Payload to send to API:", JSON.stringify(payload, null, 2));
+
+      // 2. ตัวอย่างการยิง API เพื่อบันทึกข้อมูล (สามารถ Uncomment เพื่อใช้งานจริงได้)
+      /*
+      try {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        await axios.post('/api/v1/save-shift', payload, { headers });
+        messageApi.success('บันทึกเวรสำเร็จ');
+      } catch (error) {
+        console.error("Error saving shift:", error);
+        messageApi.error('เกิดข้อผิดพลาดในการบันทึกเวร');
+        return; // หาก API Error จะไม่อัปเดตตารางและไม่ปิด Modal
+      }
+      */
+
+      // 3. อัปเดตข้อมูลบนหน้าจอ (UI) เมื่อบันทึกสำเร็จ
       setDutyData((prev) => ({
         ...prev,
         [editingCell.empId]: {
@@ -107,6 +133,11 @@ export default function ShiftMatrix() {
     }
     setIsModalOpen(false);
     setEditingCell(null);
+  };
+
+  const isWeekend = (day: number) => {
+    const dayOfWeek = currentDate.date(day).day();
+    return dayOfWeek === 0 || dayOfWeek === 6; // 0 = วันอาทิตย์, 6 = วันเสาร์
   };
 
   const columns: ColumnsType<StaffRecord> = [
@@ -123,67 +154,63 @@ export default function ShiftMatrix() {
         </div>
       ),
     },
-    ...daysArray.map(day => ({
-      title: `${day}`,
-      dataIndex: 'day_' + day,
-      key: day,
-      align: 'center' as const,
-      render: (_: any, record: StaffRecord) => {
-        const shifts = dutyData[record.id]?.[day] || [];
-        return (
-          <div
-            onClick={() => handleCellClick(record, day)}
-            className="cursor-pointer h-8 flex flex-wrap justify-center items-center content-center hover:bg-blue-50 transition-colors"
-          >
-            {shifts.length > 0 ? (
-              shifts.map((s) => (
-                <span key={s} className={`text-[10px] font-bold mx-0.5 ${
-                  s === 'OFF' ? 'text-gray-300' :
-                  s === 'M' ? 'text-blue-600' :
-                  s === 'A' ? 'text-orange-500' :
-                  s === 'N' ? 'text-purple-600' : 'text-red-500'
-                }`}>
-                  {s === 'OFF' ? 'x' : s}
-                </span>
-              ))
-            ) : (
-              <span className="text-gray-200 text-[10px]">-</span>
-            )}
-          </div>
-        );
-      },
-    })),
+    ...daysArray.map(day => {
+      const weekend = isWeekend(day);
+      return {
+        title: weekend ? <span className="text-yellow-300">{day}</span> : `${day}`,
+        dataIndex: 'day_' + day,
+        key: day,
+        align: 'center' as const,
+        className: weekend ? 'bg-slate-100/60' : '',
+        render: (_: any, record: StaffRecord) => {
+          const shifts = dutyData[record.id]?.[day] || [];
+          return (
+            <div
+              onClick={() => handleCellClick(record, day)}
+              className={`cursor-pointer h-8 flex flex-wrap justify-center items-center content-center transition-colors ${weekend ? 'hover:bg-slate-200' : 'hover:bg-blue-50'}`}
+            >
+              {shifts.length > 0 ? (
+                shifts.map((s) => (
+                  <span key={s} className={`text-[10px] font-bold mx-0.5 whitespace-nowrap ${
+                    s === 'OFF' ? 'text-blue-500' :
+                    s.includes('ช') ? 'text-blue-600' :
+                    s.includes('บ') ? 'text-orange-500' :
+                    s.includes('ด') ? 'text-purple-600' : ''
+                  }`}>
+                    {s === 'OFF' ? 'x' : s}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-300 text-[10px]">-</span>
+              )}
+            </div>
+          );
+        },
+      };
+    }),
     {
       title: 'เช้า',
-      key: 'M',
+      key: 'ช',
       width: 45,
       align: 'center',
       className: 'bg-blue-50 text-blue-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'M').length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'ช').length || '-',
     },
     {
       title: 'บ่าย',
-      key: 'A',
+      key: 'บ',
       width: 45,
       align: 'center',
       className: 'bg-orange-50 text-orange-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'A').length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'บ').length || '-',
     },
     {
       title: 'ดึก',
-      key: 'N',
+      key: 'ด',
       width: 45,
       align: 'center',
       className: 'bg-purple-50 text-purple-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'N').length || '-',
-    },
-    {
-      title: '12H',
-      key: '12H',
-      width: 45,
-      align: 'center',
-      className: 'bg-red-50 text-red-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === '12H').length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'ด').length || '-',
     },
     {
       title: 'OFF',
@@ -194,26 +221,205 @@ export default function ShiftMatrix() {
       render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'OFF').length || '-',
     },
     {
+      title: 'OT',
+      key: 'OT',
+      width: 45,
+      align: 'center',
+      className: 'bg-red-50 text-red-600 font-bold',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s.includes('OT')).length || '-',
+    },
+    {
       title: 'รวม',
       key: 'Total',
       width: 45,
       align: 'center',
       className: 'font-bold bg-gray-200',
       render: (_, record) =>
-        Object.values(dutyData[record.id] || {}).flat().filter(s => s !== 'OFF').length || '-',
+        Object.values(dutyData[record.id] || {}).filter(shifts => shifts.some(s => s !== 'OFF')).length || '-',
     },
   ];
 
+  const summaryNode = (pageData: readonly StaffRecord[]) => {
+    const dayTotals: Record<string, Record<number, number>> = {
+      'ช': {},
+      'บ': {},
+      'ด': {},
+      'OFF': {},
+      'OT': {},
+      'total': {}
+    };
+
+    let grandTotalM = 0;
+    let grandTotalA = 0;
+    let grandTotalN = 0;
+    let grandTotalOFF = 0;
+    let grandTotalOT = 0;
+    let grandTotalOverall = 0;
+
+    pageData.forEach((record) => {
+      const staffShifts = dutyData[record.id] || {};
+
+      daysArray.forEach((day) => {
+        const shifts = staffShifts[day] || [];
+        const mCount = shifts.filter(s => s === 'ช' || s === 'ช(OT)').length;
+        const aCount = shifts.filter(s => s === 'บ' || s === 'บ(OT)').length;
+        const nCount = shifts.filter(s => s === 'ด' || s === 'ด(OT)').length;
+        const offCount = shifts.filter(s => s === 'OFF').length;
+        const otCount = shifts.filter(s => s.includes('OT')).length;
+        const hasShift = shifts.some(s => s !== 'OFF');
+        const totalCount = hasShift ? 1 : 0;
+
+        dayTotals['ช'][day] = (dayTotals['ช'][day] || 0) + mCount;
+        dayTotals['บ'][day] = (dayTotals['บ'][day] || 0) + aCount;
+        dayTotals['ด'][day] = (dayTotals['ด'][day] || 0) + nCount;
+        dayTotals['OFF'][day] = (dayTotals['OFF'][day] || 0) + offCount;
+        dayTotals['OT'][day] = (dayTotals['OT'][day] || 0) + otCount;
+        dayTotals['total'][day] = (dayTotals['total'][day] || 0) + totalCount;
+      });
+
+      const allShifts = Object.values(staffShifts).flat();
+      grandTotalM += allShifts.filter((s) => s === 'ช').length;
+      grandTotalA += allShifts.filter((s) => s === 'บ').length;
+      grandTotalN += allShifts.filter((s) => s === 'ด').length;
+      grandTotalOFF += allShifts.filter((s) => s === 'OFF').length;
+      grandTotalOT += allShifts.filter((s) => s.includes('OT')).length;
+      grandTotalOverall += Object.values(staffShifts).filter((shifts) => shifts.some((s) => s !== 'OFF')).length;
+    });
+
+    return (
+      <Table.Summary fixed="bottom">
+        <Table.Summary.Row className="bg-blue-50/40 text-xs shadow-[0_-1px_2px_rgba(0,0,0,0.05)]">
+          <Table.Summary.Cell index={0} align="right">
+            <span className="text-blue-600 font-bold mr-2">รวมเช้า (ช)</span>
+          </Table.Summary.Cell>
+          {daysArray.map((day, index) => (
+            <Table.Summary.Cell key={day} index={index + 1} align="center">
+              <span className={dayTotals['ช'][day] > 0 ? "text-blue-600 font-bold" : "text-gray-300"}>
+                {dayTotals['ช'][day] > 0 ? dayTotals['ช'][day] : '-'}
+              </span>
+            </Table.Summary.Cell>
+          ))}
+          <Table.Summary.Cell index={daysInMonth + 1} align="center" className="bg-blue-50 text-blue-600 font-bold">{grandTotalM || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 2} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 3} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 4} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 5} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 6} align="center" className="text-gray-300">-</Table.Summary.Cell>
+        </Table.Summary.Row>
+
+        <Table.Summary.Row className="bg-orange-50/40 text-xs">
+          <Table.Summary.Cell index={0} align="right">
+            <span className="text-orange-500 font-bold mr-2">รวมบ่าย (บ)</span>
+          </Table.Summary.Cell>
+          {daysArray.map((day, index) => (
+            <Table.Summary.Cell key={day} index={index + 1} align="center">
+              <span className={dayTotals['บ'][day] > 0 ? "text-orange-500 font-bold" : "text-gray-300"}>
+                {dayTotals['บ'][day] > 0 ? dayTotals['บ'][day] : '-'}
+              </span>
+            </Table.Summary.Cell>
+          ))}
+          <Table.Summary.Cell index={daysInMonth + 1} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 2} align="center" className="bg-orange-50 text-orange-600 font-bold">{grandTotalA || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 3} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 4} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 5} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 6} align="center" className="text-gray-300">-</Table.Summary.Cell>
+        </Table.Summary.Row>
+
+        <Table.Summary.Row className="bg-purple-50/40 text-xs">
+          <Table.Summary.Cell index={0} align="right">
+            <span className="text-purple-600 font-bold mr-2">รวมดึก (ด)</span>
+          </Table.Summary.Cell>
+          {daysArray.map((day, index) => (
+            <Table.Summary.Cell key={day} index={index + 1} align="center">
+              <span className={dayTotals['ด'][day] > 0 ? "text-purple-600 font-bold" : "text-gray-300"}>
+                {dayTotals['ด'][day] > 0 ? dayTotals['ด'][day] : '-'}
+              </span>
+            </Table.Summary.Cell>
+          ))}
+          <Table.Summary.Cell index={daysInMonth + 1} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 2} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 3} align="center" className="bg-purple-50 text-purple-600 font-bold">{grandTotalN || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 4} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 5} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 6} align="center" className="text-gray-300">-</Table.Summary.Cell>
+        </Table.Summary.Row>
+
+        <Table.Summary.Row className="bg-slate-100/50 text-xs">
+          <Table.Summary.Cell index={0} align="right">
+            <span className="text-gray-500 font-bold mr-2">รวม OFF</span>
+          </Table.Summary.Cell>
+          {daysArray.map((day, index) => (
+            <Table.Summary.Cell key={day} index={index + 1} align="center">
+              <span className={dayTotals['OFF'][day] > 0 ? "text-gray-500 font-bold" : "text-gray-300"}>
+                {dayTotals['OFF'][day] > 0 ? dayTotals['OFF'][day] : '-'}
+              </span>
+            </Table.Summary.Cell>
+          ))}
+          <Table.Summary.Cell index={daysInMonth + 1} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 2} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 3} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 4} align="center" className="bg-gray-100 text-gray-500 font-bold">{grandTotalOFF || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 5} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 6} align="center" className="text-gray-300">-</Table.Summary.Cell>
+        </Table.Summary.Row>
+
+        <Table.Summary.Row className="bg-red-50/40 text-xs">
+          <Table.Summary.Cell index={0} align="right">
+            <span className="text-red-500 font-bold mr-2">รวม OT</span>
+          </Table.Summary.Cell>
+          {daysArray.map((day, index) => (
+            <Table.Summary.Cell key={day} index={index + 1} align="center">
+              <span className={dayTotals['OT'][day] > 0 ? "text-red-500 font-bold" : "text-gray-300"}>
+                {dayTotals['OT'][day] > 0 ? dayTotals['OT'][day] : '-'}
+              </span>
+            </Table.Summary.Cell>
+          ))}
+          <Table.Summary.Cell index={daysInMonth + 1} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 2} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 3} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 4} align="center" className="text-gray-300">-</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 5} align="center" className="bg-red-50 text-red-600 font-bold">{grandTotalOT || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 6} align="center" className="text-gray-300">-</Table.Summary.Cell>
+        </Table.Summary.Row>
+
+        <Table.Summary.Row className="bg-teal-50/50 font-bold text-xs shadow-[0_-1px_2px_rgba(0,0,0,0.05)] border-t-2 border-white">
+          <Table.Summary.Cell index={0} align="right">
+            <span className="text-[#006b5f] mr-2">รวมคนขึ้นเวร</span>
+          </Table.Summary.Cell>
+          {daysArray.map((day, index) => (
+            <Table.Summary.Cell key={day} index={index + 1} align="center">
+              {dayTotals['total'][day] > 0 ? (
+                <span className="text-[#006b5f]">{dayTotals['total'][day]}</span>
+              ) : (
+                <span className="text-gray-400">-</span>
+              )}
+            </Table.Summary.Cell>
+          ))}
+          <Table.Summary.Cell index={daysInMonth + 1} align="center" className="bg-blue-50/50 text-blue-600">{grandTotalM || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 2} align="center" className="bg-orange-50/50 text-orange-600">{grandTotalA || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 3} align="center" className="bg-purple-50/50 text-purple-600">{grandTotalN || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 4} align="center" className="bg-gray-50 text-gray-500">{grandTotalOFF || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 5} align="center" className="bg-red-50/50 text-red-600">{grandTotalOT || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 6} align="center" className="bg-gray-200 text-[#006b5f] text-[13px]">{grandTotalOverall || '-'}</Table.Summary.Cell>
+        </Table.Summary.Row>
+      </Table.Summary>
+    );
+  };
+
   const shiftOptions = [
-    { label: 'เวรเช้า (M)', time: '08:00 - 16:00', value: 'M', colorText: 'text-blue-600', bgCard: 'bg-blue-50', borderCard: 'border-blue-200', bgIcon: 'bg-blue-500' },
-    { label: 'เวรบ่าย (A)', time: '16:00 - 24:00', value: 'A', colorText: 'text-orange-500', bgCard: 'bg-orange-50', borderCard: 'border-orange-200', bgIcon: 'bg-orange-500' },
-    { label: 'เวรดึก (N)', time: '24:00 - 08:00', value: 'N', colorText: 'text-purple-600', bgCard: 'bg-purple-50', borderCard: 'border-purple-200', bgIcon: 'bg-purple-500' },
-    { label: '12 ชั่วโมง', time: '08:00 - 20:00', value: '12H', colorText: 'text-red-500', bgCard: 'bg-red-50', borderCard: 'border-red-200', bgIcon: 'bg-red-500' },
+    { label: 'เวรเช้า (ช)', time: '08:00 - 16:00', value: 'ช', colorText: 'text-blue-600', bgCard: 'bg-blue-50', borderCard: 'border-blue-200', bgIcon: 'bg-blue-500' },
+    { label: 'เวรบ่าย (บ)', time: '16:00 - 24:00', value: 'บ', colorText: 'text-orange-500', bgCard: 'bg-orange-50', borderCard: 'border-orange-200', bgIcon: 'bg-orange-500' },
+    { label: 'เวรดึก (ด)', time: '24:00 - 08:00', value: 'ด', colorText: 'text-purple-600', bgCard: 'bg-purple-50', borderCard: 'border-purple-200', bgIcon: 'bg-purple-500' },
+    { label: 'เช้า (OT)', time: '08:00 - 16:00', value: 'ช(OT)', colorText: 'text-blue-600', bgCard: 'bg-blue-50', borderCard: 'border-blue-200', bgIcon: 'bg-blue-500' },
+    { label: 'บ่าย (OT)', time: '16:00 - 24:00', value: 'บ(OT)', colorText: 'text-orange-500', bgCard: 'bg-orange-50', borderCard: 'border-orange-200', bgIcon: 'bg-orange-500' },
+    { label: 'ดึก (OT)', time: '24:00 - 08:00', value: 'ด(OT)', colorText: 'text-purple-600', bgCard: 'bg-purple-50', borderCard: 'border-purple-200', bgIcon: 'bg-purple-500' },
     { label: 'หยุดงาน', time: 'OFF', value: 'OFF', colorText: 'text-gray-500', bgCard: 'bg-slate-50', borderCard: 'border-slate-200', bgIcon: 'bg-gray-500' },
   ];
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
+      {contextHolder}
       <Navbar />
       <div className="p-6">
         <Card className="shadow-xl rounded-2xl border-none">
@@ -240,10 +446,10 @@ export default function ShiftMatrix() {
               />
             </div>
             <div className="flex gap-3">
-              <span className="text-xs text-blue-600 font-bold">M: เช้า</span>
-              <span className="text-xs text-orange-500 font-bold">A: บ่าย</span>
-              <span className="text-xs text-purple-600 font-bold">N: ดึก</span>
-              <span className="text-xs text-red-500 font-bold">12H: 12 ชม.</span>
+              <span className="text-xs text-blue-600 font-bold">ช: เช้า</span>
+              <span className="text-xs text-orange-500 font-bold">บ: บ่าย</span>
+              <span className="text-xs text-purple-600 font-bold">ด: ดึก</span>
+              <span className="text-xs text-red-500 font-bold">OT: ล่วงเวลา</span>
             </div>
           </div>
 
@@ -268,6 +474,7 @@ export default function ShiftMatrix() {
               bordered
               size="small"
               rowKey="id"
+              summary={summaryNode}
               className="
                 [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
                 [&_.ant-table-thead_.ant-table-cell]:text-white!
@@ -288,7 +495,7 @@ export default function ShiftMatrix() {
             footer={null}
             closable={false}
             centered
-            width="50%"
+            width="30%"
             className="[&_.ant-modal-content]:p-0! [&_.ant-modal-content]:rounded-2xl! [&_.ant-modal-content]:overflow-hidden! font-sans"
           >
             <div className="px-6 py-5 border-b border-gray-100 bg-white flex items-center justify-between">
@@ -315,6 +522,23 @@ export default function ShiftMatrix() {
                     <div
                       key={option.value}
                       onClick={() => {
+                        if (!isChecked) {
+                          const conflictMap: Record<string, string> = {
+                            'ช': 'ช(OT)',
+                            'ช(OT)': 'ช',
+                            'บ': 'บ(OT)',
+                            'บ(OT)': 'บ',
+                            'ด': 'ด(OT)',
+                            'ด(OT)': 'ด',
+                          };
+                          
+                          const conflict = conflictMap[option.value];
+                          if (conflict && tempShifts.includes(conflict)) {
+                            messageApi.warning(`ไม่สามารถเลือก ${option.value} และ ${conflict} พร้อมกันได้`);
+                            return;
+                          }
+                        }
+
                         const newShifts = isChecked
                           ? tempShifts.filter((s) => s !== option.value)
                           : [...tempShifts, option.value];
@@ -328,7 +552,7 @@ export default function ShiftMatrix() {
                         border rounded-xl
                       `}
                     >
-                      <div className="flex items-center w-full p-2 pl-1 select-none">
+                      <div className="flex items-center  w-full p-2 pl-1 select-none">
                         <div className={`
                           w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-all duration-300
                           ${isChecked ? `${option.bgIcon} border-transparent scale-110` : 'border-gray-200 bg-gray-50'}

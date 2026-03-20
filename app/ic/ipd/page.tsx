@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, Table, message, Tag, Select } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
@@ -8,6 +9,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import Navbar from '../../components/Navbar';
 import { PiVirusBold } from 'react-icons/pi';
+import Link from 'next/link';
 
 const { Option } = Select;
 
@@ -50,6 +52,7 @@ const InfectionControlPage = () => {
   const [loading, setLoading] = useState(true);
   const [wards, setWards] = useState<Ward[]>([]);
   const [selectedWard, setSelectedWard] = useState<string | undefined>();
+  const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,6 +61,7 @@ const InfectionControlPage = () => {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) {
           message.error('ไม่พบ Token สำหรับการยืนยันตัวตน');
+          router.push('/');
           setLoading(false);
           return;
         }
@@ -65,7 +69,7 @@ const InfectionControlPage = () => {
         const headers = { Authorization: `Bearer ${token}` };
 
         const [patientResponse, wardResponse] = await Promise.all([
-          axios.get('/api/v1/ic/ipd-patient-history-daily', { headers }).catch(() => ({ data: { success: false, data: [] } })),
+          axios.get('/api/v1/ic/ipd-patient-history-daily', { headers }),
           axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } }))
         ]);
 
@@ -79,9 +83,14 @@ const InfectionControlPage = () => {
         const wardList = Array.isArray(wardResponse.data) ? wardResponse.data : wardResponse.data.data || [];
         setWards(wardList);
 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching infection data:", error);
-        message.error('เกิดข้อผิดพลาดในการดึงข้อมูลผู้ป่วยติดเชื้อ');
+        if (error.response?.status === 401) {
+          message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+          router.push('/');
+        } else {
+          message.error('เกิดข้อผิดพลาดในการดึงข้อมูลผู้ป่วยติดเชื้อ');
+        }
       } finally {
         setLoading(false);
       }
@@ -97,13 +106,16 @@ const InfectionControlPage = () => {
       })
     : patients;
 
-  const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null) => {
+  const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null, labNo: string | null) => {
     if (!infectionName) {
       return <span className="text-gray-400">-</span>;
     }
-    return (
-      <div className="flex flex-col items-start">
-        <Tag color="volcano" className="font-semibold whitespace-normal text-left leading-normal py-0.5">{infectionName}</Tag>
+
+    const content = (
+      <div className={`flex flex-col items-start w-full h-full ${labNo ? 'group' : ''}`}>
+        <Tag color="volcano" className={`font-semibold whitespace-normal text-left leading-normal py-0.5 ${labNo ? 'group-hover:opacity-80 cursor-pointer' : ''}`}>
+          {infectionName}
+        </Tag>
         {infectionDate && (
           <span className="text-xs text-gray-500 mt-1">
             {dayjs(infectionDate).format('DD/MM/YY')}
@@ -111,6 +123,16 @@ const InfectionControlPage = () => {
         )}
       </div>
     );
+
+    if (labNo) {
+      return (
+        <Link href={`/ic/lab/${labNo}`} target="_blank" className="block w-full h-full">
+          {content}
+        </Link>
+      );
+    }
+
+    return content;
   };
 
   const columns: ColumnsType<InfectionPatient> = [
@@ -135,11 +157,11 @@ const InfectionControlPage = () => {
       align: 'center',
       render: (ds) => `${ds}`
     },
-    { title: 'CRE', key: 'cre', width: 180, render: (_, record) => renderInfectionInfo(record.cre, record.cre_date) },
-    { title: 'VRE', key: 'vre', width: 180, render: (_, record) => renderInfectionInfo(record.vre, record.vre_date) },
-    { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date) },
-    { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date) },
-    { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date) },
+    { title: 'CRE', key: 'cre', width: 180, render: (_, record) => renderInfectionInfo(record.cre, record.cre_date, record.cre_labno) },
+    { title: 'VRE', key: 'vre', width: 180, render: (_, record) => renderInfectionInfo(record.vre, record.vre_date, record.vre_labno) },
+    { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date, record.mrsa_labno) },
+    { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date, record.escr_labno) },
+    { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date, record.mdr_labno) },
   ];
 
   return (

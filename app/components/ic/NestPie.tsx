@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import * as echarts from 'echarts';
 import axios from 'axios';
 import { message } from 'antd';
@@ -13,13 +14,19 @@ interface DepResult {
 const NestPie = () => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [outerData, setOuterData] = useState<{name: string, value: number}[]>([]);
+  const router = useRouter();
 
   // ดึงข้อมูลแผนกสำหรับแสดงในวงนอก
   useEffect(() => {
     const fetchData = async () => {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        if (!token) {
+          message.error('ไม่พบ Token');
+          router.push('/');
+          return;
+        }
+        const headers = { Authorization: `Bearer ${token}` };
         const res = await axios.get('/api/v1/ic/result-dep-in-fiscal-year', { headers });
         
         if (res.data && res.data.success && Array.isArray(res.data.data)) {
@@ -29,9 +36,14 @@ const NestPie = () => {
           }));
           setOuterData(formatted);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching pie data:", error);
-        message.error("เกิดข้อผิดพลาดในการดึงข้อมูลแผนก");
+        if (error.response?.status === 401) {
+          message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+          router.push('/');
+        } else {
+          message.error("เกิดข้อผิดพลาดในการดึงข้อมูลแผนก");
+        }
       }
     };
     fetchData();
