@@ -62,6 +62,52 @@ export default function ShiftMatrix() {
     fetchWards();
   }, [messageApi]);
 
+  // โหลดข้อมูลตารางเวรภาพรวมทั้งหมดเมื่อเลือก Ward หรือเปลี่ยนเดือน/ปี
+  useEffect(() => {
+    const fetchShiftData = async () => {
+      if (!selectedWard) return;
+
+      try {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const response = await axios.post('/api/v1/nurse/nurse-schedule-by-date', {
+          ward: selectedWard,
+          date: currentDate.format('YYYY-MM')
+        }, { headers });
+
+        const resData = response.data?.data || response.data || [];
+
+        const reverseShiftCodeMap: Record<string, string> = {
+          'M': 'ช',
+          'A': 'บ',
+          'N': 'ด',
+          'M_OT': 'ช(OT)',
+          'A_OT': 'บ(OT)',
+          'N_OT': 'ด(OT)',
+          'OFF': 'OFF'
+        };
+
+        const newDutyData: DutyState = {};
+        resData.forEach((item: any) => {
+          const empId = item.staff_id;
+          const day = dayjs(item.shift_date).date(); // แปลงเวลาจาก ISO เป็นตัวเลขวันที่ 1-31
+          const shiftStr = reverseShiftCodeMap[item.shift_code] || item.shift_code;
+
+          if (!newDutyData[empId]) newDutyData[empId] = {};
+          if (!newDutyData[empId][day]) newDutyData[empId][day] = [];
+          newDutyData[empId][day].push(shiftStr);
+        });
+
+        setDutyData(newDutyData);
+      } catch (error) {
+        console.error("Error fetching shift data by date:", error);
+      }
+    };
+
+    fetchShiftData();
+  }, [selectedWard, currentDate]);
+
   // โหลดรายชื่อเจ้าหน้าที่เมื่อเลือก ward
   const handleWardChange = async (value: string) => {
     setSelectedWard(value);
@@ -89,38 +135,109 @@ export default function ShiftMatrix() {
     }
   };
 
-  const handleCellClick = (record: StaffRecord, day: number) => {
+  const handleCellClick = async (record: StaffRecord, day: number) => {
+    // 1. นำข้อมูลเก่าใน state มาแสดงทันทีก่อน เพื่อให้ UI ตอบสนองได้รวดเร็ว (ไม่มีดีเลย์)
     const currentShifts = dutyData[record.id]?.[day] || [];
     setEditingCell({ empId: record.id, day });
     setTempShifts(currentShifts);
     setIsModalOpen(true);
+
+    // 2. เรียก API ดึงข้อมูลล่าสุดจากฐานข้อมูล
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const shift_date = currentDate.date(day).format('YYYY-MM-DD');
+
+      // เปลี่ยนจาก GET เป็น POST และแนบข้อมูลไปกับ Body แทน Params
+      const response = await axios.post('/api/v1/nurse/nurse-schedule-detail', {
+        ward: selectedWard,
+        shift_date: shift_date,
+        staff_id: record.id
+      }, { headers });
+
+      const resData = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      
+      // 3. แมปกลับจากรหัส DB (M, A, N) เป็นตัวย่อบนหน้าจอ (ช, บ, ด)
+      const reverseShiftCodeMap: Record<string, string> = {
+        'M': 'ช',
+        'A': 'บ',
+        'N': 'ด',
+        'M_OT': 'ช(OT)',
+        'A_OT': 'บ(OT)',
+        'N_OT': 'ด(OT)',
+        'OFF': 'OFF'
+      };
+
+      const fetchedShifts = resData
+        .map((s: any) => reverseShiftCodeMap[s.shift_code] || s.shift_code)
+        .filter(Boolean); // กรองค่าว่างออก
+
+      // 4. อัปเดตตัวเลือกให้สถานะ Checked ตรงกับข้อมูลที่ดึงมา
+      setTempShifts(fetchedShifts);
+      
+      // 5. (ทางเลือก) อัปเดตตารางหลักไปพร้อมๆ กัน เผื่อข้อมูลในตารางยังไม่อัปเดต
+      setDutyData((prev) => ({
+        ...prev,
+        [record.id]: {
+          ...(prev[record.id] || {}),
+          [day]: fetchedShifts,
+        },
+      }));
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        console.error(`API URL Not Found (404): ${error.config?.url}`);
+        // แจ้งเตือนแบบเงียบๆ เนื่องจากบางทีอาจจะแปลว่ายังไม่มีเวร
+        // messageApi.warning(`ไม่พบ API (404): ${error.config?.url}`);
+      } else {
+        console.error("Error fetching shift detail:", error);
+      }
+    }
   };
 
   const handleModalOk = async () => {
     if (editingCell) {
+      if (tempShifts.length === 0) {
+        messageApi.warning('ต้องเลือกอย่างน้อย 1 รายการ');
+        return;
+      }
+
+      // แมปค่าเวรจากหน้าจอให้ตรงกับรหัสในฐานข้อมูล (ปรับได้ตามต้องการ)
+      const shiftCodeMap: Record<string, string> = {
+        'ช': 'M',
+        'บ': 'A',
+        'ด': 'N',
+        'ช(OT)': 'M_OT',
+        'บ(OT)': 'A_OT',
+        'ด(OT)': 'N_OT',
+        'OFF': 'OFF'
+      };
+
       // 1. จัดเตรียมข้อมูล JSON Payload
-      const payload = {
-        ward_id: selectedWard,
+      const payload = tempShifts.map(shift => ({
         staff_id: editingCell.empId,
         shift_date: currentDate.date(editingCell.day).format('YYYY-MM-DD'),
-        shift_types: tempShifts
-      };
+        shift_code: shiftCodeMap[shift] || shift,
+        ward: selectedWard,
+        created_by: 1 // TODO: ควรเปลี่ยนเป็น ID ผู้ล็อกอินใช้งานจริงจาก session หรือ decode จาก token
+      }));
 
       // console.log("Payload to send to API:", JSON.stringify(payload, null, 2));
 
-      // 2. ตัวอย่างการยิง API เพื่อบันทึกข้อมูล (สามารถ Uncomment เพื่อใช้งานจริงได้)
-      /*
+      // 2. การยิง API เพื่อบันทึกข้อมูล
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        await axios.post('/api/v1/save-shift', payload, { headers });
+        await axios.post('/api/v1/nurse/nurse-schedules', payload, { headers });
         messageApi.success('บันทึกเวรสำเร็จ');
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error saving shift:", error);
-        messageApi.error('เกิดข้อผิดพลาดในการบันทึกเวร');
+        if (error.response?.status === 404) {
+          messageApi.error(`ไม่พบ API (404): ${error.config?.url}`);
+        } else {
+          messageApi.error('เกิดข้อผิดพลาดในการบันทึกเวร');
+        }
         return; // หาก API Error จะไม่อัปเดตตารางและไม่ปิด Modal
       }
-      */
 
       // 3. อัปเดตข้อมูลบนหน้าจอ (UI) เมื่อบันทึกสำเร็จ
       setDutyData((prev) => ({
@@ -261,9 +378,9 @@ export default function ShiftMatrix() {
 
       daysArray.forEach((day) => {
         const shifts = staffShifts[day] || [];
-        const mCount = shifts.filter(s => s === 'ช' || s === 'ช(OT)').length;
-        const aCount = shifts.filter(s => s === 'บ' || s === 'บ(OT)').length;
-        const nCount = shifts.filter(s => s === 'ด' || s === 'ด(OT)').length;
+        const mCount = shifts.filter(s => s === 'ช').length;
+        const aCount = shifts.filter(s => s === 'บ').length;
+        const nCount = shifts.filter(s => s === 'ด').length;
         const offCount = shifts.filter(s => s === 'OFF').length;
         const otCount = shifts.filter(s => s.includes('OT')).length;
         const hasShift = shifts.some(s => s !== 'OFF');
