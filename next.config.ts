@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
+const nextConfig: NextConfig & { allowedDevOrigins?: string[] } = {
+  allowedDevOrigins: ["192.168.1.53", "localhost"],
   async rewrites() {
     return [
       {

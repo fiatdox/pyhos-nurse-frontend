@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, Input, Button, Table, Drawer, Form, Select, DatePicker, message, Row, Col, Typography, Radio } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
@@ -25,6 +26,7 @@ interface Patient {
   regdate?: string;
   ward?: string;
   gender?: string;
+  birthday?: string;
 }
 
 interface AdmissionType {
@@ -78,10 +80,12 @@ interface RegisterPayload {
   // Optional(String) → ห้ามส่ง null! ใช้ spread omit เมื่อไม่มีค่า
   incharge_doctor?:    string;
   is_ventilator?:      string;
+  admission_change_shift_type_id?: number | null;
 }
 
 export default function RegisterPage() {
   const [form] = Form.useForm();
+  const router = useRouter();
   const severityLevelValue   = Form.useWatch('severityLevelId', form);
   const admissionTypeIdValue = Form.useWatch('admissionTypeId', form);
 
@@ -184,6 +188,7 @@ export default function RegisterPage() {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post('/api/v1/patient-by-an', { an: anInput }, { headers });
       if (response.data.success && response.data.data) {
+        //console.log('✅ Response:', response.data);
         setPatients(response.data.data);
         if (response.data.data.length === 0) {
           message.info('ไม่พบข้อมูลผู้ป่วยสำหรับ AN นี้');
@@ -219,14 +224,15 @@ export default function RegisterPage() {
   const openRegisterDrawer = (patient: Patient) => {
     setSelectedPatient(patient);
     form.resetFields();
-    const now = dayjs();
+    const admitDate = patient.regdate ? dayjs(patient.regdate) : dayjs();
     form.setFieldsValue({
-      admitDate:    now,
-      shiftTypeId:  getShiftIdFromTime(now),
+      admitDate:    admitDate,
+      shiftTypeId:  getShiftIdFromTime(admitDate),
       bed:          patient.bedno,
       doctor_name:  patient.doctor_name,
       wardId:       patient.ward || selectedWard,
       isVentilator: 'N',
+      birthDate:    patient.birthday ? dayjs(patient.birthday) : undefined,
     });
     setIsDrawerOpen(true);
   };
@@ -279,6 +285,8 @@ const payload: RegisterPayload = {
   patient_name: selectedPatient.ptname,
   reg_datetime: regDatetime,
   ward:         String(values.wardId),  // ✅ cast
+  birth_date:   values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
+
 
   // ✅ cast เป็น string ทุกตัวที่เป็น Union(String|Null)
   spclty:             values.specialtyCode   != null ? String(values.specialtyCode)   : null,
@@ -290,6 +298,7 @@ const payload: RegisterPayload = {
   status:             1,
   serverity_level_id: values.severityLevelId  ?? null,
   severity_level_id:  values.severityLevelId  ?? null,
+  admission_change_shift_type_id: values.shiftTypeId ?? null,
 
   // Optional(String) — ห้าม null
   is_ventilator: values.isVentilator || 'N',
@@ -299,7 +308,7 @@ const payload: RegisterPayload = {
   ),
 };
 
-    console.log('📦 Payload:', JSON.stringify(payload, null, 2));
+    //console.log('📦 Payload:', JSON.stringify(payload, null, 2));
 
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
@@ -314,9 +323,10 @@ const payload: RegisterPayload = {
         text: 'ลงทะเบียนสำเร็จ',
         confirmButtonColor: '#006b5f',
         confirmButtonText: 'ตกลง',
+      }).then(() => {
+        router.push('/ipd/shift-patient');
       });
       onCloseDrawer();
-      if (selectedWard) handleWardChange(selectedWard);
 
     } catch (error: any) {
       const status = error?.response?.status;
@@ -351,7 +361,7 @@ const payload: RegisterPayload = {
     },
     {
       title: 'วันที่ Admit', dataIndex: 'regdate', key: 'regdate', width: 150,
-      render: t => t ? dayjs(t).format('DD/MM/YYYY') : '-',
+      render: t => t ? dayjs(t).format('DD/MM/YYYY HH:mm') : '-',
     },
     {
       title: 'ดำเนินการ', key: 'action', width: 150, align: 'center',
@@ -384,7 +394,7 @@ const payload: RegisterPayload = {
 
           <div className="flex flex-wrap gap-4 mb-6">
             <Select
-              size="large"
+              size="medium"
               placeholder="เลือกหอผู้ป่วย"
               style={{ width: 250 }}
               onChange={handleWardChange}
@@ -394,15 +404,15 @@ const payload: RegisterPayload = {
               {wards.map(w => <Option key={w.ward} value={w.ward}>{w.name}</Option>)}
             </Select>
             <Input
-              size="large"
+              size="medium"
               prefix={<VscSearch className="text-gray-400" />}
               placeholder="ระบุเลข AN เพื่อค้นหา"
               value={anInput}
               onChange={e => setAnInput(e.target.value)}
               onPressEnter={handleSearch}
-              style={{ maxWidth: 400 }}
+              style={{ maxWidth: 200 }}
             />
-            <Button size="large" type="primary" onClick={handleSearch} loading={loading} className="bg-[#006b5f]">
+            <Button size="medium" type="primary" onClick={handleSearch} loading={loading} className="bg-[#006b5f]">
               ค้นหา
             </Button>
           </div>
@@ -412,6 +422,7 @@ const payload: RegisterPayload = {
             dataSource={patients}
             rowKey="an"
             pagination={false}
+            size='small'
             locale={{ emptyText: 'ไม่พบข้อมูล หรือยังไม่ได้ค้นหา' }}
             className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white!"
           />
@@ -558,6 +569,11 @@ const payload: RegisterPayload = {
               <Col span={12}>
                 <Form.Item label="เตียง" name="bed" rules={[{ required: true, message: 'ระบุเตียง' }]}>
                   <Input placeholder="ระบุเลขเตียง" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="วันเกิด" name="birthDate">
+                  <DatePicker format="DD/MM/YYYY" className="w-full" placeholder="ไม่ระบุ" disabled />
                 </Form.Item>
               </Col>
             </Row>

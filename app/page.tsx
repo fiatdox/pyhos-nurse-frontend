@@ -39,8 +39,10 @@ export default function Home() {
     const date = new Date();
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     const expires = "; expires=" + date.toUTCString();
-    // Secure: บังคับ HTTPS, SameSite=Lax: ป้องกัน CSRF พื้นฐาน
-    document.cookie = "token=" + (token || "") + expires + "; path=/; Secure; SameSite=Lax";
+    
+    // ตรวจสอบว่าเป็น HTTPS หรือไม่ (ถ้ารันบน localhost ที่เป็น HTTP จะไม่ใส่ Secure)
+    const isSecure = window.location.protocol === 'https:' ? 'Secure;' : '';
+    document.cookie = "token=" + (token || "") + expires + "; path=/; " + isSecure + " SameSite=Lax";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -39,7 +39,15 @@ dayjs.locale('th');
 
 const { TextArea } = Input;
 
+interface ShiftRecord {
+  date: string;
+  shiftId: number;
+  isVentilator: boolean;
+  severityLevel: number;
+}
+
 interface PatientInfo {
+  admission_list_id: number | string;
   hn: string;
   an: string;
   name: string;
@@ -51,6 +59,7 @@ interface PatientInfo {
   admitDateTimeIso: string;
   spcltyName: string;
   doctorName: string;
+  shiftRecords?: ShiftRecord[];
 }
 
 interface ShiftType {
@@ -119,29 +128,6 @@ interface CarePlanEntry {
 
 // ─── Mock Data ──────────────────────────────────────────────────────────────
 const now = dayjs();
-
-const mockPatients: PatientInfo[] = [
-  { hn: '66000001', an: '67000001', name: 'นายสมชาย รักดี',          age: 45, ward: '02', wardName: 'ศัลยกรรมชาย',            bed: '01', admitDate: now.subtract(4,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(4,'day').format('YYYY-MM-DDTHH:mm:00'),            spcltyName: 'ศัลยกรรม',       doctorName: 'นพ. สมชาย ใจดี'     },
-  { hn: '66000002', an: '67000002', name: 'นายวิชัย ใจกล้า',          age: 50, ward: '02', wardName: 'ศัลยกรรมชาย',            bed: '02', admitDate: now.subtract(1,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(1,'day').subtract(4,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'ศัลยกรรม',       doctorName: 'พญ. หญิง สมบูรณ์'  },
-  { hn: '66000003', an: '67000003', name: 'นางสาวสมหญิง จริงใจ',      age: 32, ward: '03', wardName: 'ศัลยกรรมหญิง',           bed: '01', admitDate: now.subtract(7,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(7,'day').format('YYYY-MM-DDTHH:mm:00'),            spcltyName: 'ศัลยกรรม',       doctorName: 'นพ. ประสิทธิ์ เก่งกาจ' },
-  { hn: '66000004', an: '67000004', name: 'นายประสิทธิ์ คิดรอบคอบ',   age: 62, ward: '04', wardName: 'ศัลยกรรมกระดูก',          bed: '05', admitDate: now.subtract(10,'day').format('DD/MM/YYYY'), admitDateTimeIso: now.subtract(10,'day').format('YYYY-MM-DDTHH:mm:00'),           spcltyName: 'ศัลยกรรมกระดูก', doctorName: 'นพ. สมชาย ใจดี'     },
-  { hn: '66000005', an: '67000005', name: 'นางวันดี มีสุข',            age: 28, ward: '22', wardName: 'หอผู้ป่วยอายุรกรรม 1',     bed: '03', admitDate: now.subtract(2,'hour').format('DD/MM/YYYY'), admitDateTimeIso: now.subtract(2,'hour').format('YYYY-MM-DDTHH:mm:00'),           spcltyName: 'อายุรกรรม',      doctorName: 'พญ. สุดา งามเลิศ'   },
-  { hn: '66000006', an: '67000006', name: 'ด.ช.มานะ อดทน',            age:  8, ward: '06', wardName: 'กุมารเวชกรรม',           bed: '12', admitDate: now.subtract(2,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(2,'day').add(1,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'กุมารเวชกรรม',  doctorName: 'นพ. วีระ ใจดี'      },
-  { hn: '66000007', an: '67000007', name: 'ด.ญ.ปิติ ยินดี',            age:  5, ward: '06', wardName: 'กุมารเวชกรรม',           bed: '14', admitDate: now.subtract(5,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(5,'day').format('YYYY-MM-DDTHH:mm:00'),            spcltyName: 'กุมารเวชกรรม',  doctorName: 'นพ. วีระ ใจดี'      },
-  { hn: '66000008', an: '67000008', name: 'นายทรงพล เกียรติยศ',        age: 75, ward: '16', wardName: 'หอผู้ป่วยหนัก 1(MICU1)',   bed: '02', admitDate: now.subtract(3,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(3,'day').subtract(6,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'อายุรกรรม',      doctorName: 'นพ. เอกชัย นำชัย'   },
-  { hn: '66000009', an: '67000009', name: 'นางสมร ทรัพย์มาก',          age: 68, ward: '01', wardName: 'หอผู้ป่วยหนัก 2(MICU2)',   bed: '04', admitDate: now.subtract(6,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(6,'day').format('YYYY-MM-DDTHH:mm:00'),            spcltyName: 'อายุรกรรม',      doctorName: 'นพ. เอกชัย นำชัย'   },
-  { hn: '66000010', an: '67000010', name: 'นางมาลี สีสวย',             age: 41, ward: '08', wardName: 'ห้องคลอด',               bed: '08', admitDate: now.subtract(8,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(8,'day').format('YYYY-MM-DDTHH:mm:00'),            spcltyName: 'สูตินารีเวชกรรม', doctorName: 'พญ. นารี งามตา'     },
-  { hn: '66000011', an: '67000011', name: 'น.ส.ใจดี รักสงบ',           age: 25, ward: '09', wardName: 'หลังคลอด',               bed: '09', admitDate: now.subtract(1,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(1,'day').subtract(1,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'สูตินารีเวชกรรม', doctorName: 'พญ. นารี งามตา'     },
-  { hn: '66000012', an: '67000012', name: 'นายพิชัย สู้ชีวิต',         age: 55, ward: '33', wardName: 'หอผู้ป่วยหนัก 3(SICU)',   bed: '05', admitDate: now.subtract(0,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(4,'hour').format('YYYY-MM-DDTHH:mm:00'),           spcltyName: 'ศัลยกรรม',       doctorName: 'นพ. สมชาย ใจดี'     },
-  { hn: '66000013', an: '67000013', name: 'นายสุนทร พรหมจรรย์',        age: 39, ward: '00', wardName: 'หอผู้ป่วยอายุรกรรม 2',     bed: '11', admitDate: now.subtract(4,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(4,'day').add(2,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'อายุรกรรม',      doctorName: 'นพ. สมชาย ใจดี'     },
-  { hn: '66000014', an: '67000014', name: 'นางจินตนา พาขวัญ',          age: 48, ward: '14', wardName: 'พิเศษ ชั้น 4',            bed: '07', admitDate: now.subtract(2,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(2,'day').subtract(8,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'อายุรกรรม',      doctorName: 'พญ. สุดา งามเลิศ'   },
-  { hn: '66000015', an: '67000015', name: 'น.ส.วิภาดา น่ารัก',         age: 22, ward: '15', wardName: 'พิเศษ ชั้น 5',            bed: '06', admitDate: now.subtract(3,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(3,'day').format('YYYY-MM-DDTHH:mm:00'),            spcltyName: 'ศัลยกรรม',       doctorName: 'นพ. ประสิทธิ์ เก่งกาจ' },
-  { hn: '66000016', an: '67000016', name: 'นายเกรียงไกร ชัยชนะ',       age: 58, ward: '25', wardName: 'พิเศษ VIP ชั้น 5',        bed: '10', admitDate: now.subtract(5,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(5,'day').subtract(3,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'ศัลยกรรม',       doctorName: 'นพ. สมชาย ใจดี'     },
-  { hn: '66000017', an: '67000017', name: 'ด.ช.นพดล คนเก่ง',           age:  0, ward: '07', wardName: 'ทารกแรกเกิด ( nursery)',   bed: '15', admitDate: now.subtract(2,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(2,'day').add(5,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'กุมารเวชกรรม',  doctorName: 'นพ. วีระ ใจดี'      },
-  { hn: '66000018', an: '67000018', name: 'นางสมบูรณ์ พูนสุข',         age: 72, ward: '30', wardName: 'Sub ICU Med',            bed: '12', admitDate: now.subtract(1,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(1,'day').subtract(12,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'อายุรกรรม',     doctorName: 'พญ. สุดา งามเลิศ'   },
-  { hn: '66000019', an: '67000019', name: 'น.ส.รัตนา น่าชม',           age: 29, ward: '34', wardName: 'หอผู้ป่วยเฟื่องฟ้า',         bed: '10', admitDate: now.subtract(0,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(6,'hour').format('YYYY-MM-DDTHH:mm:00'),           spcltyName: 'สูตินารีเวชกรรม', doctorName: 'พญ. นารี งามตา'     },
-  { hn: '66000020', an: '67000020', name: 'นายบุญส่ง ทรงธรรม',         age: 80, ward: '37', wardName: 'Home Ward',              bed: '05', admitDate: now.subtract(7,'day').format('DD/MM/YYYY'),  admitDateTimeIso: now.subtract(7,'day').subtract(2,'hour').format('YYYY-MM-DDTHH:mm:00'), spcltyName: 'อายุรกรรม',      doctorName: 'นพ. เอกชัย นำชัย'   },
-];
 
 const mockHistoryRecords = [
   {
@@ -213,6 +199,33 @@ const getShiftIdFromTime = (date: dayjs.Dayjs) => {
   return 1;
 };
 
+// ─── Helper for Anchor Date ────────────────────────────────────────────────
+// กำหนดวันที่สิ้นสุดของรอบ 7 วันให้อิงจากข้อมูลที่มีล่าสุด (แก้ปัญหาข้อมูลจำลอง/ปีคลาดเคลื่อน)
+const getAnchorDate = (record: PatientInfo) => {
+  let anchor = dayjs();
+  let maxRecord = dayjs('1900-01-01');
+  let found = false;
+
+  record.shiftRecords?.forEach(r => {
+    const parts = r.date.split('/');
+    if (parts.length === 3) {
+      const d = dayjs(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      if (d.isValid()) {
+        found = true;
+        if (d.isAfter(maxRecord)) maxRecord = d;
+      }
+    }
+  });
+
+  if (found) return maxRecord;
+  
+  if (record.admitDateTimeIso) {
+    const admit = dayjs(record.admitDateTimeIso);
+    if (admit.isValid() && admit.isAfter(anchor)) return admit;
+  }
+  return anchor;
+};
+
 // ─── Reset helper ───────────────────────────────────────────────────────────
 const defaultFormState = () => ({
   severityLevelId: undefined as number | undefined,
@@ -243,6 +256,9 @@ export default function ShiftPatientPage() {
 
   const [wards, setWards]                     = useState<Ward[]>([]);
   const [selectedWard, setSelectedWard]       = useState<string | undefined>();
+
+  const [patients, setPatients]               = useState<PatientInfo[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
 
   // Shift meta
   const [recordDate, setRecordDate]   = useState<dayjs.Dayjs>(dayjs());
@@ -322,6 +338,29 @@ export default function ShiftPatientPage() {
     fetchWards();
   }, []);
 
+  // ── Fetch Patients by Ward ─────────────────────────────────────────────
+  useEffect(() => {
+    const fetchPatients = async () => {
+      if (!selectedWard) return;
+      setLoadingPatients(true);
+      try {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
+        //console.table(response.data);
+        if (response.data) {
+          setPatients(Array.isArray(response.data) ? response.data : response.data.data || []);
+        }
+      } catch (error) {
+        console.error("Error fetching patients by ward:", error);
+        message.error("เกิดข้อผิดพลาดในการดึงข้อมูลผู้ป่วย");
+      } finally {
+        setLoadingPatients(false);
+      }
+    };
+    fetchPatients();
+  }, [selectedWard]);
+
   // ── Computed ──────────────────────────────────────────────────────────
   const gcsTotal = gcsEye + gcsVerbal + gcsMotor;
   const gcsLevel =
@@ -382,10 +421,9 @@ export default function ShiftPatientPage() {
   };
 
   // ── Table ─────────────────────────────────────────────────────────────
-  const filteredPatients = mockPatients.filter(p => {
-    const matchWard = selectedWard ? p.ward === selectedWard : true;
+  const filteredPatients = patients.filter(p => {
     const matchSearch = p.name.includes(searchText) || p.hn.includes(searchText) || p.an.includes(searchText);
-    return matchWard && matchSearch;
+    return matchSearch;
   });
 
   const columns: ColumnsType<PatientInfo> = [
@@ -394,7 +432,7 @@ export default function ShiftPatientPage() {
     { title: 'ชื่อ-สกุล', dataIndex: 'name', key: 'name',
       render: (text) => <span className="font-semibold text-[#006b5f]">{text}</span> },
     { title: 'อายุ',         dataIndex: 'age',       key: 'age',       width: 70,  align: 'center' },
-    { title: 'หอผู้ป่วย',    dataIndex: 'wardName',  key: 'wardName',  width: 150 },
+    { title: 'หอผู้ป่วย',    dataIndex: 'wardName',  key: 'wardName',  width: 200 },
     { title: 'เตียง',        dataIndex: 'bed',       key: 'bed',       width: 80,  align: 'center' },
     { title: 'แผนกการรักษา', dataIndex: 'spcltyName',key: 'spcltyName',width: 120 },
     { title: 'วันที่ Admit',  dataIndex: 'admitDate', key: 'admitDate', width: 120 },
@@ -410,17 +448,22 @@ export default function ShiftPatientPage() {
       title: 'Ventilator', key: 'ventilator', width: 100, align: 'center',
       render: (_: any, record: PatientInfo) => {
         const shifts = ['ด','ช','บ'];
-        const hnHash = record.hn.split('').reduce((a,c) => a + c.charCodeAt(0), 0);
-        const hoursSinceAdmit = dayjs().diff(dayjs(record.admitDateTimeIso), 'hour');
-        const shiftsCount = Math.min(21, Math.max(0, Math.ceil(hoursSinceAdmit / 8)));
-        const startIndex  = 21 - shiftsCount;
-        const items: { date: string; shiftName: string; isRecorded: boolean; isUsed: boolean }[] = [];
-        let ai = 0;
+        const items: { dateStr: string; shiftName: string; isRecorded: boolean; isUsed: boolean }[] = [];
+        
+        const anchorDate = getAnchorDate(record);
+
         for (let d = 6; d >= 0; d--) {
+          const targetDateObj = anchorDate.subtract(d, 'day');
+          const targetDateStrFull = targetDateObj.format('DD/MM/YYYY');
+          const targetDateStrShort = targetDateObj.format('DD/MM');
           for (let s = 0; s < 3; s++) {
-            const isRecorded = ai >= startIndex;
-            items.push({ date: dayjs().subtract(d,'day').format('DD/MM'), shiftName: shifts[s], isRecorded, isUsed: isRecorded ? ((hnHash + ai) % 5 === 0) : false });
-            ai++;
+            const shiftId = s + 1; // 1, 2, 3
+            const recordMatch = record.shiftRecords?.find(r => r.date === targetDateStrFull && r.shiftId === shiftId);
+            
+            // ป้องกัน Type Error เผื่อ API ส่งมาเป็น String เช่น "false" หรือ "0" 
+            const valStr = recordMatch ? String(recordMatch.isVentilator).toLowerCase() : 'false';
+            const isUsed = valStr === 'true' || valStr === 'y' || valStr === '1';
+            items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, isUsed });
           }
         }
         return (
@@ -428,7 +471,7 @@ export default function ShiftPatientPage() {
             <div className="grid grid-rows-3 grid-flow-col gap-0.75">
               {items.map((item, i) => (
                 <div key={i} className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${!item.isRecorded ? 'bg-slate-100 border border-slate-200 opacity-50' : item.isUsed ? 'bg-orange-500 hover:bg-orange-600 shadow-sm' : 'bg-slate-300 hover:bg-slate-400'}`}
-                  title={`วันที่ ${item.date} เวร${item.shiftName}: ${!item.isRecorded ? 'ยังไม่เข้ารับการรักษา' : item.isUsed ? 'ใส่' : 'ไม่ใส่'}เครื่องช่วยหายใจ`} suppressHydrationWarning />
+                  title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${!item.isRecorded ? 'ไม่มีบันทึก' : item.isUsed ? 'ใส่' : 'ไม่ใส่'}เครื่องช่วยหายใจ`} suppressHydrationWarning />
               ))}
             </div>
           </div>
@@ -438,30 +481,32 @@ export default function ShiftPatientPage() {
     {
       title: 'ระดับความรุนแรง', key: 'trend_7_days', width: 150, align: 'center',
       render: (_: any, record: PatientInfo) => {
-        const hnHash = record.hn.split('').reduce((a,c) => a + c.charCodeAt(0), 0);
-        const hoursSinceAdmit = dayjs().diff(dayjs(record.admitDateTimeIso), 'hour');
-        const shiftsCount = Math.min(21, Math.max(0, Math.ceil(hoursSinceAdmit / 8)));
-        const startIndex  = 21 - shiftsCount;
         const shifts = ['ด','ช','บ'];
         const levelColors: Record<number,string> = {
           1:'bg-green-500 hover:bg-green-600 shadow-sm', 2:'bg-yellow-500 hover:bg-yellow-600 shadow-sm',
           3:'bg-orange-500 hover:bg-orange-600 shadow-sm', 4:'bg-red-500 hover:bg-red-600 shadow-sm', 5:'bg-purple-500 hover:bg-purple-600 shadow-sm',
         };
-        const items: { date: string; shiftName: string; isRecorded: boolean; val: number }[] = [];
-        let ai = 0;
+        const items: { dateStr: string; shiftName: string; isRecorded: boolean; val: number }[] = [];
+        
+        const anchorDate = getAnchorDate(record);
+
         for (let d = 6; d >= 0; d--) {
+          const targetDateObj = anchorDate.subtract(d, 'day');
+          const targetDateStrFull = targetDateObj.format('DD/MM/YYYY');
+          const targetDateStrShort = targetDateObj.format('DD/MM');
           for (let s = 0; s < 3; s++) {
-            const isRecorded = ai >= startIndex;
-            items.push({ date: dayjs().subtract(d,'day').format('DD/MM'), shiftName: shifts[s], isRecorded, val: isRecorded ? ((hnHash + ai) % 5) + 1 : 0 });
-            ai++;
+            const shiftId = s + 1; // 1, 2, 3
+            const recordMatch = record.shiftRecords?.find(r => r.date === targetDateStrFull && r.shiftId === shiftId);
+            
+            items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, val: recordMatch ? Number(recordMatch.severityLevel) : 0 });
           }
         }
         return (
           <div className="flex justify-center items-center h-full">
             <div className="grid grid-rows-3 grid-flow-col gap-0.75">
               {items.map((item, i) => (
-                <div key={i} className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${item.isRecorded ? levelColors[item.val] : 'bg-slate-100 border border-slate-200 opacity-50'}`}
-                  title={`วันที่ ${item.date} เวร${item.shiftName}: ${item.isRecorded ? `ระดับ ${item.val}` : 'ยังไม่เข้ารับการรักษา'}`} suppressHydrationWarning />
+                <div key={i} className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${item.isRecorded && item.val > 0 ? (levelColors[item.val] || 'bg-slate-300') : 'bg-slate-100 border border-slate-200 opacity-50'}`}
+                  title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${item.isRecorded ? `ระดับ ${item.val}` : 'ไม่มีบันทึก'}`} suppressHydrationWarning />
               ))}
             </div>
           </div>
@@ -533,9 +578,11 @@ export default function ShiftPatientPage() {
           <Table
             columns={columns}
             dataSource={filteredPatients}
-            rowKey="hn"
+            rowKey="admission_list_id"
+           
             size="small"
             pagination={{ pageSize: 10 }}
+            loading={loadingPatients}
             className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
           />
         </Card>
@@ -567,14 +614,14 @@ export default function ShiftPatientPage() {
                   </div>
                 </div>
                 <Divider className="my-3" />
-                <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
-                  <div>
-                    <span className="text-gray-500 block text-xs">หอผู้ป่วยปัจจุบัน</span>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-500 text-xs">หอผู้ป่วยปัจจุบัน:</span>
                     <span className="font-semibold text-gray-800">{selectedPatient.wardName}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-500 block text-xs">เตียง</span>
-                    <span className="font-semibold text-gray-800">เตียง {selectedPatient.bed}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-500 text-xs">เตียง:</span>
+                    <span className="font-semibold text-gray-800">{selectedPatient.bed}</span>
                   </div>
                 </div>
               </div>
