@@ -5,7 +5,6 @@ import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio,
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import { VscSearch, VscRefresh } from "react-icons/vsc";
-
 import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
@@ -237,7 +236,7 @@ export default function PatientList() {
       key: 'action',
       align: 'center',
       width: 200,
-      width: 230,
+      
       render: (_, record) => (
         <Space>
           <Button 
