@@ -199,11 +199,6 @@ const Navbar = () => {
                                                 label: <Link href="/ipd/patients" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนผู้ป่วย</Link>,
                                             },
                                             {
-                                                key: 'ipd_discharge',
-                                                icon: <GrWheelchairActive className="w-5 h-5" />,
-                                                label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">จำหน่ายผู้ป่วย / ย้ายออก</Link>,
-                                            },
-                                            {
                                                 key: 'food_order',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
                                                 label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
@@ -211,7 +206,12 @@ const Navbar = () => {
                                             {
                                                 key: 'patient_shift_summary',
                                                 icon: <VscChecklist className="w-5 h-5" />,
-                                                label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร / FTE</Link>,
+                                                label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร</Link>,
+                                            },
+                                            {
+                                                key: 'fte',
+                                                icon: <CgPerformance  className="w-5 h-5" />,
+                                                label: <Link href="/ipd/fte" onClick={onCloseLeft} className="text-white block w-full text-left">Full-Time Equivalent (FTE)</Link>,
                                             },
                                             {
                                                 key: 'employee_shift_schedule',

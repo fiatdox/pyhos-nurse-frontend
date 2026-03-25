@@ -5,7 +5,8 @@ import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio,
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import { VscSearch, VscRefresh } from "react-icons/vsc";
-import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold } from 'react-icons/pi';
+
+import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
@@ -236,8 +237,15 @@ export default function PatientList() {
       key: 'action',
       align: 'center',
       width: 200,
+      width: 230,
       render: (_, record) => (
         <Space>
+          <Button 
+            className="text-blue-600 border-blue-600 hover:bg-blue-50 flex items-center justify-center"
+            icon={<PiFolderOpenBold className="text-lg" />}
+            title="สรุปข้อมูลผู้ป่วย"
+            onClick={() => window.open(`/ipd/summary/${record.an}`, '_blank')}
+          />
           <Button 
             className="text-yellow-600 border-yellow-600 hover:bg-yellow-50"
             onClick={() => router.push(`/ipd/edit-patient?an=${record.an}`)}
