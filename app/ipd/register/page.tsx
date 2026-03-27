@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, Input, Button, Table, Drawer, Form, Select, DatePicker, message, Row, Col, Typography, Radio } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -40,8 +40,11 @@ interface Specialty {
 }
 
 interface Ward {
-  ward: string;
-  name: string;
+  ward: string | number;
+  name?: string;
+  ward_name?: string;
+  his_code?: string;
+  is_labor_room?: string | null;
 }
 
 interface ShiftType {
@@ -63,44 +66,56 @@ interface SeverityLevel {
 //
 interface RegisterPayload {
   // required
-  an:           string;
-  hn:           string;
+  an: string;
+  hn: string;
   patient_name: string;
   reg_datetime: string;
-  ward:         string;
+  before_ward?: string | null;
+  ward: string;
   // Optional(Union(...Null)) → null ได้
-  birth_date?:         string | null;
-  spclty?:             string | null;
-  admission_type_id?:  number | null;
-  status?:             number | string | null;
+  birth_date?: string | null;
+  spclty?: string | null;
+  admission_type_id?: number | null;
+  status?: number | string | null;
   serverity_level_id?: number | null;
-  severity_level_id?:  number | null;
-  gender?:             string | null;
-  bedno?:              string | null;
+  severity_level_id?: number | null;
+  gender?: string | null;
+  bedno?: string | null;
   // Optional(String) → ห้ามส่ง null! ใช้ spread omit เมื่อไม่มีค่า
-  incharge_doctor?:    string;
-  is_ventilator?:      string;
+  incharge_doctor?: string;
+  is_ventilator?: string;
+  oxygen_support_type?: number | null;
   admission_change_shift_type_id?: number | null;
 }
 
 export default function RegisterPage() {
   const [form] = Form.useForm();
   const router = useRouter();
-  const severityLevelValue   = Form.useWatch('severityLevelId', form);
-  const admissionTypeIdValue = Form.useWatch('admissionTypeId', form);
 
-  const [selectedWard, setSelectedWard]       = useState<string>('');
-  const [anInput, setAnInput]                 = useState('');
-  const [patients, setPatients]               = useState<Patient[]>([]);
-  const [loading, setLoading]                 = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen]       = useState(false);
+  // ✅ ย้าย useState ทั้งหมดขึ้นก่อน useMemo เพื่อป้องกัน "used before declaration"
+  const [selectedWard, setSelectedWard] = useState<string>('');
+  const [anInput, setAnInput] = useState('');
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
-  const [admissionTypes, setAdmissionTypes]   = useState<AdmissionType[]>([]);
-  const [specialties, setSpecialties]         = useState<Specialty[]>([]);
-  const [wards, setWards]                     = useState<Ward[]>([]);
-  const [shiftTypes, setShiftTypes]           = useState<ShiftType[]>([]);
-  const [severityLevels, setSeverityLevels]   = useState<SeverityLevel[]>([]);
+  const [admissionTypes, setAdmissionTypes] = useState<AdmissionType[]>([]);
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [wards, setWards] = useState<Ward[]>([]);
+  const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([]);
+  const [severityLevels, setSeverityLevels] = useState<SeverityLevel[]>([]);
+
+  const severityLevelValue = Form.useWatch('severityLevelId', form);
+  const admissionTypeIdValue = Form.useWatch('admissionTypeId', form);
+  const isVentilatorValue = Form.useWatch('isVentilator', form);
+  const wardIdValue = Form.useWatch('wardId', form);
+
+  // ✅ declare isLaborRoom เพียงครั้งเดียว (ลบอันซ้ำออก)
+  const isLaborRoom = useMemo(() => {
+    const selected = wards.find(w => String(w.his_code) === String(wardIdValue) || String(w.ward) === String(wardIdValue));
+    return selected?.is_labor_room === 'Y';
+  }, [wardIdValue, wards]);
 
   // --- Fetch Dropdown Data ---
   useEffect(() => {
@@ -110,11 +125,11 @@ export default function RegisterPage() {
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
         const [admTypeRes, spcltyRes, wardRes, shiftRes, severityRes] = await Promise.all([
-          axios.get('/api/v1/admission-types',              { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/spclty',                       { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/wards',                        { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/spclty', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/wardsV1', { headers }).catch(() => axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } }))),
           axios.get('/api/v1/admission-change-shift-types', { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/admission-severity-levels',    { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/admission-severity-levels', { headers }).catch(() => ({ data: { data: [] } })),
         ]);
 
         setAdmissionTypes(admTypeRes.data.data || []);
@@ -174,9 +189,36 @@ export default function RegisterPage() {
     } catch (error) {
       console.error('Error fetching patients by ward:', error);
       message.error('เกิดข้อผิดพลาดในการดึงข้อมูลผู้ป่วย');
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        Swal.fire({
+          icon: 'error',
+          title: 'เซสชันหมดอายุ',
+          text: 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+          confirmButtonText: 'ตกลง',
+        }).then(() => router.push('/'));
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  // --- Check Labor Room on Ward Change ---
+  const handleDrawerWardChange = (value: string) => {
+    const selectedWardObj = wards.find(w => String(w.his_code) === String(value) || String(w.ward) === String(value));
+    if (selectedWardObj && selectedWardObj.is_labor_room === 'Y') {
+      Swal.fire({
+        icon: 'info',
+        title: 'แจ้งเตือนห้องคลอด',
+        text: 'หอผู้ป่วยที่เลือกเป็นห้องคลอด (Labor Room)',
+        confirmButtonColor: '#006b5f',
+        confirmButtonText: 'รับทราบ',
+      });
+    }
+    // รีเซตค่าทุกครั้งที่เปลี่ยนตึก เพื่อป้องกันค่าหลุดข้าม mode (labor ↔ non-labor)
+    form.setFieldsValue({
+      isVentilator: 'N',
+      oxygenSupportType: 1,
+    });
   };
 
   // --- Search ---
@@ -188,7 +230,6 @@ export default function RegisterPage() {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post('/api/v1/patient-by-an', { an: anInput }, { headers });
       if (response.data.success && response.data.data) {
-        //console.log('✅ Response:', response.data);
         setPatients(response.data.data);
         if (response.data.data.length === 0) {
           message.info('ไม่พบข้อมูลผู้ป่วยสำหรับ AN นี้');
@@ -202,6 +243,14 @@ export default function RegisterPage() {
     } catch (error) {
       console.error('Error fetching patient data:', error);
       message.error('เกิดข้อผิดพลาดในการค้นหาผู้ป่วย');
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        Swal.fire({
+          icon: 'error',
+          title: 'เซสชันหมดอายุ',
+          text: 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+          confirmButtonText: 'ตกลง',
+        }).then(() => router.push('/'));
+      }
       setPatients([]);
     } finally {
       setLoading(false);
@@ -226,13 +275,14 @@ export default function RegisterPage() {
     form.resetFields();
     const admitDate = patient.regdate ? dayjs(patient.regdate) : dayjs();
     form.setFieldsValue({
-      admitDate:    admitDate,
-      shiftTypeId:  getShiftIdFromTime(admitDate),
-      bed:          patient.bedno,
-      doctor_name:  patient.doctor_name,
-      wardId:       patient.ward || selectedWard,
+      admitDate: admitDate,
+      shiftTypeId: getShiftIdFromTime(admitDate),
+      bed: patient.bedno,
+      doctor_name: patient.doctor_name,
+      wardId: patient.ward || selectedWard,
       isVentilator: 'N',
-      birthDate:    patient.birthday ? dayjs(patient.birthday) : undefined,
+      oxygenSupportType: 1,
+      birthDate: patient.birthday ? dayjs(patient.birthday) : undefined,
     });
     setIsDrawerOpen(true);
   };
@@ -274,41 +324,33 @@ export default function RegisterPage() {
       : dayjs().format('YYYY-MM-DD HH:mm:ss');
 
     // ✅ Build payload ตาม Elysia schema อย่างเคร่งครัด
-    //
-    // Optional(Union(String|Null)) → ส่ง null ได้   → ใช้ ?? null
-    // Optional(String)             → ห้ามส่ง null!  → ใช้ spread (...) เพื่อ omit field เมื่อไม่มีค่า
-    //
-const payload: RegisterPayload = {
-  // required
-  an:           selectedPatient.an,
-  hn:           selectedPatient.hn,
-  patient_name: selectedPatient.ptname,
-  reg_datetime: regDatetime,
-  ward:         String(values.wardId),  // ✅ cast
-  birth_date:   values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
+    const payload: RegisterPayload = {
+      // required
+      an: selectedPatient.an,
+      hn: selectedPatient.hn,
+      patient_name: selectedPatient.ptname,
+      reg_datetime: regDatetime,
+      before_ward: String(values.referFromWardId) ?? null,
+      ward: String(values.wardId),
+      birth_date: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
 
+      spclty: values.specialtyCode != null ? String(values.specialtyCode) : null,
+      gender: selectedPatient.gender != null ? String(selectedPatient.gender) : null,
+      bedno: values.bed != null ? String(values.bed) : null,
 
-  // ✅ cast เป็น string ทุกตัวที่เป็น Union(String|Null)
-  spclty:             values.specialtyCode   != null ? String(values.specialtyCode)   : null,
-  gender:             selectedPatient.gender != null ? String(selectedPatient.gender) : null,
-  bedno:              values.bed             != null ? String(values.bed)             : null,
+      admission_type_id: values.admissionTypeId ?? null,
+      status: 1,
+      serverity_level_id: values.severityLevelId ?? null,
+      severity_level_id: values.severityLevelId ?? null,
+      admission_change_shift_type_id: values.shiftTypeId ?? null,
 
-  // number fields — ปล่อยเป็น number ได้ (backend รับ Union(Number|String|Null))
-  admission_type_id:  values.admissionTypeId  ?? null,
-  status:             1,
-  serverity_level_id: values.severityLevelId  ?? null,
-  severity_level_id:  values.severityLevelId  ?? null,
-  admission_change_shift_type_id: values.shiftTypeId ?? null,
-
-  // Optional(String) — ห้าม null
-  is_ventilator: values.isVentilator || 'N',
-  ...(values.doctor_name?.trim()
-    ? { incharge_doctor: values.doctor_name.trim() }
-    : {}
-  ),
-};
-
-    //console.log('📦 Payload:', JSON.stringify(payload, null, 2));
+      is_ventilator: values.isVentilator || 'N',
+      oxygen_support_type: values.isVentilator === 'N' ? values.oxygenSupportType : null,
+      ...(values.doctor_name?.trim()
+        ? { incharge_doctor: values.doctor_name.trim() }
+        : {}
+      ),
+    };
 
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
@@ -335,7 +377,12 @@ const payload: RegisterPayload = {
 
       let errorText = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล';
       if (status === 422) errorText = `ข้อมูลไม่ถูกต้อง (422): ${JSON.stringify(detail)}`;
-      else if (status === 401) errorText = 'Session หมดอายุ กรุณา Login ใหม่';
+      else if (status === 401) {
+        errorText = 'Session หมดอายุ กรุณา Login ใหม่';
+        Swal.fire({
+          icon: 'error', title: 'เซสชันหมดอายุ', text: errorText, confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง',
+        }).then(() => router.push('/'));
+      }
       else if (status === 404) errorText = 'ไม่พบข้อมูลผู้ป่วยในระบบ HIS';
       else if (status === 500) errorText = 'เกิดข้อผิดพลาดที่ Server (500)';
 
@@ -394,17 +441,17 @@ const payload: RegisterPayload = {
 
           <div className="flex flex-wrap gap-4 mb-6">
             <Select
-              size="medium"
+              size="middle"
               placeholder="เลือกหอผู้ป่วย"
               style={{ width: 250 }}
               onChange={handleWardChange}
               showSearch
               optionFilterProp="children"
             >
-              {wards.map(w => <Option key={w.ward} value={w.ward}>{w.name}</Option>)}
+              {wards.map(w => <Option key={w.ward} value={w.his_code || String(w.ward)}>{w.ward_name || w.name}</Option>)}
             </Select>
             <Input
-              size="medium"
+              size="middle"
               prefix={<VscSearch className="text-gray-400" />}
               placeholder="ระบุเลข AN เพื่อค้นหา"
               value={anInput}
@@ -412,7 +459,7 @@ const payload: RegisterPayload = {
               onPressEnter={handleSearch}
               style={{ maxWidth: 200 }}
             />
-            <Button size="medium" type="primary" onClick={handleSearch} loading={loading} className="bg-[#006b5f]">
+            <Button size="middle" type="primary" onClick={handleSearch} loading={loading} className="bg-[#006b5f]">
               ค้นหา
             </Button>
           </div>
@@ -451,8 +498,8 @@ const payload: RegisterPayload = {
 
             {/* Ward */}
             <Form.Item label="รับเข้าตึก" name="wardId" rules={[{ required: true, message: 'กรุณาเลือกหอผู้ป่วย' }]}>
-              <Select placeholder="เลือกหอผู้ป่วย" showSearch optionFilterProp="children">
-                {wards.map(w => <Option key={w.ward} value={w.ward}>{w.name}</Option>)}
+              <Select placeholder="เลือกหอผู้ป่วย" showSearch optionFilterProp="children" onChange={handleDrawerWardChange}>
+                {wards.map(w => <Option key={w.ward} value={w.his_code || String(w.ward)}>{w.ward_name || w.name}</Option>)}
               </Select>
             </Form.Item>
 
@@ -469,7 +516,7 @@ const payload: RegisterPayload = {
             {admissionTypeIdValue === 2 && (
               <Form.Item label="รับย้ายจากหอผู้ป่วย" name="referFromWardId" rules={[{ required: true, message: 'กรุณาเลือกหอผู้ป่วยต้นทาง' }]}>
                 <Select placeholder="เลือกหอผู้ป่วย" showSearch optionFilterProp="children">
-                  {wards.map(w => <Option key={w.ward} value={w.ward}>{w.name}</Option>)}
+                  {wards.map(w => <Option key={w.ward} value={w.his_code || String(w.ward)}>{w.ward_name || w.name}</Option>)}
                 </Select>
               </Form.Item>
             )}
@@ -501,8 +548,8 @@ const payload: RegisterPayload = {
                         value={level.severity_level_id}
                         style={{
                           backgroundColor: isSelected ? theme.selectedBg : theme.bg,
-                          borderColor:     isSelected ? theme.selectedBg : theme.border,
-                          color:           isSelected ? '#fff' : theme.text,
+                          borderColor: isSelected ? theme.selectedBg : theme.border,
+                          color: isSelected ? '#fff' : theme.text,
                           height: 'auto', textAlign: 'center', padding: '8px 4px',
                           lineHeight: '1.2', borderWidth: '1px', borderStyle: 'solid',
                         }}
@@ -516,22 +563,60 @@ const payload: RegisterPayload = {
               </Radio.Group>
             </Form.Item>
 
-            {/* Ventilator */}
-            <Form.Item
-              label="การใช้เครื่องช่วยหายใจ (Ventilator)"
-              name="isVentilator"
-              rules={[{ required: true, message: 'กรุณาระบุข้อมูลการใช้เครื่องช่วยหายใจ' }]}
-            >
-              <Radio.Group
-                optionType="button"
-                buttonStyle="solid"
-                className="flex w-full [&>label]:flex-1 [&>label]:text-center"
-                options={[
-                  { label: 'ใส่เครื่องช่วยหายใจ', value: 'Y' },
-                  { label: 'ไม่ใส่', value: 'N' },
-                ]}
-              />
-            </Form.Item>
+            {/* Ventilator / Patient Condition */}
+            {isLaborRoom ? (
+              <Form.Item
+                label="สภาวะผู้ป่วย"
+                name="isVentilator"
+                rules={[{ required: true, message: 'กรุณาระบุสภาวะผู้ป่วย' }]}
+              >
+                <Radio.Group
+                  optionType="button"
+                  buttonStyle="solid"
+                  className="flex w-full [&>label]:flex-1 [&>label]:text-center"
+                  options={[
+                    { label: 'คลอดปกติ', value: 'N' },
+                    { label: 'C/S Complication อื่นๆ', value: 'C' },
+                  ]}
+                />
+              </Form.Item>
+            ) : (
+              <Form.Item
+                label="การใช้เครื่องช่วยหายใจ (Ventilator)"
+                name="isVentilator"
+                rules={[{ required: true, message: 'กรุณาระบุข้อมูลการใช้เครื่องช่วยหายใจ' }]}
+              >
+                <Radio.Group
+                  optionType="button"
+                  buttonStyle="solid"
+                  className="flex w-full [&>label]:flex-1 [&>label]:text-center"
+                  options={[
+                    { label: 'ใส่เครื่องช่วยหายใจ', value: 'Y' },
+                    { label: 'ไม่ใส่', value: 'N' },
+                  ]}
+                />
+              </Form.Item>
+            )}
+
+            {/* Oxygen Support — แสดงเมื่อ: ไม่ใส่เครื่องช่วยหายใจ (ทั้ง labor room และ ward ทั่วไป) */}
+            {isVentilatorValue === 'N' && (
+              <Form.Item
+                label="การให้ออกซิเจน (Oxygen Support)"
+                name="oxygenSupportType"
+                rules={[{ required: true, message: 'กรุณาเลือกประเภทการให้ออกซิเจน' }]}
+              >
+                <Radio.Group
+                  optionType="button"
+                  buttonStyle="solid"
+                  className="flex w-full [&>label]:flex-1 [&>label]:text-center"
+                  options={[
+                    { label: 'ปกติ (Room Air)', value: 1 },
+                    { label: 'Oxygen (O2)', value: 2 },
+                    { label: 'HFNC', value: 3 },
+                  ]}
+                />
+              </Form.Item>
+            )}
 
             {/* Date + Shift */}
             <Row gutter={16}>
@@ -559,13 +644,8 @@ const payload: RegisterPayload = {
               </Col>
             </Row>
 
-            {/* Phone + Bed */}
+            {/* Bed + Birth Date */}
             <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item label="เบอร์โทรศัพท์" name="phone">
-                  <Input placeholder="ระบุเบอร์โทร" />
-                </Form.Item>
-              </Col>
               <Col span={12}>
                 <Form.Item label="เตียง" name="bed" rules={[{ required: true, message: 'ระบุเตียง' }]}>
                   <Input placeholder="ระบุเลขเตียง" />

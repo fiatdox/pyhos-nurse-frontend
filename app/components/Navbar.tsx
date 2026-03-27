@@ -201,7 +201,7 @@ const Navbar = () => {
                                             {
                                                 key: 'food_order',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
-                                                label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
+                                                label: <Link href="/ipd/food-order" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
                                             },
                                             {
                                                 key: 'patient_shift_summary',

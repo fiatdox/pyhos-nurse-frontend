@@ -10,8 +10,9 @@ import dayjs from 'dayjs';
 const { Title } = Typography;
 
 interface Ward {
-  ward: string;
-  name: string;
+  ward: number;
+  ward_name: string;
+  his_code: string;
 }
 
 const ScheduleTableAntd = () => {
@@ -24,19 +25,12 @@ const ScheduleTableAntd = () => {
       align: 'center',
       width: 50,
       // ฟังก์ชัน render เพื่อทำ RowSpan ผสาน 3 เวรเข้าด้วยกัน
-      render: (value, row) => {
-        const obj: { children: React.ReactNode; props: { rowSpan?: number } } = {
-          children: <strong>{value}</strong>,
-          props: {},
-        };
-        // ถ้าเป็นเวรแรกของวัน (indexInDay === 0) ให้กินพื้นที่ 3 แถว
-        if (row.indexInDay === 0) {
-          obj.props.rowSpan = 3;
-        } else {
-          // แถวอื่นๆ ให้ถูกซ่อนไป (RowSpan = 0)
-          obj.props.rowSpan = 0;
+      render: (value) => <strong>{value}</strong>,
+      onCell: (record) => {
+        if (record.indexInDay === 0) {
+          return { rowSpan: 3 }; // ถ้าเป็นเวรแรกของวัน (indexInDay === 0) ให้กินพื้นที่ 3 แถว
         }
-        return obj;
+        return { rowSpan: 0 }; // แถวอื่นๆ ให้ถูกซ่อนไป (RowSpan = 0)
       },
     },
     {
@@ -171,14 +165,14 @@ const ScheduleTableAntd = () => {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) return;
-        const response = await axios.get('/api/v1/wards', {
+        const response = await axios.get('/api/v1/wardsV1', {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (response.data) {
           const wardList = Array.isArray(response.data) ? response.data : response.data.data || [];
           setWards(wardList);
           if (wardList.length > 0) {
-             setSelectedWard(String(wardList[0].ward));
+             setSelectedWard(wardList[0].his_code);
           }
         }
       } catch (error) {
@@ -226,7 +220,7 @@ const ScheduleTableAntd = () => {
                 className="w-48"
                 onChange={(value) => setSelectedWard(value)}
                 placeholder="กำลังโหลดข้อมูล..."
-                options={wards.map(w => ({ label: w.name, value: w.ward }))}
+                options={wards.map(w => ({ label: w.ward_name, value: w.his_code }))}
                 showSearch
                 optionFilterProp="label"
               />

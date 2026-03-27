@@ -22,8 +22,9 @@ interface PatientRecord {
 }
 
 interface Ward {
-  ward: string;
-  name: string;
+  ward: number;
+  ward_name: string;
+  his_code: string;
 }
 
 const { Option } = Select;
@@ -90,7 +91,7 @@ export default function PatientList() {
         if (!token) return;
 
         // เรียก API ไปที่ /api/v1/wards (ผ่าน Proxy) พร้อมแนบ Token
-        const response = await axios.get('/api/v1/wards', {
+        const response = await axios.get('/api/v1/wardsV1', {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -102,7 +103,7 @@ export default function PatientList() {
           setWards(wardList);
           
           if (wardList.length > 0) {
-             setSelectedWard(String(wardList[0].ward));
+             setSelectedWard(wardList[0].his_code);
           }
         }
       } catch (error) {
@@ -270,7 +271,7 @@ export default function PatientList() {
     },
   ];
 
-  const currentWardName = wards.find(w => w.ward === selectedWard)?.name || '-';
+  const currentWardName = wards.find(w => w.his_code === selectedWard)?.ward_name || '-';
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
@@ -292,7 +293,7 @@ export default function PatientList() {
                 placeholder="กำลังโหลดข้อมูล..."
                 
               >
-                {wards.map(w => <Option key={w.ward} value={w.ward}>{w.name}</Option>)}
+                {wards.map(w => <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>)}
               </Select>
               
               <Button 

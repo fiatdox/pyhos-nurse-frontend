@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Card, 
   Select, 
@@ -73,8 +73,10 @@ interface SeverityLevel {
 }
 
 interface Ward {
-  ward: string;
-  name: string;
+  ward: number;
+  ward_name: string;
+  his_code: string;
+  is_labor_room: string | null;
 }
 
 // ─── Prefix/Suffix constants ───────────────────────────────────────────────
@@ -200,7 +202,6 @@ const getShiftIdFromTime = (date: dayjs.Dayjs) => {
 };
 
 // ─── Helper for Anchor Date ────────────────────────────────────────────────
-// กำหนดวันที่สิ้นสุดของรอบ 7 วันให้อิงจากข้อมูลที่มีล่าสุด (แก้ปัญหาข้อมูลจำลอง/ปีคลาดเคลื่อน)
 const getAnchorDate = (record: PatientInfo) => {
   let anchor = dayjs();
   let maxRecord = dayjs('1900-01-01');
@@ -226,26 +227,6 @@ const getAnchorDate = (record: PatientInfo) => {
   return anchor;
 };
 
-// ─── Reset helper ───────────────────────────────────────────────────────────
-const defaultFormState = () => ({
-  severityLevelId: undefined as number | undefined,
-  isVentilator: false,
-  vsBp: '', vsPr: '', vsRr: '', vsTemp: '', vsO2: '',
-  ioInFluid: '', ioInTube: '', ioInOral: '',
-  ioOutUrine: '', ioOutFeces: '', ioOutDrain: '',
-  painScore: 0,
-  fallRisk: 'low',
-  pressureSore: 'low',
-  levelOfCare: 'self',
-  safetyPrecautions: [] as string[],
-  gcsEye: 4, gcsVerbal: 5, gcsMotor: 6,
-  wounds: [] as WoundEntry[],
-  isbarSituation: '', isbarBackground: '', isbarAssessment: '', isbarRecommendation: '',
-  focusChartFocus: '', focusChartData: '', focusChartAction: '', focusChartResponse: '',
-  medications: [] as MedEntry[],
-  carePlans: [] as CarePlanEntry[],
-});
-
 // ═══════════════════════════════════════════════════════════════════════════
 export default function ShiftPatientPage() {
   const [selectedPatient, setSelectedPatient] = useState<PatientInfo | null>(null);
@@ -257,6 +238,11 @@ export default function ShiftPatientPage() {
   const [wards, setWards]                     = useState<Ward[]>([]);
   const [selectedWard, setSelectedWard]       = useState<string | undefined>();
 
+  const isLaborRoom = useMemo(() => {
+    const selected = wards.find(w => w.his_code === selectedWard);
+    return selected?.is_labor_room === 'Y';
+  }, [selectedWard, wards]);
+
   const [patients, setPatients]               = useState<PatientInfo[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
 
@@ -265,8 +251,12 @@ export default function ShiftPatientPage() {
   const [recordShift, setRecordShift] = useState<number>(1);
 
   // Form fields
-  const [severityLevelId, setSeverityLevelId]   = useState<number | undefined>();
-  const [isVentilator, setIsVentilator]         = useState(false);
+  const [severityLevelId, setSeverityLevelId]         = useState<number | undefined>();
+  // ✅ isVentilator เปลี่ยนเป็น string 'Y' | 'N' | 'C' ให้ตรงกับ backend
+  const [isVentilator, setIsVentilator]               = useState<'Y' | 'N' | 'C'>('N');
+  // ✅ เพิ่ม oxygenSupportType (1=Room Air, 2=Oxygen, 3=HFNC)
+  const [oxygenSupportType, setOxygenSupportType]     = useState<number>(1);
+
   const [vsBp, setVsBp]     = useState('');
   const [vsPr, setVsPr]     = useState('');
   const [vsRr, setVsRr]     = useState('');
@@ -293,9 +283,9 @@ export default function ShiftPatientPage() {
   const [wounds, setWounds] = useState<WoundEntry[]>([]);
 
   // ISBAR
-  const [isbarSituation, setIsbarSituation]         = useState('');
-  const [isbarBackground, setIsbarBackground]       = useState('');
-  const [isbarAssessment, setIsbarAssessment]       = useState('');
+  const [isbarSituation, setIsbarSituation]           = useState('');
+  const [isbarBackground, setIsbarBackground]         = useState('');
+  const [isbarAssessment, setIsbarAssessment]         = useState('');
   const [isbarRecommendation, setIsbarRecommendation] = useState('');
 
   // Focus Charting
@@ -317,18 +307,15 @@ export default function ShiftPatientPage() {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) return;
 
-        const response = await axios.get('/api/v1/wards', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+        const response = await axios.get('/api/v1/wardsV1', {
+          headers: { Authorization: `Bearer ${token}` }
         });
 
         if (response.data) {
           const wardList = Array.isArray(response.data) ? response.data : response.data.data || [];
           setWards(wardList);
-          
           if (wardList.length > 0) {
-             setSelectedWard(String(wardList[0].ward));
+            setSelectedWard(wardList[0].his_code);
           }
         }
       } catch (error) {
@@ -347,7 +334,6 @@ export default function ShiftPatientPage() {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const response = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
-        //console.table(response.data);
         if (response.data) {
           setPatients(Array.isArray(response.data) ? response.data : response.data.data || []);
         }
@@ -370,7 +356,10 @@ export default function ShiftPatientPage() {
 
   // ── Reset ────────────────────────────────────────────────────────────
   const resetForm = () => {
-    setSeverityLevelId(undefined); setIsVentilator(false);
+    setSeverityLevelId(undefined);
+    // ✅ reset เป็น 'N' และ oxygenSupportType เป็น 1
+    setIsVentilator('N');
+    setOxygenSupportType(1);
     setVsBp(''); setVsPr(''); setVsRr(''); setVsTemp(''); setVsO2('');
     setIoInFluid(''); setIoInTube(''); setIoInOral('');
     setIoOutUrine(''); setIoOutFeces(''); setIoOutDrain('');
@@ -405,6 +394,35 @@ export default function ShiftPatientPage() {
     if (!selectedPatient) { message.warning('กรุณาเลือกผู้ป่วย'); return; }
     if (!severityLevelId) { message.warning('กรุณาเลือกระดับความรุนแรง'); return; }
     setIsSubmitting(true);
+
+    // ✅ payload รวม is_ventilator และ oxygen_support_type
+    const payload = {
+      admission_list_id: selectedPatient.admission_list_id,
+      an: selectedPatient.an,
+      hn: selectedPatient.hn,
+      shift_date: recordDate.format('YYYY-MM-DD'),
+      admission_change_shift_type_id: recordShift,
+      severity_level_id: severityLevelId,
+      is_ventilator: isVentilator,
+      // ส่ง number เมื่อไม่ใส่เครื่อง (N), null เมื่อใส่เครื่อง (Y) หรือ C/S (C)
+      oxygen_support_type: isVentilator === 'N' ? oxygenSupportType : null,
+      vs_bp: vsBp, vs_pr: vsPr, vs_rr: vsRr, vs_temp: vsTemp, vs_o2: vsO2,
+      io_in_fluid: ioInFluid, io_in_tube: ioInTube, io_in_oral: ioInOral,
+      io_out_urine: ioOutUrine, io_out_feces: ioOutFeces, io_out_drain: ioOutDrain,
+      pain_score: painScore,
+      fall_risk: fallRisk,
+      pressure_sore: pressureSore,
+      level_of_care: levelOfCare,
+      safety_precautions: safetyPrecautions,
+      gcs_eye: gcsEye, gcs_verbal: gcsVerbal, gcs_motor: gcsMotor,
+      isbar_situation: isbarSituation, isbar_background: isbarBackground,
+      isbar_assessment: isbarAssessment, isbar_recommendation: isbarRecommendation,
+      focus_chart_focus: focusChartFocus, focus_chart_data: focusChartData,
+      focus_chart_action: focusChartAction, focus_chart_response: focusChartResponse,
+    };
+
+    console.log('📦 Shift Payload:', JSON.stringify(payload, null, 2));
+
     setTimeout(() => {
       message.success(`บันทึกข้อมูลวันที่ ${recordDate.format('DD/MM/YYYY')} สำเร็จ`);
       setIsSubmitting(false);
@@ -445,11 +463,10 @@ export default function ShiftPatientPage() {
       }
     },
     {
-      title: 'Ventilator', key: 'ventilator', width: 100, align: 'center',
+      title: isLaborRoom ? 'สภาวะผู้ป่วย' : 'Ventilator', key: 'ventilator', width: 100, align: 'center',
       render: (_: any, record: PatientInfo) => {
         const shifts = ['ด','ช','บ'];
-        const items: { dateStr: string; shiftName: string; isRecorded: boolean; isUsed: boolean }[] = [];
-        
+        const items: { dateStr: string; shiftName: string; isRecorded: boolean; value: string }[] = [];
         const anchorDate = getAnchorDate(record);
 
         for (let d = 6; d >= 0; d--) {
@@ -457,22 +474,45 @@ export default function ShiftPatientPage() {
           const targetDateStrFull = targetDateObj.format('DD/MM/YYYY');
           const targetDateStrShort = targetDateObj.format('DD/MM');
           for (let s = 0; s < 3; s++) {
-            const shiftId = s + 1; // 1, 2, 3
+            const shiftId = s + 1;
             const recordMatch = record.shiftRecords?.find(r => r.date === targetDateStrFull && r.shiftId === shiftId);
-            
-            // ป้องกัน Type Error เผื่อ API ส่งมาเป็น String เช่น "false" หรือ "0" 
-            const valStr = recordMatch ? String(recordMatch.isVentilator).toLowerCase() : 'false';
-            const isUsed = valStr === 'true' || valStr === 'y' || valStr === '1';
-            items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, isUsed });
+            const valStr = recordMatch ? String(recordMatch.isVentilator).toUpperCase() : '';
+            items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, value: valStr });
           }
         }
+
+        if (isLaborRoom) {
+          // ห้องคลอด: N=คลอดปกติ (เขียว), C=C/S Complication (ส้ม)
+          return (
+            <div className="flex justify-center items-center h-full">
+              <div className="grid grid-rows-3 grid-flow-col gap-0.75">
+                {items.map((item, i) => {
+                  const isCS = item.value === 'C';
+                  return (
+                    <div key={i}
+                      className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${!item.isRecorded ? 'bg-slate-100 border border-slate-200 opacity-50' : isCS ? 'bg-orange-500 hover:bg-orange-600 shadow-sm' : 'bg-green-500 hover:bg-green-600 shadow-sm'}`}
+                      title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${!item.isRecorded ? 'ไม่มีบันทึก' : isCS ? 'C/S Complication' : 'คลอดปกติ'}`}
+                      suppressHydrationWarning />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+
+        // ward ทั่วไป: Y=ใส่เครื่องช่วยหายใจ (ส้ม), N=ไม่ใส่ (เทา)
         return (
           <div className="flex justify-center items-center h-full">
             <div className="grid grid-rows-3 grid-flow-col gap-0.75">
-              {items.map((item, i) => (
-                <div key={i} className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${!item.isRecorded ? 'bg-slate-100 border border-slate-200 opacity-50' : item.isUsed ? 'bg-orange-500 hover:bg-orange-600 shadow-sm' : 'bg-slate-300 hover:bg-slate-400'}`}
-                  title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${!item.isRecorded ? 'ไม่มีบันทึก' : item.isUsed ? 'ใส่' : 'ไม่ใส่'}เครื่องช่วยหายใจ`} suppressHydrationWarning />
-              ))}
+              {items.map((item, i) => {
+                const isUsed = item.value === 'Y' || item.value === 'TRUE' || item.value === '1';
+                return (
+                  <div key={i}
+                    className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${!item.isRecorded ? 'bg-slate-100 border border-slate-200 opacity-50' : isUsed ? 'bg-orange-500 hover:bg-orange-600 shadow-sm' : 'bg-slate-300 hover:bg-slate-400'}`}
+                    title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${!item.isRecorded ? 'ไม่มีบันทึก' : isUsed ? 'ใส่' : 'ไม่ใส่'}เครื่องช่วยหายใจ`}
+                    suppressHydrationWarning />
+                );
+              })}
             </div>
           </div>
         );
@@ -484,10 +524,10 @@ export default function ShiftPatientPage() {
         const shifts = ['ด','ช','บ'];
         const levelColors: Record<number,string> = {
           1:'bg-green-500 hover:bg-green-600 shadow-sm', 2:'bg-yellow-500 hover:bg-yellow-600 shadow-sm',
-          3:'bg-orange-500 hover:bg-orange-600 shadow-sm', 4:'bg-red-500 hover:bg-red-600 shadow-sm', 5:'bg-purple-500 hover:bg-purple-600 shadow-sm',
+          3:'bg-orange-500 hover:bg-orange-600 shadow-sm', 4:'bg-red-500 hover:bg-red-600 shadow-sm',
+          5:'bg-purple-500 hover:bg-purple-600 shadow-sm',
         };
         const items: { dateStr: string; shiftName: string; isRecorded: boolean; val: number }[] = [];
-        
         const anchorDate = getAnchorDate(record);
 
         for (let d = 6; d >= 0; d--) {
@@ -495,9 +535,8 @@ export default function ShiftPatientPage() {
           const targetDateStrFull = targetDateObj.format('DD/MM/YYYY');
           const targetDateStrShort = targetDateObj.format('DD/MM');
           for (let s = 0; s < 3; s++) {
-            const shiftId = s + 1; // 1, 2, 3
+            const shiftId = s + 1;
             const recordMatch = record.shiftRecords?.find(r => r.date === targetDateStrFull && r.shiftId === shiftId);
-            
             items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, val: recordMatch ? Number(recordMatch.severityLevel) : 0 });
           }
         }
@@ -505,8 +544,10 @@ export default function ShiftPatientPage() {
           <div className="flex justify-center items-center h-full">
             <div className="grid grid-rows-3 grid-flow-col gap-0.75">
               {items.map((item, i) => (
-                <div key={i} className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${item.isRecorded && item.val > 0 ? (levelColors[item.val] || 'bg-slate-300') : 'bg-slate-100 border border-slate-200 opacity-50'}`}
-                  title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${item.isRecorded ? `ระดับ ${item.val}` : 'ไม่มีบันทึก'}`} suppressHydrationWarning />
+                <div key={i}
+                  className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${item.isRecorded && item.val > 0 ? (levelColors[item.val] || 'bg-slate-300') : 'bg-slate-100 border border-slate-200 opacity-50'}`}
+                  title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${item.isRecorded ? `ระดับ ${item.val}` : 'ไม่มีบันทึก'}`}
+                  suppressHydrationWarning />
               ))}
             </div>
           </div>
@@ -559,13 +600,13 @@ export default function ShiftPatientPage() {
             <div className="flex items-center gap-3 w-full md:w-auto justify-end flex-1 md:flex-none">
               <div className="flex items-center gap-2">
                 <span className="text-gray-600 whitespace-nowrap">เลือกหอผู้ป่วย:</span>
-                <Select 
+                <Select
                   size="middle"
                   value={selectedWard}
                   className="w-35 md:w-50"
                   onChange={(value) => setSelectedWard(value)}
                   placeholder="กำลังโหลดข้อมูล..."
-                  options={wards.map(w => ({ label: w.name, value: w.ward }))}
+                  options={wards.map(w => ({ label: w.ward_name, value: w.his_code }))}
                   showSearch
                   optionFilterProp="label"
                 />
@@ -579,7 +620,6 @@ export default function ShiftPatientPage() {
             columns={columns}
             dataSource={filteredPatients}
             rowKey="admission_list_id"
-           
             size="small"
             pagination={{ pageSize: 10 }}
             loading={loadingPatients}
@@ -683,8 +723,11 @@ export default function ShiftPatientPage() {
                                 const theme = colors[level.severity_level_id];
                                 return (
                                   <Radio.Button key={level.severity_level_id} value={level.severity_level_id}
-                                    style={{ backgroundColor: isSelected ? theme.selectedBg : theme.bg, borderColor: isSelected ? theme.selectedBg : theme.border,
-                                      color: isSelected ? '#fff' : theme.text, height: 'auto', textAlign: 'center', padding: '8px 4px', lineHeight: '1.2', borderWidth: '1px', borderStyle: 'solid' }}
+                                    style={{ backgroundColor: isSelected ? theme.selectedBg : theme.bg,
+                                      borderColor: isSelected ? theme.selectedBg : theme.border,
+                                      color: isSelected ? '#fff' : theme.text,
+                                      height: 'auto', textAlign: 'center', padding: '8px 4px',
+                                      lineHeight: '1.2', borderWidth: '1px', borderStyle: 'solid' }}
                                     className="transition-all">
                                     <span className="text-xs whitespace-normal">{level.severity_level_name.split(' / ')[0]}</span>
                                   </Radio.Button>
@@ -694,17 +737,74 @@ export default function ShiftPatientPage() {
                           </Radio.Group>
                         </div>
 
-                        {/* Ventilator */}
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            <span className="text-red-500 mr-1">*</span>การใช้เครื่องช่วยหายใจ (Ventilator)
-                          </label>
-                          <Radio.Group value={isVentilator} onChange={e => setIsVentilator(e.target.value)}
-                            className="w-full flex" optionType="button" buttonStyle="solid">
-                            <Radio.Button value={true}  className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">ใส่เครื่องช่วยหายใจ</Radio.Button>
-                            <Radio.Button value={false} className="flex-1 text-center font-semibold text-slate-500">ไม่ใส่เครื่องช่วยหายใจ</Radio.Button>
-                          </Radio.Group>
-                        </div>
+                        {/* Ventilator / สภาวะผู้ป่วย — แสดงตามประเภทหอผู้ป่วย */}
+                        {isLaborRoom ? (
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              <span className="text-red-500 mr-1">*</span>สภาวะผู้ป่วย
+                            </label>
+                            <Radio.Group
+                              value={isVentilator}
+                              onChange={e => {
+                                setIsVentilator(e.target.value);
+                                if (e.target.value !== 'N') setOxygenSupportType(1);
+                              }}
+                              className="w-full flex"
+                              optionType="button"
+                              buttonStyle="solid"
+                            >
+                              <Radio.Button value="N" className="flex-1 text-center font-semibold">
+                                คลอดปกติ
+                              </Radio.Button>
+                              <Radio.Button value="C" className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">
+                                C/S Complication อื่นๆ
+                              </Radio.Button>
+                            </Radio.Group>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              <span className="text-red-500 mr-1">*</span>การใช้เครื่องช่วยหายใจ (Ventilator)
+                            </label>
+                            <Radio.Group
+                              value={isVentilator}
+                              onChange={e => {
+                                setIsVentilator(e.target.value);
+                                if (e.target.value !== 'N') setOxygenSupportType(1);
+                              }}
+                              className="w-full flex"
+                              optionType="button"
+                              buttonStyle="solid"
+                            >
+                              <Radio.Button value="Y" className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">
+                                ใส่เครื่องช่วยหายใจ
+                              </Radio.Button>
+                              <Radio.Button value="N" className="flex-1 text-center font-semibold text-slate-500">
+                                ไม่ใส่เครื่องช่วยหายใจ
+                              </Radio.Button>
+                            </Radio.Group>
+                          </div>
+                        )}
+
+                        {/* Oxygen Support — แสดงเมื่อ isVentilator === 'N' (ทั้ง labor room และ ward ทั่วไป) */}
+                        {isVentilator === 'N' && (
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              การให้ออกซิเจน (Oxygen Support)
+                            </label>
+                            <Radio.Group
+                              value={oxygenSupportType}
+                              onChange={e => setOxygenSupportType(e.target.value)}
+                              className="w-full flex"
+                              optionType="button"
+                              buttonStyle="solid"
+                            >
+                              <Radio.Button value={1} className="flex-1 text-center">ปกติ (Room Air)</Radio.Button>
+                              <Radio.Button value={2} className="flex-1 text-center">Oxygen (O2)</Radio.Button>
+                              <Radio.Button value={3} className="flex-1 text-center">HFNC</Radio.Button>
+                            </Radio.Group>
+                          </div>
+                        )}
 
                         <Divider className="my-4 border-gray-200" />
 
@@ -793,12 +893,12 @@ export default function ShiftPatientPage() {
                           <Select mode="multiple" allowClear size="small" className="w-full"
                             placeholder="เลือกการเฝ้าระวังพิเศษ" value={safetyPrecautions} onChange={setSafetyPrecautions}
                             options={[
-                              {label:'ระวังพลัดตกหกล้ม (Fall Precaution)',     value:'fall'},
-                              {label:'ระวังชัก (Seizure Precaution)',           value:'seizure'},
-                              {label:'ระวังแผลกดทับ (Pressure Sore Precaution)',value:'bedsore'},
-                              {label:'ระวังการดึงรั้งสาย (Tube Dislodgement)', value:'tube'},
-                              {label:'เฝ้าระวังการติดเชื้อ (Infection Control)',value:'infection'},
-                              {label:'ระวังการสำลัก (Aspiration Precaution)',   value:'aspiration'},
+                              {label:'ระวังพลัดตกหกล้ม (Fall Precaution)',      value:'fall'},
+                              {label:'ระวังชัก (Seizure Precaution)',            value:'seizure'},
+                              {label:'ระวังแผลกดทับ (Pressure Sore Precaution)', value:'bedsore'},
+                              {label:'ระวังการดึงรั้งสาย (Tube Dislodgement)',  value:'tube'},
+                              {label:'เฝ้าระวังการติดเชื้อ (Infection Control)', value:'infection'},
+                              {label:'ระวังการสำลัก (Aspiration Precaution)',    value:'aspiration'},
                             ]} />
                         </div>
 
@@ -875,10 +975,10 @@ export default function ShiftPatientPage() {
                     children: (
                       <div className="space-y-4">
                         {[
-                          { key:'S', label:'Situation (สถานการณ์)',  color:'bg-blue-100 text-blue-600',    value:isbarSituation,     setter:setIsbarSituation,     placeholder:'อาการเปลี่ยนแปลงที่สำคัญ ปัญหาหลักที่เกิดขึ้น...' },
-                          { key:'B', label:'Background (ภูมิหลัง)', color:'bg-green-100 text-green-600',  value:isbarBackground,    setter:setIsbarBackground,    placeholder:'ข้อมูลการรักษาที่สำคัญ ผล Lab/X-ray ที่ผิดปกติ...' },
-                          { key:'A', label:'Assessment (การประเมิน)',color:'bg-orange-100 text-orange-600',value:isbarAssessment,    setter:setIsbarAssessment,    placeholder:'สัญญาณชีพ (V/S) ล่าสุด, Pain Score, GCS, I/O...' },
-                          { key:'R', label:'Recommendation (ข้อเสนอแนะ)',color:'bg-purple-100 text-purple-600',value:isbarRecommendation,setter:setIsbarRecommendation,placeholder:'แผนการดูแล (Plan of care), สิ่งที่ต้องเฝ้าระวัง, ยาที่ต้องให้ต่อ...' },
+                          { key:'S', label:'Situation (สถานการณ์)',       color:'bg-blue-100 text-blue-600',    value:isbarSituation,      setter:setIsbarSituation,      placeholder:'อาการเปลี่ยนแปลงที่สำคัญ ปัญหาหลักที่เกิดขึ้น...' },
+                          { key:'B', label:'Background (ภูมิหลัง)',       color:'bg-green-100 text-green-600',  value:isbarBackground,     setter:setIsbarBackground,     placeholder:'ข้อมูลการรักษาที่สำคัญ ผล Lab/X-ray ที่ผิดปกติ...' },
+                          { key:'A', label:'Assessment (การประเมิน)',      color:'bg-orange-100 text-orange-600',value:isbarAssessment,     setter:setIsbarAssessment,     placeholder:'สัญญาณชีพ (V/S) ล่าสุด, Pain Score, GCS, I/O...' },
+                          { key:'R', label:'Recommendation (ข้อเสนอแนะ)',color:'bg-purple-100 text-purple-600',value:isbarRecommendation, setter:setIsbarRecommendation, placeholder:'แผนการดูแล (Plan of care), สิ่งที่ต้องเฝ้าระวัง, ยาที่ต้องให้ต่อ...' },
                         ].map(item => (
                           <div key={item.key} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <label className="flex items-center gap-1.5 text-sm font-bold text-gray-700 mb-1">
@@ -912,9 +1012,9 @@ export default function ShiftPatientPage() {
                             className="mt-1" />
                         </div>
                         {[
-                          { key:'D', label:'Data (ข้อมูลสนับสนุน)',  color:'bg-sky-100 text-sky-600',      value:focusChartData,     setter:setFocusChartData,     placeholder:'ข้อมูลอัตวิสัย (Subjective) และปรนัย (Objective)...' },
-                          { key:'A', label:'Action (การพยาบาล)',     color:'bg-teal-100 text-teal-600',    value:focusChartAction,   setter:setFocusChartAction,   placeholder:'กิจกรรมทางการพยาบาลที่ให้การดูแล...' },
-                          { key:'R', label:'Response (การประเมินผล)',color:'bg-emerald-100 text-emerald-600',value:focusChartResponse,setter:setFocusChartResponse, placeholder:'ผลลัพธ์หลังให้การพยาบาล อาการทุเลาลง หรือต้องติดตามต่อ...' },
+                          { key:'D', label:'Data (ข้อมูลสนับสนุน)',   color:'bg-sky-100 text-sky-600',        value:focusChartData,     setter:setFocusChartData,     placeholder:'ข้อมูลอัตวิสัย (Subjective) และปรนัย (Objective)...' },
+                          { key:'A', label:'Action (การพยาบาล)',      color:'bg-teal-100 text-teal-600',      value:focusChartAction,   setter:setFocusChartAction,   placeholder:'กิจกรรมทางการพยาบาลที่ให้การดูแล...' },
+                          { key:'R', label:'Response (การประเมินผล)', color:'bg-emerald-100 text-emerald-600',value:focusChartResponse, setter:setFocusChartResponse, placeholder:'ผลลัพธ์หลังให้การพยาบาล อาการทุเลาลง หรือต้องติดตามต่อ...' },
                         ].map(item => (
                           <div key={item.key} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <label className="flex items-center gap-1.5 text-sm font-bold text-gray-700 mb-1">
@@ -977,7 +1077,6 @@ export default function ShiftPatientPage() {
                           </div>
                         ))}
 
-                        {/* Summary badge */}
                         {medications.length > 0 && (
                           <div className="flex gap-2 pt-1">
                             <Tag color="green">ให้แล้ว {medications.filter(m => m.given).length} รายการ</Tag>
@@ -1037,7 +1136,6 @@ export default function ShiftPatientPage() {
                           </div>
                         ))}
 
-                        {/* Summary badges */}
                         {carePlans.length > 0 && (
                           <div className="flex gap-2 pt-1 flex-wrap">
                             <Tag color="red">   Active    {carePlans.filter(c => c.status === 'active').length}    ข้อ</Tag>
@@ -1064,7 +1162,7 @@ export default function ShiftPatientPage() {
           )}
         </Drawer>
 
-        {/* ─── HISTORY DRAWER ──────────────────────────────────────────────────────── */}
+        {/* ─── HISTORY DRAWER ──────────────────────────────────────────────── */}
         <Drawer
           title={<span className="text-white font-bold text-lg">ประวัติการบันทึกอาการ</span>}
           placement="right"
@@ -1078,7 +1176,6 @@ export default function ShiftPatientPage() {
         >
           {selectedPatient && (
             <div className="space-y-6">
-              {/* ── Patient Card ─────────────────────────────────────────── */}
               <div className="bg-linear-to-r from-teal-50 to-white p-4 rounded-xl border border-teal-100 mb-6">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-[#006b5f] flex items-center justify-center shrink-0">
