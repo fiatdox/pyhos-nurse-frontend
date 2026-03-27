@@ -44,8 +44,9 @@ interface PatientFood {
 }
 
 interface Ward {
-  ward: string;
-  name: string;
+  ward: number;
+  ward_name: string;
+  his_code: string;
 }
 
 interface NutritionMenu {
@@ -83,14 +84,14 @@ export default function OrderFoodPage() {
         const headers = { Authorization: `Bearer ${token}` };
 
         const [wardRes, menuRes] = await Promise.all([
-          axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
           axios.get('/api/v1/nutrition-menu', { headers }).catch(() => ({ data: { data: [] } }))
         ]);
 
         const wardList = Array.isArray(wardRes.data) ? wardRes.data : wardRes.data.data || [];
         setWards(wardList);
         if (wardList.length > 0) {
-          setSelectedWard(String(wardList[0].ward));
+          setSelectedWard(wardList[0].his_code);
         }
 
         const menuList = Array.isArray(menuRes.data) ? menuRes.data : menuRes.data.data || [];
@@ -110,8 +111,8 @@ export default function OrderFoodPage() {
     }
     
     // จำลองการสร้างข้อมูลผู้ป่วยตามหอผู้ป่วยที่เลือก
-    const currentWard = wards.find(w => String(w.ward) === String(selectedWard));
-    const wardName = currentWard ? currentWard.name : `หอผู้ป่วย ${selectedWard}`;
+    const currentWard = wards.find(w => w.his_code === selectedWard);
+    const wardName = currentWard ? currentWard.ward_name : `หอผู้ป่วย ${selectedWard}`;
     
     // สร้าง seed จากรหัส ward เพื่อจำลองจำนวนคนไข้ (3 - 8 คน) แบบสุ่มแต่คงที่
     const seed = parseInt(selectedWard, 10) || 1;
@@ -386,7 +387,7 @@ export default function OrderFoodPage() {
                 onChange={setSelectedWard}
                 className="w-48"
                 placeholder="กำลังโหลดข้อมูล..."
-                options={wards.map(w => ({ label: w.name, value: String(w.ward) }))}
+                options={wards.map(w => ({ label: w.ward_name, value: w.his_code }))}
                 showSearch
                 optionFilterProp="label"
               />

@@ -10,7 +10,7 @@ const sarabun = Sarabun({
 });
 
 export const metadata: Metadata = {
-  title: "Phayao Hospital Nurse System",
+  title: "PYHOS x Nurse | Phayao Hospital Nurse System",
   description: "A nurse management system for Phayao Hospital.",
 };
 

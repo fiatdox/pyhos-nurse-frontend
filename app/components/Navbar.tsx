@@ -201,7 +201,7 @@ const Navbar = () => {
                                             {
                                                 key: 'food_order',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
-                                                label: <Link href="/ipd/food-order" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
+                                                label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
                                             },
                                             {
                                                 key: 'patient_shift_summary',
@@ -222,6 +222,11 @@ const Navbar = () => {
                                                 key: 'ipd_report',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
                                                 label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">รายงาน</Link>,
+                                            },
+                                            {
+                                                key: 'dashboard',
+                                                icon: <TbReportSearch className="w-5 h-5" />,
+                                                label: <Link href="/ipd/dashboard" onClick={onCloseLeft} className="text-white block w-full text-left">Dashboard</Link>,
                                             },
                                         ]
                                     },

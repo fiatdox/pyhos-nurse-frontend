@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Card, 
-  Select, 
-  DatePicker, 
-  Radio, 
-  Input, 
-  Button, 
+import {
+  Card,
+  Select,
+  DatePicker,
+  Radio,
+  Input,
+  Button,
   message,
   Divider,
   Tag,
@@ -17,7 +17,8 @@ import {
   AutoComplete,
   Slider,
   Collapse,
-  Timeline
+  Timeline,
+  App as AntApp
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -44,6 +45,7 @@ interface ShiftRecord {
   shiftId: number;
   isVentilator: boolean;
   severityLevel: number;
+  oxygenSupportTypeId?: number;
 }
 
 interface PatientInfo {
@@ -245,6 +247,7 @@ export default function ShiftPatientPage() {
 
   const [patients, setPatients]               = useState<PatientInfo[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
+  const [isLoadingAssessment, setIsLoadingAssessment] = useState(false);
 
   // Shift meta
   const [recordDate, setRecordDate]   = useState<dayjs.Dayjs>(dayjs());
@@ -271,7 +274,7 @@ export default function ShiftPatientPage() {
   const [painScore, setPainScore]         = useState(0);
   const [fallRisk, setFallRisk]           = useState('low');
   const [pressureSore, setPressureSore]   = useState('low');
-  const [levelOfCare, setLevelOfCare]     = useState('self');
+  const [levelOfCare, setLevelOfCare]     = useState<number>(1);
   const [safetyPrecautions, setSafetyPrecautions] = useState<string[]>([]);
 
   // GCS
@@ -326,25 +329,26 @@ export default function ShiftPatientPage() {
   }, []);
 
   // ── Fetch Patients by Ward ─────────────────────────────────────────────
-  useEffect(() => {
-    const fetchPatients = async () => {
-      if (!selectedWard) return;
-      setLoadingPatients(true);
-      try {
-        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const response = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
-        if (response.data) {
-          setPatients(Array.isArray(response.data) ? response.data : response.data.data || []);
-        }
-      } catch (error) {
-        console.error("Error fetching patients by ward:", error);
-        message.error("เกิดข้อผิดพลาดในการดึงข้อมูลผู้ป่วย");
-      } finally {
-        setLoadingPatients(false);
+  const refetchPatients = async () => {
+    if (!selectedWard) return;
+    setLoadingPatients(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
+      if (response.data) {
+        setPatients(Array.isArray(response.data) ? response.data : response.data.data || []);
       }
-    };
-    fetchPatients();
+    } catch (error) {
+      console.error("Error fetching patients by ward:", error);
+      message.error("เกิดข้อผิดพลาดในการดึงข้อมูลผู้ป่วย");
+    } finally {
+      setLoadingPatients(false);
+    }
+  };
+
+  useEffect(() => {
+    refetchPatients();
   }, [selectedWard]);
 
   // ── Computed ──────────────────────────────────────────────────────────
@@ -353,6 +357,78 @@ export default function ShiftPatientPage() {
     gcsTotal >= 13 ? { label: 'Mild / ปกติ',       color: 'text-green-600  bg-green-50  border-green-200'  } :
     gcsTotal >=  9 ? { label: 'Moderate / ปานกลาง', color: 'text-orange-600 bg-orange-50 border-orange-200' } :
                      { label: 'Severe / รุนแรง',    color: 'text-red-600    bg-red-50    border-red-200'    };
+
+  // ── Load Shift Assessment ─────────────────────────────────────────────
+  const handleLoadShiftAssessment = async () => {
+    if (!selectedPatient) return;
+
+    setIsLoadingAssessment(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const payload = {
+        admission_list_id: Number(selectedPatient.admission_list_id),
+        admission_change_shift_type_id: recordShift,
+        ward: String(selectedPatient.ward),
+        shift_date: recordDate.format('YYYY-MM-DD'),
+      };
+
+     //console.log('📥 Fetching assessment with payload:', payload);
+
+      const response = await axios.post('/api/v1/get-shift-assessment', payload, { headers });
+
+      if (response.data?.success && response.data?.data) {
+        const data = response.data.data;
+        console.log('✅ Assessment data loaded:', data);
+
+        // Load data into form
+        setSeverityLevelId(data.severity_level_id);
+        setIsVentilator(data.ventilator_use || 'N');
+        setOxygenSupportType(data.oxygen_support_type_id || 1);
+        setLevelOfCare(data.level_of_care || 1);
+        if (data.pain_score) setPainScore(data.pain_score);
+
+        // Convert numbers back to risk labels
+        const convertNumberToRisk = (num: number): string => {
+          if (num === 1) return 'low';
+          if (num === 2) return 'medium';
+          if (num === 3) return 'high';
+          return 'low';
+        };
+
+        setFallRisk(convertNumberToRisk(data.fall_risk));
+        setPressureSore(convertNumberToRisk(data.pressure_sore_risk));
+        setGcsEye(data.gcs_eye || 4);
+        setGcsVerbal(data.gcs_verbal || 5);
+        setGcsMotor(data.gcs_motor || 6);
+        setSafetyPrecautions(data.safety_precautions || []);
+
+        message.success('โหลดข้อมูลเวรเก่า สำเร็จ');
+      } else {
+        // No existing data - form stays empty
+        resetForm();
+      }
+    } catch (error: any) {
+      console.error('Error loading assessment:', error);
+      // If 404 or no data, just reset form (new record)
+      if (error.response?.status === 404) {
+        resetForm();
+      } else {
+        message.warning('ไม่พบข้อมูลเวรในระบบ');
+        resetForm();
+      }
+    } finally {
+      setIsLoadingAssessment(false);
+    }
+  };
+
+  // ── Auto-load assessment when shift/date changes ────────────────────────
+  useEffect(() => {
+    if (isDrawerOpen && selectedPatient) {
+      handleLoadShiftAssessment();
+    }
+  }, [recordDate, recordShift]);
 
   // ── Reset ────────────────────────────────────────────────────────────
   const resetForm = () => {
@@ -364,7 +440,7 @@ export default function ShiftPatientPage() {
     setIoInFluid(''); setIoInTube(''); setIoInOral('');
     setIoOutUrine(''); setIoOutFeces(''); setIoOutDrain('');
     setPainScore(0); setFallRisk('low'); setPressureSore('low');
-    setLevelOfCare('self'); setSafetyPrecautions([]);
+    setLevelOfCare(1); setSafetyPrecautions([]);
     setGcsEye(4); setGcsVerbal(5); setGcsMotor(6); setWounds([]);
     setIsbarSituation(''); setIsbarBackground(''); setIsbarAssessment(''); setIsbarRecommendation('');
     setFocusChartFocus(''); setFocusChartData(''); setFocusChartAction(''); setFocusChartResponse('');
@@ -389,47 +465,131 @@ export default function ShiftPatientPage() {
   const updateCarePlan = (id: number, field: string, value: string) =>
     setCarePlans(p => p.map(c => c.id === id ? { ...c, [field]: value } : c));
 
+  // ── Validation helpers ────────────────────────────────────────────────
+  const validateForm = (): boolean => {
+    if (!selectedPatient) {
+      message.warning('กรุณาเลือกผู้ป่วย');
+      return false;
+    }
+    if (!selectedPatient?.admission_list_id) {
+      message.warning('admission_list_id ไม่สามารถใช้ได้');
+      return false;
+    }
+    if (!selectedPatient?.an) {
+      message.warning('AN ไม่สามารถใช้ได้');
+      return false;
+    }
+    if (!selectedPatient?.hn) {
+      message.warning('HN ไม่สามารถใช้ได้');
+      return false;
+    }
+    if (!selectedPatient?.ward) {
+      message.warning('ward ไม่สามารถใช้ได้');
+      return false;
+    }
+    if (!recordDate) {
+      message.warning('กรุณาระบุวันที่');
+      return false;
+    }
+    if (!recordShift) {
+      message.warning('กรุณาระบุเวร');
+      return false;
+    }
+    if (!severityLevelId) {
+      message.warning('กรุณาเลือกระดับความรุนแรง');
+      return false;
+    }
+    return true;
+  };
+
   // ── Submit / Cancel ───────────────────────────────────────────────────
-  const handleConfirm = () => {
-    if (!selectedPatient) { message.warning('กรุณาเลือกผู้ป่วย'); return; }
-    if (!severityLevelId) { message.warning('กรุณาเลือกระดับความรุนแรง'); return; }
+  const handleConfirm = async () => {
+    if (!validateForm() || !selectedPatient) return;
     setIsSubmitting(true);
 
-    // ✅ payload รวม is_ventilator และ oxygen_support_type
-    const payload = {
-      admission_list_id: selectedPatient.admission_list_id,
-      an: selectedPatient.an,
-      hn: selectedPatient.hn,
-      shift_date: recordDate.format('YYYY-MM-DD'),
-      admission_change_shift_type_id: recordShift,
-      severity_level_id: severityLevelId,
-      is_ventilator: isVentilator,
-      // ส่ง number เมื่อไม่ใส่เครื่อง (N), null เมื่อใส่เครื่อง (Y) หรือ C/S (C)
-      oxygen_support_type: isVentilator === 'N' ? oxygenSupportType : null,
-      vs_bp: vsBp, vs_pr: vsPr, vs_rr: vsRr, vs_temp: vsTemp, vs_o2: vsO2,
-      io_in_fluid: ioInFluid, io_in_tube: ioInTube, io_in_oral: ioInOral,
-      io_out_urine: ioOutUrine, io_out_feces: ioOutFeces, io_out_drain: ioOutDrain,
-      pain_score: painScore,
-      fall_risk: fallRisk,
-      pressure_sore: pressureSore,
-      level_of_care: levelOfCare,
-      safety_precautions: safetyPrecautions,
-      gcs_eye: gcsEye, gcs_verbal: gcsVerbal, gcs_motor: gcsMotor,
-      isbar_situation: isbarSituation, isbar_background: isbarBackground,
-      isbar_assessment: isbarAssessment, isbar_recommendation: isbarRecommendation,
-      focus_chart_focus: focusChartFocus, focus_chart_data: focusChartData,
-      focus_chart_action: focusChartAction, focus_chart_response: focusChartResponse,
+    // Convert fall_risk and pressure_sore from string labels to numbers (1-3)
+    const convertRiskLevel = (risk: string): number => {
+      const riskMap: Record<string, number> = { 'low': 1, 'medium': 2, 'high': 3 };
+      return riskMap[risk] || 1;
     };
 
-    console.log('📦 Shift Payload:', JSON.stringify(payload, null, 2));
+    // Prepare payload matching API spec
+    const payload = {
+      admission_list_id: Number(selectedPatient.admission_list_id),
+      admission_change_shift_type_id: recordShift,
+      an: selectedPatient.an,
+      hn: selectedPatient.hn,
+      ward: String(selectedPatient.ward),
+      shift_date: recordDate.format('YYYY-MM-DD'),
+      severity_level_id: severityLevelId,
+      staff: undefined, // optional
+      ventilator_use: isVentilator, // 'Y' | 'N' | 'C'
+      oxygen_support_type_id: (isVentilator === 'N' && oxygenSupportType) ? oxygenSupportType : null,
+      level_of_care: levelOfCare || undefined,
+      pain_score: painScore > 0 ? painScore : undefined,
+      fall_risk: convertRiskLevel(fallRisk),
+      pressure_sore_risk: convertRiskLevel(pressureSore),
+      gcs_eye: gcsEye,
+      gcs_verbal: gcsVerbal,
+      gcs_motor: gcsMotor,
+      safety_precautions: safetyPrecautions.length > 0 ? safetyPrecautions : undefined,
+      comment: undefined, // optional
+    };
 
-    setTimeout(() => {
-      message.success(`บันทึกข้อมูลวันที่ ${recordDate.format('DD/MM/YYYY')} สำเร็จ`);
+
+    // Remove undefined values
+    const cleanPayload = Object.fromEntries(
+      Object.entries(payload).filter(([, value]) => value !== undefined)
+    );
+
+    // console.log('========================================');
+    // console.log('📦 Shift Payload (บันทึกเวรผู้ป่วย):');
+    // console.log('========================================');
+    // console.log(JSON.stringify(cleanPayload, null, 2));
+    // console.log('========================================');
+
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const response = await axios.post('/api/v1/save-shift-assessment', cleanPayload, { headers });
+
+      if (response.status === 200 || response.status === 201) {
+        message.success(`บันทึกข้อมูลวันที่ ${recordDate.format('DD/MM/YYYY')} สำเร็จ`);
+        setSelectedPatient(null);
+        resetForm();
+        setIsDrawerOpen(false);
+        // Refresh table data
+        await refetchPatients();
+      }
+    } catch (error: any) {
+      console.error('❌ API Error Details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+        fullError: error
+      });
+
+      let errorMsg = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล';
+
+      if (error.response?.status === 401) {
+        errorMsg = 'ไม่ได้รับสิทธิ์เข้าถึง - กรุณาเข้าสู่ระบบใหม่';
+      } else if (error.response?.status === 400) {
+        errorMsg = `ข้อมูลไม่ถูกต้อง: ${error.response?.data?.message || error.response?.data?.error || 'ตรวจสอบค่าที่ส่ง'}`;
+      } else if (error.response?.status === 404) {
+        errorMsg = 'ไม่พบ API endpoint';
+      } else if (error.response?.status === 500) {
+        errorMsg = 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์';
+      } else if (error.message === 'Network Error') {
+        errorMsg = 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์';
+      } else {
+        errorMsg = error.response?.data?.message || error.message || errorMsg;
+      }
+
+      message.error(errorMsg);
+    } finally {
       setIsSubmitting(false);
-      setSelectedPatient(null);
-      resetForm();
-      setIsDrawerOpen(false);
-    }, 1000);
+    }
   };
 
   const handleCancel = () => {
@@ -466,7 +626,7 @@ export default function ShiftPatientPage() {
       title: isLaborRoom ? 'สภาวะผู้ป่วย' : 'Ventilator', key: 'ventilator', width: 100, align: 'center',
       render: (_: any, record: PatientInfo) => {
         const shifts = ['ด','ช','บ'];
-        const items: { dateStr: string; shiftName: string; isRecorded: boolean; value: string }[] = [];
+        const items: { dateStr: string; shiftName: string; isRecorded: boolean; value: string; oxygenType?: string }[] = [];
         const anchorDate = getAnchorDate(record);
 
         for (let d = 6; d >= 0; d--) {
@@ -477,7 +637,11 @@ export default function ShiftPatientPage() {
             const shiftId = s + 1;
             const recordMatch = record.shiftRecords?.find(r => r.date === targetDateStrFull && r.shiftId === shiftId);
             const valStr = recordMatch ? String(recordMatch.isVentilator).toUpperCase() : '';
-            items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, value: valStr });
+            const oxygenTypeStr = recordMatch?.oxygenSupportTypeId ? (
+              recordMatch.oxygenSupportTypeId === 1 ? 'Room Air' :
+              recordMatch.oxygenSupportTypeId === 2 ? 'O2' : 'HFNC'
+            ) : '';
+            items.push({ dateStr: targetDateStrShort, shiftName: shifts[s], isRecorded: !!recordMatch, value: valStr, oxygenType: oxygenTypeStr });
           }
         }
 
@@ -509,7 +673,7 @@ export default function ShiftPatientPage() {
                 return (
                   <div key={i}
                     className={`w-2.5 h-2.5 rounded-xs cursor-help transition-all ${!item.isRecorded ? 'bg-slate-100 border border-slate-200 opacity-50' : isUsed ? 'bg-orange-500 hover:bg-orange-600 shadow-sm' : 'bg-slate-300 hover:bg-slate-400'}`}
-                    title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${!item.isRecorded ? 'ไม่มีบันทึก' : isUsed ? 'ใส่' : 'ไม่ใส่'}เครื่องช่วยหายใจ`}
+                    title={`วันที่ ${item.dateStr} เวร${item.shiftName}: ${!item.isRecorded ? 'ไม่มีบันทึก' : isUsed ? `ใส่เครื่องช่วยหายใจ` : `ไม่ใส่${item.oxygenType ? ` (${item.oxygenType})` : ''}`}`}
                     suppressHydrationWarning />
                 );
               })}
@@ -559,13 +723,63 @@ export default function ShiftPatientPage() {
       render: (_, record) => (
         <div className="flex flex-col gap-2">
           <Button type="primary" size="small" className="bg-[#006b5f] flex items-center justify-center gap-1 mx-auto w-full"
-            onClick={() => {
+            onClick={async () => {
               setSelectedPatient(record);
               setIsDrawerOpen(true);
               const n = dayjs();
               setRecordDate(n);
               setRecordShift(getShiftIdFromTime(n));
               resetForm();
+
+              // Load existing assessment data if available
+              setTimeout(() => {
+                // Use record data directly since state update is async
+                const payload = {
+                  admission_list_id: Number(record.admission_list_id),
+                  admission_change_shift_type_id: getShiftIdFromTime(n),
+                  ward: String(record.ward),
+                  shift_date: n.format('YYYY-MM-DD'),
+                };
+
+                const loadAssessment = async () => {
+                  setIsLoadingAssessment(true);
+                  try {
+                    const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+                    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                    const response = await axios.post('/api/v1/get-shift-assessment', payload, { headers });
+
+                    if (response.data?.success && response.data?.data) {
+                      const data = response.data.data;
+                      setSeverityLevelId(data.severity_level_id);
+                      setIsVentilator(data.ventilator_use || 'N');
+                      setOxygenSupportType(data.oxygen_support_type_id || 1);
+                      setLevelOfCare(data.level_of_care || 1);
+                      if (data.pain_score) setPainScore(data.pain_score);
+
+                      const convertNumberToRisk = (num: number): string => {
+                        if (num === 1) return 'low';
+                        if (num === 2) return 'medium';
+                        if (num === 3) return 'high';
+                        return 'low';
+                      };
+
+                      setFallRisk(convertNumberToRisk(data.fall_risk));
+                      setPressureSore(convertNumberToRisk(data.pressure_sore_risk));
+                      setGcsEye(data.gcs_eye || 4);
+                      setGcsVerbal(data.gcs_verbal || 5);
+                      setGcsMotor(data.gcs_motor || 6);
+                      setSafetyPrecautions(data.safety_precautions || []);
+                      message.success('โหลดข้อมูลเวรเก่า สำเร็จ');
+                    }
+                  } catch (error) {
+                    // No existing data - form stays with reset values
+                  } finally {
+                    setIsLoadingAssessment(false);
+                  }
+                };
+
+                loadAssessment();
+              }, 0);
             }}>
             บันทึกเวร
           </Button>
@@ -585,7 +799,8 @@ export default function ShiftPatientPage() {
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
-      <div className="p-6 max-w-full mx-auto">
+      <AntApp>
+        <div className="p-6 max-w-full mx-auto">
         <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -787,24 +1002,24 @@ export default function ShiftPatientPage() {
                         )}
 
                         {/* Oxygen Support — แสดงเมื่อ isVentilator === 'N' (ทั้ง labor room และ ward ทั่วไป) */}
-                        {isVentilator === 'N' && (
+                        {isVentilator === 'N' ? (
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">
                               การให้ออกซิเจน (Oxygen Support)
                             </label>
                             <Radio.Group
-                              value={oxygenSupportType}
-                              onChange={e => setOxygenSupportType(e.target.value)}
+                              value={String(oxygenSupportType || 1)}
+                              onChange={e => setOxygenSupportType(Number(e.target.value))}
                               className="w-full flex"
                               optionType="button"
                               buttonStyle="solid"
                             >
-                              <Radio.Button value={1} className="flex-1 text-center">ปกติ (Room Air)</Radio.Button>
-                              <Radio.Button value={2} className="flex-1 text-center">Oxygen (O2)</Radio.Button>
-                              <Radio.Button value={3} className="flex-1 text-center">HFNC</Radio.Button>
+                              <Radio.Button value="1" className="flex-1 text-center">ปกติ (Room Air)</Radio.Button>
+                              <Radio.Button value="2" className="flex-1 text-center">Oxygen (O2)</Radio.Button>
+                              <Radio.Button value="3" className="flex-1 text-center">HFNC</Radio.Button>
                             </Radio.Group>
                           </div>
-                        )}
+                        ) : null}
 
                         <Divider className="my-4 border-gray-200" />
 
@@ -816,11 +1031,11 @@ export default function ShiftPatientPage() {
                         {/* Level of Care */}
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 mb-1">Level of Care</label>
-                          <Radio.Group value={levelOfCare} onChange={e => setLevelOfCare(e.target.value)}
+                          <Radio.Group value={levelOfCare || 1} onChange={e => setLevelOfCare(e.target.value)}
                             className="w-full flex" optionType="button" buttonStyle="solid" size="middle">
-                            <Radio.Button value="self"    className="flex-1 text-center">Self-care</Radio.Button>
-                            <Radio.Button value="partial" className="flex-1 text-center">Partial-care</Radio.Button>
-                            <Radio.Button value="total"   className="flex-1 text-center">Total-care</Radio.Button>
+                            <Radio.Button value={1} className="flex-1 text-center">Self-care</Radio.Button>
+                            <Radio.Button value={2} className="flex-1 text-center">Partial-care</Radio.Button>
+                            <Radio.Button value={3} className="flex-1 text-center">Total-care</Radio.Button>
                           </Radio.Group>
                         </div>
 
@@ -1255,6 +1470,7 @@ export default function ShiftPatientPage() {
           )}
         </Drawer>
       </div>
+    </AntApp>
     </div>
   );
 }
