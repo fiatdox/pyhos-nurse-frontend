@@ -35,6 +35,7 @@ import {
   PiClockBold
 } from 'react-icons/pi';
 import { MdOutlineSummarize } from 'react-icons/md';
+import Swal from 'sweetalert2';
 
 dayjs.locale('th');
 
@@ -404,7 +405,7 @@ export default function ShiftPatientPage() {
         setGcsMotor(data.gcs_motor || 6);
         setSafetyPrecautions(data.safety_precautions || []);
 
-        message.success('โหลดข้อมูลเวรเก่า สำเร็จ');
+        //message.success('โหลดข้อมูลเวรเก่า สำเร็จ');
       } else {
         // No existing data - form stays empty
         resetForm();
@@ -496,7 +497,12 @@ export default function ShiftPatientPage() {
       return false;
     }
     if (!severityLevelId) {
-      message.warning('กรุณาเลือกระดับความรุนแรง');
+      Swal.fire({
+        icon: 'warning',
+        title: 'แจ้งเตือน',
+        text: 'กรุณาเลือกระดับความรุนแรง',
+        confirmButtonColor: '#006b5f'
+      });
       return false;
     }
     return true;
@@ -555,7 +561,7 @@ export default function ShiftPatientPage() {
       const response = await axios.post('/api/v1/save-shift-assessment', cleanPayload, { headers });
 
       if (response.status === 200 || response.status === 201) {
-        message.success(`บันทึกข้อมูลวันที่ ${recordDate.format('DD/MM/YYYY')} สำเร็จ`);
+        Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: `บันทึกข้อมูลวันที่ ${recordDate.format('DD/MM/YYYY')} สำเร็จ`, timer: 2000, showConfirmButton: false });
         setSelectedPatient(null);
         resetForm();
         setIsDrawerOpen(false);
@@ -586,7 +592,7 @@ export default function ShiftPatientPage() {
         errorMsg = error.response?.data?.message || error.message || errorMsg;
       }
 
-      message.error(errorMsg);
+      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: errorMsg });
     } finally {
       setIsSubmitting(false);
     }
@@ -769,7 +775,7 @@ export default function ShiftPatientPage() {
                       setGcsVerbal(data.gcs_verbal || 5);
                       setGcsMotor(data.gcs_motor || 6);
                       setSafetyPrecautions(data.safety_precautions || []);
-                      message.success('โหลดข้อมูลเวรเก่า สำเร็จ');
+                      //message.success('โหลดข้อมูลเวรเก่า สำเร็จ');
                     }
                   } catch (error) {
                     // No existing data - form stays with reset values

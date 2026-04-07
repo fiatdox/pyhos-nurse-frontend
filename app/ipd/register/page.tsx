@@ -573,12 +573,18 @@ export default function RegisterPage() {
                 <Radio.Group
                   optionType="button"
                   buttonStyle="solid"
-                  className="flex w-full [&>label]:flex-1 [&>label]:text-center"
-                  options={[
-                    { label: 'คลอดปกติ', value: 'N' },
-                    { label: 'C/S Complication อื่นๆ', value: 'C' },
-                  ]}
-                />
+                  className="w-full flex"
+                  onChange={e => {
+                    if (e.target.value !== 'N') form.setFieldsValue({ oxygenSupportType: 1 });
+                  }}
+                >
+                  <Radio.Button value="N" className="flex-1 text-center font-semibold">
+                    คลอดปกติ
+                  </Radio.Button>
+                  <Radio.Button value="C" className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">
+                    C/S Complication อื่นๆ
+                  </Radio.Button>
+                </Radio.Group>
               </Form.Item>
             ) : (
               <Form.Item
@@ -589,16 +595,22 @@ export default function RegisterPage() {
                 <Radio.Group
                   optionType="button"
                   buttonStyle="solid"
-                  className="flex w-full [&>label]:flex-1 [&>label]:text-center"
-                  options={[
-                    { label: 'ใส่เครื่องช่วยหายใจ', value: 'Y' },
-                    { label: 'ไม่ใส่', value: 'N' },
-                  ]}
-                />
+                  className="w-full flex"
+                  onChange={e => {
+                    if (e.target.value !== 'N') form.setFieldsValue({ oxygenSupportType: 1 });
+                  }}
+                >
+                  <Radio.Button value="Y" className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">
+                    ใส่เครื่องช่วยหายใจ
+                  </Radio.Button>
+                  <Radio.Button value="N" className="flex-1 text-center font-semibold text-slate-500">
+                    ไม่ใส่เครื่องช่วยหายใจ
+                  </Radio.Button>
+                </Radio.Group>
               </Form.Item>
             )}
 
-            {/* Oxygen Support — แสดงเมื่อ: ไม่ใส่เครื่องช่วยหายใจ (ทั้ง labor room และ ward ทั่วไป) */}
+            {/* Oxygen Support — แสดงเมื่อ isVentilator === 'N' (ทั้ง labor room และ ward ทั่วไป) */}
             {isVentilatorValue === 'N' && (
               <Form.Item
                 label="การให้ออกซิเจน (Oxygen Support)"
@@ -608,13 +620,12 @@ export default function RegisterPage() {
                 <Radio.Group
                   optionType="button"
                   buttonStyle="solid"
-                  className="flex w-full [&>label]:flex-1 [&>label]:text-center"
-                  options={[
-                    { label: 'ปกติ (Room Air)', value: 1 },
-                    { label: 'Oxygen (O2)', value: 2 },
-                    { label: 'HFNC', value: 3 },
-                  ]}
-                />
+                  className="w-full flex"
+                >
+                  <Radio.Button value={1} className="flex-1 text-center">ปกติ (Room Air)</Radio.Button>
+                  <Radio.Button value={2} className="flex-1 text-center">Oxygen (O2)</Radio.Button>
+                  <Radio.Button value={3} className="flex-1 text-center">HFNC</Radio.Button>
+                </Radio.Group>
               </Form.Item>
             )}
 

@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Select, Typography, DatePicker } from 'antd';
+import { Table, Card, Select, Typography, DatePicker, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import 'antd/dist/reset.css'; // อย่าลืม import css ของ antd (ถ้าใช้เวอร์ชัน 5 ไม่ต้องใช้บรรทัดนี้)
 import Navbar from '../../components/Navbar';
@@ -28,9 +28,10 @@ const ScheduleTableAntd = () => {
       render: (value) => <strong>{value}</strong>,
       onCell: (record) => {
         if (record.indexInDay === 0) {
-          return { rowSpan: 3 }; // ถ้าเป็นเวรแรกของวัน (indexInDay === 0) ให้กินพื้นที่ 3 แถว
+          // ใช้ rowSpanForDay จากข้อมูลจริง หรือ fallback เป็น 3
+          return { rowSpan: record.rowSpanForDay || 3 }; 
         }
-        return { rowSpan: 0 }; // แถวอื่นๆ ให้ถูกซ่อนไป (RowSpan = 0)
+        return { rowSpan: 0 }; // แถวอื่นๆ ให้ถูกซ่อนไป
       },
     },
     {
@@ -49,18 +50,19 @@ const ScheduleTableAntd = () => {
       }
     },
     {
-      title: 'ยอดผป.ที่\nเครื่องช่วย\nหายใจ',
-      dataIndex: 'ptIn',
-      key: 'ptIn',
-      align: 'center',
-      width: 80,
+      title: 'ยอด ที่ไม่ on ventilator',
+      children: [
+        { title: 'ปกติ', dataIndex: 'ptNormal', key: 'ptNormal', align: 'center', width: 50 },
+        { title: 'O2', dataIndex: 'ptO2', key: 'ptO2', align: 'center', width: 50 },
+        { title: 'HFNC', dataIndex: 'ptHfnc', key: 'ptHfnc', align: 'center', width: 50 },
+      ]
     },
     {
-      title: 'ยอดผป.ที่ใช้\nเครื่องช่วย\nหายใจ',
+      title: 'ยอด\n ventilator  C/S',
       dataIndex: 'ptVent',
       key: 'ptVent',
       align: 'center',
-      width: 80,
+      width: 70,
     },
     {
       title: 'FTE',
@@ -82,21 +84,22 @@ const ScheduleTableAntd = () => {
           ],
         },
         {
-          title: 'OT',
+          title: 'OT 8 hr',
           children: [
-            { title: 'RN', dataIndex: 'otRn', key: 'otRn', align: 'center', width: 40, className: 'text-blue-500' },
-            { title: 'TN', dataIndex: 'otTn', key: 'otTn', align: 'center', width: 40, className: 'text-blue-500' },
-            { title: 'PN', dataIndex: 'otPn', key: 'otPn', align: 'center', width: 40, className: 'text-blue-500' },
+            { title: 'RN', dataIndex: 'ot8Rn', key: 'ot8Rn', align: 'center', width: 40, className: 'text-red-500' },
+            { title: 'TN', dataIndex: 'ot8Tn', key: 'ot8Tn', align: 'center', width: 40, className: 'text-blue-500' },
+            { title: 'PN', dataIndex: 'ot8Pn', key: 'ot8Pn', align: 'center', width: 40, className: 'text-blue-500' },
+          ],
+        },
+        {
+          title: 'OT 4 hr',
+          children: [
+            { title: 'RN', dataIndex: 'ot4Rn', key: 'ot4Rn', align: 'center', width: 40, className: 'text-red-500' },
+            { title: 'TN', dataIndex: 'ot4Tn', key: 'ot4Tn', align: 'center', width: 40, className: 'text-blue-500' },
+            { title: 'PN', dataIndex: 'ot4Pn', key: 'ot4Pn', align: 'center', width: 40, className: 'text-blue-500' },
           ],
         },
       ],
-    },
-    {
-      title: 'OT\nเสริม',
-      dataIndex: 'extraOt',
-      key: 'extraOt',
-      align: 'center',
-      width: 60,
     },
     {
       title: '-ขาด/+\nเกิน',
@@ -143,15 +146,7 @@ const ScheduleTableAntd = () => {
     },
   ];
 
-  // ข้อมูลจำลองตั้งต้น
-  const defaultData = [
-    { key: '1-N', date: 1, indexInDay: 0, shift: 'N', ptIn: 7, ptVent: '', fte: 1.13, noOtRn: 2, noOtTn: '', noOtPn: '', otRn: '', otTn: '', otPn: '', extraOt: '', diff: 0.88, prod1: 56.25, t1: 6, t2: 1, t3: '', t4: '', t5: '', total: 7, prod2: 63.10 },
-    { key: '1-D', date: 1, indexInDay: 1, shift: 'D', ptIn: 10, ptVent: '', fte: 2.57, noOtRn: 1, noOtTn: '', noOtPn: '', otRn: 1, otTn: '', otPn: '', extraOt: '', diff: -1.57, prod1: 80.36, t1: 9, t2: 1, t3: '', t4: '', t5: '', total: 10, prod2: 88.10 },
-    { key: '1-E', date: 1, indexInDay: 2, shift: 'E', ptIn: 11, ptVent: '', fte: 2.48, noOtRn: 2, noOtTn: '', noOtPn: '', otRn: '', otTn: '', otPn: '', extraOt: '', diff: -0.48, prod1: 88.39, t1: 11, t2: '', t3: '', t4: '', t5: '', total: 11, prod2: 91.67 },
-    { key: '2-N', date: 2, indexInDay: 0, shift: 'N', ptIn: 11, ptVent: '', fte: 1.77, noOtRn: 1, noOtTn: '', noOtPn: '', otRn: 1, otTn: '', otPn: '', extraOt: '', diff: 0.77, prod1: 88.39, t1: 11, t2: '', t3: '', t4: '', t5: '', total: 11, prod2: 91.67 },
-    { key: '2-D', date: 2, indexInDay: 1, shift: 'D', ptIn: 11, ptVent: '', fte: 2.83, noOtRn: 2, noOtTn: '', noOtPn: '', otRn: 1, otTn: '', otPn: '', extraOt: '', diff: -0.83, prod1: 58.93, t1: 7, t2: 4, t3: '', t4: '', t5: '', total: 11, prod2: 73.81 },
-    { key: '2-E', date: 2, indexInDay: 2, shift: 'E', ptIn: 13, ptVent: '', fte: 2.93, noOtRn: 2, noOtTn: '', noOtPn: '', otRn: '', otTn: '', otPn: '', extraOt: '', diff: -0.93, prod1: 104.46, t1: 8, t2: 5, t3: '', t4: '', t5: '', total: 13, prod2: 132.14 },
-  ];
+
 
   const [wards, setWards] = useState<Ward[]>([]);
   const [selectedWard, setSelectedWard] = useState<string | undefined>();
@@ -182,25 +177,87 @@ const ScheduleTableAntd = () => {
     fetchWards();
   }, []);
 
-  // 2. จำลองการดึงข้อมูลตารางเมื่อเปลี่ยนหอผู้ป่วย หรือ เดือน
+  // 2. ดึงข้อมูลตารางเมื่อเปลี่ยนหอผู้ป่วย หรือ เดือน
   useEffect(() => {
-    if (!selectedWard) {
+    if (!selectedWard || !selectedMonth) {
       setTableData([]);
       return;
     }
-    setLoading(true);
     
-    // จำลองการเปลี่ยนข้อมูลตามตึกและเดือนที่เลือก (ให้เห็นการทำงาน)
-    setTimeout(() => {
-      const seed = (selectedWard.charCodeAt(selectedWard.length - 1) % 5) + selectedMonth.month();
-      const mockDataForWard = defaultData.map(item => ({
-        ...item,
-        ptIn: (item.ptIn as number) + seed,
-        total: (item.total as number) + seed,
-      }));
-      setTableData(mockDataForWard);
-      setLoading(false);
-    }, 400); // จำลอง delay โหลด API
+    const fetchFteData = async () => {
+      setLoading(true);
+      try {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        
+        const payload = {
+          ward: String(selectedWard),
+          month: selectedMonth.format('YYYY-MM') // เช่น '2026-03'
+        };
+        
+        const response = await axios.post('/api/v1/nurse/fte-by-ward', payload, { headers });
+        
+        if (response.data && response.data.success) {
+          const rawData = response.data.data || [];
+          
+          // จัดกลุ่มตามวัน เพื่อทำ rowSpan ให้ถูกต้อง
+          const daysMap: Record<string, any[]>  = {};
+          rawData.forEach((item: any) => {
+            if (!daysMap[item.shift_date]) daysMap[item.shift_date] = [];
+            daysMap[item.shift_date].push(item);
+          });
+          
+          let finalData: any[] = [];
+          Object.keys(daysMap).sort().forEach(dateKey => {
+            const shiftsForDay = daysMap[dateKey].sort((a: any, b: any) => a.shift_id - b.shift_id);
+            shiftsForDay.forEach((item: any, index: number) => {
+              finalData.push({
+                key: `${item.shift_date}-${item.shift_id}`,
+                date: dayjs(item.shift_date).date(),
+                indexInDay: index,
+                rowSpanForDay: index === 0 ? shiftsForDay.length : 0,
+                shift: item.shift_name === 'ดึก' ? 'N' : item.shift_name === 'เช้า' ? 'D' : 'E',
+                ptNormal: item.normal_count,
+                ptO2: item.o2_count,
+                ptHfnc: item.hfnc_count,
+                ptVent: item.crisis_count,
+                fte: item.fte,
+                t1: item.severity_1,
+                t2: item.severity_2,
+                t3: item.severity_3,
+                t4: item.severity_4,
+                t5: item.severity_5,
+                total: item.total_count,
+                prod1: item.general_score,
+                prod2: item.crisis_score,
+                noOtRn: item.RN_NOT_OT ?? 0,
+                noOtTn: item.TN_NOT_OT ?? 0,
+                noOtPn: item.PN_NOT_OT ?? 0,
+                ot4Rn: item.RN_OT4 ?? 0,
+                ot4Tn: item.TN_OT4 ?? 0,
+                ot4Pn: item.PN_OT4 ?? 0,
+                ot8Rn: item.RN_OT8 ?? 0,
+                ot8Tn: item.TN_OT8 ?? 0,
+                ot8Pn: item.PN_OT8 ?? 0,
+                diff: 0
+              });
+            });
+          });
+          
+          setTableData(finalData);
+        } else {
+           setTableData([]);
+        }
+      } catch (error) {
+        console.error("Error fetching fte data:", error);
+        message.error("เกิดข้อผิดพลาดในการดึงข้อมูล FTE");
+        setTableData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFteData();
   }, [selectedWard, selectedMonth]);
 
   return (

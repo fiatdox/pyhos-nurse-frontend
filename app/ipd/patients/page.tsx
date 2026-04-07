@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message } from 'antd';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
@@ -9,8 +9,10 @@ import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolde
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
+import Swal from 'sweetalert2';
 
 interface PatientRecord {
+  admission_list_id: number;
   hn: string;
   an: string;
   patient_name: string;
@@ -46,9 +48,7 @@ export default function PatientList() {
   const [dischargeDate, setDischargeDate] = useState<dayjs.Dayjs | null>(null);
   const [dischargeType, setDischargeType] = useState<string>('transfer');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [severityLevelId, setSeverityLevelId] = useState<number | undefined>();
   const [shiftTypeId, setShiftTypeId] = useState<number | undefined>();
-  const [los, setLos] = useState<number>(0);
 
   // ข้อมูลตัวเลือกสำหรับฟอร์มจำหน่าย/ย้าย
   const destinations = [
@@ -68,14 +68,6 @@ export default function PatientList() {
     { value: 'transfer', label: 'ย้ายหอผู้ป่วย', icon: <PiArrowRightBold className="w-4 h-4" /> },
     { value: 'discharge', label: 'จำหน่ายกลับบ้าน', icon: <PiHouseBold className="w-4 h-4" /> },
     { value: 'refer', label: 'ส่งต่อ รพ.อื่น', icon: <PiArrowRightBold className="w-4 h-4 rotate-90" /> },
-  ];
-
-  const severityLevels = [
-    { severity_level_id: 1, severity_level_name: "ผู้ป่วยทั่วไป / อาการดี" },
-    { severity_level_id: 2, severity_level_name: "ผู้ป่วยต้องช่วยเหลือบางส่วน" },
-    { severity_level_id: 3, severity_level_name: "ผู้ป่วยมีอาการปานกลาง" },
-    { severity_level_id: 4, severity_level_name: "ผู้ป่วยอาการหนัก ต้องการดูแลพิเศษ" },
-    { severity_level_id: 5, severity_level_name: "ผู้ป่วยวิกฤติ (Critical)" }
   ];
 
   const shiftTypes = [
@@ -154,43 +146,57 @@ export default function PatientList() {
     return 1; // ดึก
   };
 
-  const handleDischargeDateChange = (date: dayjs.Dayjs | null) => {
-    setDischargeDate(date);
-    if (date) {
-      setShiftTypeId(getShiftIdFromTime(date));
-    } else {
-      setShiftTypeId(undefined);
-    }
-  };
-
-  useEffect(() => {
-    if (admitDateTime && dischargeDate) {
-      const hours = dischargeDate.diff(admitDateTime, 'hour');
-      if (hours >= 0) {
-        const days = Math.floor(hours / 24);
-        const remainder = hours % 24;
-        setLos(days + (remainder >= 6 ? 1 : 0));
-      } else {
-        setLos(0);
-      }
-    } else {
-      setLos(0);
-    }
+  const los = useMemo(() => {
+    if (!admitDateTime || !dischargeDate) return 0;
+    const totalMinutes = dischargeDate.diff(admitDateTime, 'minute');
+    if (totalMinutes < 0) return 0;
+    const fullDays = Math.floor(totalMinutes / (24 * 60));
+    const remainderHours = (totalMinutes % (24 * 60)) / 60;
+    return fullDays + (remainderHours >= 6 ? 1 : 0);
   }, [admitDateTime, dischargeDate]);
 
+  const handleDischargeDateChange = (date: dayjs.Dayjs | null) => {
+    setDischargeDate(date);
+    setShiftTypeId(date ? getShiftIdFromTime(date) : undefined);
+  };
+
+  const dischargeTypeIdMap: Record<string, number> = {
+    discharge: 1, // จำหน่าย
+    transfer: 2,  // ย้ายออก
+    refer: 3,     // REFER
+  };
+
   const handleConfirmShift = async () => {
-    if (!severityLevelId) return message.warning('กรุณาเลือกระดับความรุนแรง');
     if (dischargeType === 'transfer' && !destination) return message.warning('กรุณาเลือกหอผู้ป่วยปลายทาง');
     if (dischargeType === 'refer' && !referHospital.trim()) return message.warning('กรุณาระบุโรงพยาบาลปลายทาง');
     if (!admitDateTime) return message.warning('กรุณาระบุวันที่เวลารับเข้าตึก');
     if (!dischargeDate) return message.warning('กรุณาเลือกวันและเวลาที่จำหน่าย/ย้าย');
 
+    const payload = {
+      admission_list_id: selectedPatient!.admission_list_id,
+      discharge_type_id: dischargeTypeIdMap[dischargeType],
+      discharge_datetime: dischargeDate.format('YYYY-MM-DD HH:mm:ss'),
+      move_to_ward: dischargeType === 'transfer' ? (destination ?? '') : null,
+      before_ward: '',
+      status: dischargeType === 'transfer' ? '2' : '3',
+      los,
+    };
+   
+
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.post('/api/v1/discharge-patient', payload, { headers });
       message.success('บันทึกการจำหน่ายผู้ป่วยสำเร็จ');
       handleCancelShift();
-      fetchPatients(); // โหลดข้อมูลผู้ป่วยใหม่หลังจากทำรายการเสร็จ
-    }, 1000);
+      fetchPatients();
+    } catch (error: any) {
+      const status = error?.response?.status;
+      Swal.fire({ icon: 'error', title: `ผิดพลาด (${status ?? 'Network Error'})`, text: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancelShift = () => {
@@ -200,7 +206,6 @@ export default function PatientList() {
     setReferHospital('');
     setAdmitDateTime(null);
     setDischargeDate(null);
-    setSeverityLevelId(undefined);
     setShiftTypeId(undefined);
     setDischargeType('transfer');
     setIsDrawerOpen(false);
@@ -258,8 +263,9 @@ export default function PatientList() {
             onClick={() => {
               setSelectedPatient(record);
               setIsDrawerOpen(true);
-              setAdmitDateTime(record.reg_datetime ? dayjs(record.reg_datetime) : null);
+              const admit = record.reg_datetime ? (() => { const d = dayjs(record.reg_datetime); return d.year() > 2500 ? d.year(d.year() - 543) : d; })() : null;
               const now = dayjs();
+              setAdmitDateTime(admit);
               setDischargeDate(now);
               setShiftTypeId(getShiftIdFromTime(now));
             }}
@@ -364,42 +370,6 @@ export default function PatientList() {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     <span className="text-red-500 mr-1">*</span>
-                    ระดับความรุนแรง
-                  </label>
-                  <Radio.Group className="w-full" value={severityLevelId} onChange={(e) => setSeverityLevelId(e.target.value)} size='small'>
-                    <div className="grid grid-cols-2 gap-2">
-                      {severityLevels.map(level => {
-                        const colors: Record<number, { bg: string; border: string; text: string; selectedBg: string; }> = {
-                          1: { bg: '#f6ffed', border: '#b7eb8f', text: '#389e0d', selectedBg: '#52c41a' },
-                          2: { bg: '#fffbe6', border: '#ffe58f', text: '#d48806', selectedBg: '#faad14' },
-                          3: { bg: '#fff7e6', border: '#ffd591', text: '#d46b08', selectedBg: '#fa8c16' },
-                          4: { bg: '#fff1f0', border: '#ffccc7', text: '#cf1322', selectedBg: '#f5222d' },
-                          5: { bg: '#f9f0ff', border: '#d3adf7', text: '#531dab', selectedBg: '#722ed1' },
-                        };
-                        const isSelected = severityLevelId === level.severity_level_id;
-                        const theme = colors[level.severity_level_id] || { bg: '#fafafa', border: '#d9d9d9', text: 'rgba(0,0,0,0.88)', selectedBg: '#1677ff' };
-
-                        return (
-                          <Radio.Button
-                            key={level.severity_level_id}
-                            value={level.severity_level_id}
-                            style={{
-                              backgroundColor: isSelected ? theme.selectedBg : theme.bg, borderColor: isSelected ? theme.selectedBg : theme.border, color: isSelected ? '#fff' : theme.text,
-                              height: 'auto', textAlign: 'center', padding: '8px 4px', lineHeight: '1.2', borderWidth: '1px', borderStyle: 'solid',
-                            }}
-                            className="transition-all"
-                          >
-                            <span className="text-xs whitespace-normal">{level.severity_level_name.split(' / ')[0]}</span>
-                          </Radio.Button>
-                        );
-                      })}
-                    </div>
-                  </Radio.Group>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <span className="text-red-500 mr-1">*</span>
                     ประเภทการจำหน่าย
                   </label>
                   <Radio.Group 
@@ -475,6 +445,7 @@ export default function PatientList() {
                       className="w-full"
                       size="medium"
                       showTime
+                      disabled
                       placeholder="เลือกวันและเวลา"
                       format="DD/MM/YYYY HH:mm"
                     />

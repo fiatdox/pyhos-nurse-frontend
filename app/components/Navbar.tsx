@@ -18,7 +18,7 @@ import { CgPerformance } from 'react-icons/cg';
 import { LiaHospital } from 'react-icons/lia';
 import { PiVirusBold } from 'react-icons/pi';
 import { FaShippingFast } from 'react-icons/fa';
-import { RiSurgicalMaskLine } from 'react-icons/ri';
+import { RiShareForwardFill, RiSurgicalMaskLine } from 'react-icons/ri';
 import { GiChemicalBolt } from 'react-icons/gi';
 
 const Navbar = () => {
@@ -199,6 +199,11 @@ const Navbar = () => {
                                                 label: <Link href="/ipd/patients" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนผู้ป่วย</Link>,
                                             },
                                             {
+                                                key: 'discharge',
+                                                icon: <RiShareForwardFill  className="w-5 h-5" />,
+                                                label: <Link href="/ipd/discharge" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนจำหน่าย</Link>,
+                                            },
+                                            {
                                                 key: 'food_order',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
                                                 label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
@@ -208,16 +213,16 @@ const Navbar = () => {
                                                 icon: <VscChecklist className="w-5 h-5" />,
                                                 label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร</Link>,
                                             },
-                                            {
-                                                key: 'fte',
-                                                icon: <CgPerformance  className="w-5 h-5" />,
-                                                label: <Link href="/ipd/fte" onClick={onCloseLeft} className="text-white block w-full text-left">Full-Time Equivalent (FTE)</Link>,
-                                            },
-                                            {
-                                                key: 'employee_shift_schedule',
-                                                icon: <GrSchedulePlay className="w-5 h-5" />,
-                                                label: <Link href="/ipd/shift-configs" onClick={onCloseLeft} className="text-white block w-full text-left">ตารางการปฏิบัติงาน</Link>,
-                                            },
+                                            // {
+                                            //     key: 'fte',
+                                            //     icon: <CgPerformance  className="w-5 h-5" />,
+                                            //     label: <Link href="/ipd/fte" onClick={onCloseLeft} className="text-white block w-full text-left">Full-Time Equivalent (FTE)</Link>,
+                                            // },
+                                            // {
+                                            //     key: 'employee_shift_schedule',
+                                            //     icon: <GrSchedulePlay className="w-5 h-5" />,
+                                            //     label: <Link href="/ipd/shift-configs" onClick={onCloseLeft} className="text-white block w-full text-left">ตารางการปฏิบัติงาน</Link>,
+                                            // },
                                             {
                                                 key: 'ipd_report',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
@@ -304,7 +309,7 @@ const Navbar = () => {
 
             {/* Right Drawer (User Profile) */}
             <Drawer
-                title={<span className="text-white font-bold text-lg">User Profile</span>}
+                title={<span className="text-white font-bold text-lg">Setting</span>}
                 placement="right"
                 onClose={onCloseRight}
                 open={openRight}
@@ -315,12 +320,24 @@ const Navbar = () => {
                     <div className="flex-1">
                         <div className="flex items-center gap-3 p-2 font-bold border-b border-white/10 mb-2">
                             <VscAccount className="w-5 h-5" />
-                            <span>User Information</span>
+                            <span>Setting Information</span>
                         </div>
-                        <Link href="#" onClick={onCloseLeft}>
+                        {/* <Link href="#" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <CgPerformance    className="w-5 h-5 text-white" />
                             <span>Performance ของฉัน</span>
+                           </div>
+                        </Link> */}
+                        <Link href="/ipd/fte" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <CgPerformance    className="w-5 h-5 text-white" />
+                            <span>Full-Time Equivalent (FTE)</span>
+                           </div>
+                        </Link>
+                        <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <GrSchedulePlay    className="w-5 h-5 text-white" />
+                            <span>ตั้งค่าเวรเจ้าหน้าที่</span>
                            </div>
                         </Link>
                         <Link href="/ipd/ward-staffs" onClick={onCloseLeft}>
@@ -332,7 +349,7 @@ const Navbar = () => {
                         <Link href="#" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <GrWorkshop   className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าเจ้าหน้าปฏิบัติงานในหอผู้ป่วย</span>
+                            <span>เจ้าหน้าที่</span>
                            </div>
                         </Link>
 

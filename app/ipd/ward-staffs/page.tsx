@@ -15,8 +15,9 @@ type TransferItem = GetProp<TransferProps, 'dataSource'>[number];
 type TableRowSelection<T extends object> = TableProps<T>['rowSelection'];
 
 interface Ward {
-    ward: string;
-    name: string;
+    ward: number;
+    ward_name: string;
+    his_code: string;
 }
 
 interface Staff {
@@ -103,7 +104,7 @@ export default function WardStaffPage() {
                 const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
                 const [wardRes, staffRes] = await Promise.all([
-                    axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } })),
+                    axios.get('/api/v1/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
                     axios.get('/api/v1/staffs', { headers }).catch(() => ({ data: { data: [] } }))
                 ]);
 
@@ -302,7 +303,7 @@ export default function WardStaffPage() {
                                     value={selectedWard}
                                     onChange={handleWardChange}
                                 >
-                                    {wards.map(w => <Option key={w.ward} value={w.ward}>{w.name}</Option>)}
+                                    {wards.map(w => <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>)}
                                 </Select>
                                 {selectedWard && (
                                     <Button 

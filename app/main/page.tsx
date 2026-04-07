@@ -7,6 +7,7 @@ import { message, Button, Card, Tag } from 'antd';
 import { AudioOutlined, AudioMutedOutlined, DeleteOutlined } from '@ant-design/icons';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import Navbar from '../components/Navbar';
+import ActivityChart from './ActivityChart';
 
 const Main = () => {
   const router = useRouter();
@@ -120,6 +121,8 @@ const Main = () => {
 
           </div>
         </Card>
+
+        <ActivityChart />
 
         <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
           <p className="text-sm text-blue-700">

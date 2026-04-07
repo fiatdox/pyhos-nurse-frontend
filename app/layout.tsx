@@ -7,6 +7,7 @@ const sarabun = Sarabun({
   subsets: ["thai"],
   variable: "--font-sarabun",
   display: 'swap',
+  preload: false,
 });
 
 export const metadata: Metadata = {

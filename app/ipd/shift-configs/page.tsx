@@ -18,6 +18,15 @@ interface StaffRecord {
   position: string;
 }
 
+interface NurseShiftType {
+  nurse_shift_type_id: number;
+  code: string;
+  name: string;
+  description: string;
+  admission_change_shift_type_id: number;
+  display_order: number;
+}
+
 interface DutyState {
   [empId: number]: {
     [day: number]: string[];
@@ -44,22 +53,29 @@ export default function ShiftMatrix() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCell, setEditingCell] = useState<{ empId: number; day: number } | null>(null);
   const [tempShifts, setTempShifts] = useState<string[]>([]);
+  const [shiftTypes, setShiftTypes] = useState<NurseShiftType[]>([]);
 
-  // โหลด ward list
+  // โหลด ward list และชั่วโมงเวร
   useEffect(() => {
-    const fetchWards = async () => {
+    const fetchInitialData = async () => {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        
         const response = await axios.get('/api/v1/wardsV1', { headers });
-        const wardList = Array.isArray(response.data) ? response.data : response.data.data || [];
+        const wardList = Array.isArray(response.data) ? response.data : response.data?.data || [];
         setWards(wardList);
+
+        const shiftsRes = await axios.get('/api/v1/nurse/nurse-shift-types', { headers });
+        if (shiftsRes.data?.success) {
+          setShiftTypes(shiftsRes.data.data.sort((a: any, b: any) => a.display_order - b.display_order));
+        }
       } catch (error) {
-        console.error("Error fetching wards:", error);
-        messageApi.error("ไม่สามารถดึงข้อมูลหอผู้ป่วยได้");
+        console.error("Error fetching initial data:", error);
+        messageApi.error("เกิดข้อผิดพลาดในการโหลดข้อมูลเบื้องต้น");
       }
     };
-    fetchWards();
+    fetchInitialData();
   }, [messageApi]);
 
   // โหลดข้อมูลตารางเวรภาพรวมทั้งหมดเมื่อเลือก Ward หรือเปลี่ยนเดือน/ปี
@@ -78,24 +94,11 @@ export default function ShiftMatrix() {
 
         const resData = response.data?.data || response.data || [];
 
-        const reverseShiftCodeMap: Record<string, string> = {
-          'M': 'ช',
-          'A': 'บ',
-          'N': 'ด',
-          'M_OT': 'ช(OT8)',
-          'A_OT': 'บ(OT8)',
-          'N_OT': 'ด(OT8)',
-          'M_OT4': 'ช(OT4)',
-          'A_OT4': 'บ(OT4)',
-          'N_OT4': 'ด(OT4)',
-          'OFF': 'OFF'
-        };
-
         const newDutyData: DutyState = {};
         resData.forEach((item: any) => {
           const empId = item.staff_id;
           const day = dayjs(item.shift_date).date(); // แปลงเวลาจาก ISO เป็นตัวเลขวันที่ 1-31
-          const shiftStr = reverseShiftCodeMap[item.shift_code] || item.shift_code;
+          const shiftStr = item.shift_code; // ใช้ค่า code ตรงๆ
 
           if (!newDutyData[empId]) newDutyData[empId] = {};
           if (!newDutyData[empId][day]) newDutyData[empId][day] = [];
@@ -160,22 +163,9 @@ export default function ShiftMatrix() {
 
       const resData = Array.isArray(response.data) ? response.data : response.data?.data || [];
       
-      // 3. แมปกลับจากรหัส DB (M, A, N) เป็นตัวย่อบนหน้าจอ (ช, บ, ด)
-      const reverseShiftCodeMap: Record<string, string> = {
-        'M': 'ช',
-        'A': 'บ',
-        'N': 'ด',
-        'M_OT': 'ช(OT8)',
-        'A_OT': 'บ(OT8)',
-        'N_OT': 'ด(OT8)',
-        'M_OT4': 'ช(OT4)',
-        'A_OT4': 'บ(OT4)',
-        'N_OT4': 'ด(OT4)',
-        'OFF': 'OFF'
-      };
-
+      // 3. เลิกแมปเป็นภาษาไทย ใช้รหัสตรงไปเลยได้เลย
       const fetchedShifts = resData
-        .map((s: any) => reverseShiftCodeMap[s.shift_code] || s.shift_code)
+        .map((s: any) => s.shift_code)
         .filter(Boolean); // กรองค่าว่างออก
 
       // 4. อัปเดตตัวเลือกให้สถานะ Checked ตรงกับข้อมูลที่ดึงมา
@@ -207,30 +197,22 @@ export default function ShiftMatrix() {
         return;
       }
 
-      // แมปค่าเวรจากหน้าจอให้ตรงกับรหัสในฐานข้อมูล (ปรับได้ตามต้องการ)
-      const shiftCodeMap: Record<string, string> = {
-        'ช': 'M',
-        'บ': 'A',
-        'ด': 'N',
-        'ช(OT8)': 'M_OT',
-        'บ(OT8)': 'A_OT',
-        'ด(OT8)': 'N_OT',
-        'ช(OT4)': 'M_OT4',
-        'บ(OT4)': 'A_OT4',
-        'ด(OT4)': 'N_OT4',
-        'OFF': 'OFF'
-      };
-
       // 1. จัดเตรียมข้อมูล JSON Payload
-      const payload = tempShifts.map(shift => ({
-        staff_id: editingCell.empId,
-        shift_date: currentDate.date(editingCell.day).format('YYYY-MM-DD'),
-        shift_code: shiftCodeMap[shift] || shift,
-        ward: selectedWard,
-        created_by: 1 // TODO: ควรเปลี่ยนเป็น ID ผู้ล็อกอินใช้งานจริงจาก session หรือ decode จาก token
-      }));
+      const payload = tempShifts.map(shiftCode => {
+        const shiftType = shiftTypes.find(t => t.code === shiftCode);
+        return {
+          staff_id: editingCell.empId,
+          shift_date: currentDate.date(editingCell.day).format('YYYY-MM-DD'),
+          shift_code: shiftCode,
+          nurse_shift_type_id: shiftType?.nurse_shift_type_id ?? 0,
+          admission_change_shift_type_id: shiftType?.admission_change_shift_type_id ?? 0,
+          description: shiftType?.description ?? '',
+          ward: selectedWard,
+          created_by: 1 // TODO: ควรเปลี่ยนเป็น ID ผู้ล็อกอินใช้งานจริงจาก session หรือ decode จาก token
+        };
+      });
 
-      // console.log("Payload to send to API:", JSON.stringify(payload, null, 2));
+      console.log("Payload to send to API:", JSON.stringify(payload, null, 2));
 
       // 2. การยิง API เพื่อบันทึกข้อมูล
       try {
@@ -240,6 +222,7 @@ export default function ShiftMatrix() {
         messageApi.success('บันทึกเวรสำเร็จ');
       } catch (error: any) {
         console.error("Error saving shift:", error);
+        console.error("Response data:", error.response?.data);
         if (error.response?.status === 404) {
           messageApi.error(`ไม่พบ API (404): ${error.config?.url}`);
         } else {
@@ -296,16 +279,19 @@ export default function ShiftMatrix() {
               className={`cursor-pointer h-8 flex flex-wrap justify-center items-center content-center transition-colors ${weekend ? 'hover:bg-slate-200' : 'hover:bg-blue-50'}`}
             >
               {shifts.length > 0 ? (
-                shifts.map((s) => (
-                  <span key={s} className={`text-[10px] font-bold mx-0.5 whitespace-nowrap ${
-                    s === 'OFF' ? 'text-blue-500' :
-                    s.includes('ช') ? 'text-blue-600' :
-                    s.includes('บ') ? 'text-orange-500' :
-                    s.includes('ด') ? 'text-purple-600' : ''
-                  }`}>
-                    {s === 'OFF' ? 'x' : s}
-                  </span>
-                ))
+                shifts.map((s) => {
+                  const st = shiftTypes.find(t => t.code === s);
+                  const label = st ? st.name : s;
+                  const color = s.startsWith('M') ? 'text-blue-600'
+                    : s.startsWith('A') ? 'text-orange-500'
+                    : s.startsWith('N') ? 'text-purple-600'
+                    : 'text-blue-500'; // OFF
+                  return (
+                    <span key={s} className={`text-[10px] font-bold mx-0.5 whitespace-nowrap ${color}`}>
+                      {s === 'OFF' ? 'x' : label}
+                    </span>
+                  );
+                })
               ) : (
                 <span className="text-gray-300 text-[10px]">-</span>
               )}
@@ -316,27 +302,27 @@ export default function ShiftMatrix() {
     }),
     {
       title: 'เช้า',
-      key: 'ช',
+      key: 'M',
       width: 45,
       align: 'center',
       className: 'bg-blue-50 text-blue-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'ช').length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'M').length || '-',
     },
     {
       title: 'บ่าย',
-      key: 'บ',
+      key: 'A',
       width: 45,
       align: 'center',
       className: 'bg-orange-50 text-orange-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'บ').length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'A').length || '-',
     },
     {
       title: 'ดึก',
-      key: 'ด',
+      key: 'N',
       width: 45,
       align: 'center',
       className: 'bg-purple-50 text-purple-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'ด').length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s === 'N').length || '-',
     },
     {
       title: 'OFF',
@@ -352,7 +338,7 @@ export default function ShiftMatrix() {
       width: 45,
       align: 'center',
       className: 'bg-red-50 text-red-600 font-bold',
-      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s.includes('OT8')).length || '-',
+      render: (_, record) => Object.values(dutyData[record.id] || {}).flat().filter(s => s.includes('_OT') && !s.includes('OT4')).length || '-',
     },
     {
       title: 'OT4',
@@ -375,13 +361,7 @@ export default function ShiftMatrix() {
 
   const summaryNode = (pageData: readonly StaffRecord[]) => {
     const dayTotals: Record<string, Record<number, number>> = {
-      'ช': {},
-      'บ': {},
-      'ด': {},
-      'OFF': {},
-      'OT8': {},
-      'OT4': {},
-      'total': {}
+      'M': {}, 'A': {}, 'N': {}, 'OFF': {}, 'OT8': {}, 'OT4': {}, 'total': {}
     };
 
     let grandTotalM = 0;
@@ -397,18 +377,18 @@ export default function ShiftMatrix() {
 
       daysArray.forEach((day) => {
         const shifts = staffShifts[day] || [];
-        const mCount = shifts.filter(s => s === 'ช').length;
-        const aCount = shifts.filter(s => s === 'บ').length;
-        const nCount = shifts.filter(s => s === 'ด').length;
+        const mCount = shifts.filter(s => s === 'M').length;
+        const aCount = shifts.filter(s => s === 'A').length;
+        const nCount = shifts.filter(s => s === 'N').length;
         const offCount = shifts.filter(s => s === 'OFF').length;
-        const ot8Count = shifts.filter(s => s.includes('OT8')).length;
+        const ot8Count = shifts.filter(s => s.includes('_OT') && !s.includes('OT4')).length;
         const ot4Count = shifts.filter(s => s.includes('OT4')).length;
         const hasShift = shifts.some(s => s !== 'OFF');
         const totalCount = hasShift ? 1 : 0;
 
-        dayTotals['ช'][day] = (dayTotals['ช'][day] || 0) + mCount;
-        dayTotals['บ'][day] = (dayTotals['บ'][day] || 0) + aCount;
-        dayTotals['ด'][day] = (dayTotals['ด'][day] || 0) + nCount;
+        dayTotals['M'][day] = (dayTotals['M'][day] || 0) + mCount;
+        dayTotals['A'][day] = (dayTotals['A'][day] || 0) + aCount;
+        dayTotals['N'][day] = (dayTotals['N'][day] || 0) + nCount;
         dayTotals['OFF'][day] = (dayTotals['OFF'][day] || 0) + offCount;
         dayTotals['OT8'][day] = (dayTotals['OT8'][day] || 0) + ot8Count;
         dayTotals['OT4'][day] = (dayTotals['OT4'][day] || 0) + ot4Count;
@@ -416,11 +396,11 @@ export default function ShiftMatrix() {
       });
 
       const allShifts = Object.values(staffShifts).flat();
-      grandTotalM += allShifts.filter((s) => s === 'ช').length;
-      grandTotalA += allShifts.filter((s) => s === 'บ').length;
-      grandTotalN += allShifts.filter((s) => s === 'ด').length;
+      grandTotalM += allShifts.filter((s) => s === 'M').length;
+      grandTotalA += allShifts.filter((s) => s === 'A').length;
+      grandTotalN += allShifts.filter((s) => s === 'N').length;
       grandTotalOFF += allShifts.filter((s) => s === 'OFF').length;
-      grandTotalOT8 += allShifts.filter((s) => s.includes('OT8')).length;
+      grandTotalOT8 += allShifts.filter((s) => s.includes('_OT') && !s.includes('OT4')).length;
       grandTotalOT4 += allShifts.filter((s) => s.includes('OT4')).length;
       grandTotalOverall += Object.values(staffShifts).filter((shifts) => shifts.some((s) => s !== 'OFF')).length;
     });
@@ -429,12 +409,12 @@ export default function ShiftMatrix() {
       <Table.Summary fixed="bottom">
         <Table.Summary.Row className="bg-blue-50/40 text-xs shadow-[0_-1px_2px_rgba(0,0,0,0.05)]">
           <Table.Summary.Cell index={0} align="right">
-            <span className="text-blue-600 font-bold mr-2">รวมเช้า (ช)</span>
+            <span className="text-blue-600 font-bold mr-2">รวมเช้า (M)</span>
           </Table.Summary.Cell>
           {daysArray.map((day, index) => (
             <Table.Summary.Cell key={day} index={index + 1} align="center">
-              <span className={dayTotals['ช'][day] > 0 ? "text-blue-600 font-bold" : "text-gray-300"}>
-                {dayTotals['ช'][day] > 0 ? dayTotals['ช'][day] : '-'}
+              <span className={dayTotals['M'][day] > 0 ? "text-blue-600 font-bold" : "text-gray-300"}>
+                {dayTotals['M'][day] > 0 ? dayTotals['M'][day] : '-'}
               </span>
             </Table.Summary.Cell>
           ))}
@@ -449,12 +429,12 @@ export default function ShiftMatrix() {
 
         <Table.Summary.Row className="bg-orange-50/40 text-xs">
           <Table.Summary.Cell index={0} align="right">
-            <span className="text-orange-500 font-bold mr-2">รวมบ่าย (บ)</span>
+            <span className="text-orange-500 font-bold mr-2">รวมบ่าย (A)</span>
           </Table.Summary.Cell>
           {daysArray.map((day, index) => (
             <Table.Summary.Cell key={day} index={index + 1} align="center">
-              <span className={dayTotals['บ'][day] > 0 ? "text-orange-500 font-bold" : "text-gray-300"}>
-                {dayTotals['บ'][day] > 0 ? dayTotals['บ'][day] : '-'}
+              <span className={dayTotals['A'][day] > 0 ? "text-orange-500 font-bold" : "text-gray-300"}>
+                {dayTotals['A'][day] > 0 ? dayTotals['A'][day] : '-'}
               </span>
             </Table.Summary.Cell>
           ))}
@@ -469,12 +449,12 @@ export default function ShiftMatrix() {
 
         <Table.Summary.Row className="bg-purple-50/40 text-xs">
           <Table.Summary.Cell index={0} align="right">
-            <span className="text-purple-600 font-bold mr-2">รวมดึก (ด)</span>
+            <span className="text-purple-600 font-bold mr-2">รวมดึก (N)</span>
           </Table.Summary.Cell>
           {daysArray.map((day, index) => (
             <Table.Summary.Cell key={day} index={index + 1} align="center">
-              <span className={dayTotals['ด'][day] > 0 ? "text-purple-600 font-bold" : "text-gray-300"}>
-                {dayTotals['ด'][day] > 0 ? dayTotals['ด'][day] : '-'}
+              <span className={dayTotals['N'][day] > 0 ? "text-purple-600 font-bold" : "text-gray-300"}>
+                {dayTotals['N'][day] > 0 ? dayTotals['N'][day] : '-'}
               </span>
             </Table.Summary.Cell>
           ))}
@@ -572,25 +552,28 @@ export default function ShiftMatrix() {
     );
   };
 
-  const shiftIcons: Record<string, React.ReactNode> = {
-    'ช': <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z" /></svg>,
-    'บ': <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" /></svg>,
-    'ด': <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" /><path d="M13 6a1 1 0 011-1h.01a1 1 0 110 2H14a1 1 0 01-1-1zM16.5 8a1 1 0 011-1h.01a1 1 0 110 2H17.5a1 1 0 01-1-1zM15 3.5a1 1 0 011-1h.01a1 1 0 110 2H16a1 1 0 01-1-1z" /></svg>,
-    'OFF': <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clipRule="evenodd" /></svg>,
+  // icon ตาม prefix ของ shift code
+  const getShiftIcon = (code: string) => {
+    if (code === 'OFF') return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clipRule="evenodd" /></svg>;
+    if (code.startsWith('M')) return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z" /></svg>;
+    return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" /></svg>;
   };
 
-  const shiftOptions = [
-    { label: 'เวรเช้า (ช)', time: '08:00 - 16:00', value: 'ช', colorText: 'text-blue-600', bgCard: 'bg-blue-50', borderCard: 'border-blue-200', bgIcon: 'bg-blue-500' },
-    { label: 'เช้า OT 4 ชม.', time: '', value: 'ช(OT4)', colorText: 'text-blue-600', bgCard: 'bg-blue-50/70', borderCard: 'border-blue-300', bgIcon: 'bg-blue-400' },
-    { label: 'เช้า OT 8 ชม.', time: '', value: 'ช(OT8)', colorText: 'text-blue-600', bgCard: 'bg-blue-50', borderCard: 'border-blue-200', bgIcon: 'bg-blue-500' },
-    { label: 'เวรบ่าย (บ)', time: '16:00 - 24:00', value: 'บ', colorText: 'text-orange-500', bgCard: 'bg-orange-50', borderCard: 'border-orange-200', bgIcon: 'bg-orange-500' },
-    { label: 'บ่าย OT 4 ชม.', time: '', value: 'บ(OT4)', colorText: 'text-orange-500', bgCard: 'bg-orange-50/70', borderCard: 'border-orange-300', bgIcon: 'bg-orange-400' },
-    { label: 'บ่าย OT 8 ชม.', time: '', value: 'บ(OT8)', colorText: 'text-orange-500', bgCard: 'bg-orange-50', borderCard: 'border-orange-200', bgIcon: 'bg-orange-500' },
-    { label: 'เวรดึก (ด)', time: '24:00 - 08:00', value: 'ด', colorText: 'text-purple-600', bgCard: 'bg-purple-50', borderCard: 'border-purple-200', bgIcon: 'bg-purple-500' },
-    { label: 'ดึก OT 4 ชม.', time: '', value: 'ด(OT4)', colorText: 'text-purple-600', bgCard: 'bg-purple-50/70', borderCard: 'border-purple-300', bgIcon: 'bg-purple-400' },
-    { label: 'ดึก OT 8 ชม.', time: '', value: 'ด(OT8)', colorText: 'text-purple-600', bgCard: 'bg-purple-50', borderCard: 'border-purple-200', bgIcon: 'bg-purple-500' },
-    { label: 'หยุดงาน', time: 'OFF', value: 'OFF', colorText: 'text-gray-500', bgCard: 'bg-slate-50', borderCard: 'border-slate-200', bgIcon: 'bg-gray-500' },
-  ];
+  // derive สี/สไตล์จาก code prefix
+  const getShiftStyle = (code: string) => {
+    if (code === 'OFF') return { colorText: 'text-gray-500', bgCard: 'bg-slate-50', borderCard: 'border-slate-200', bgIcon: 'bg-gray-500' };
+    const isOT = code.includes('_OT');
+    if (code.startsWith('M')) return isOT
+      ? { colorText: 'text-blue-600', bgCard: 'bg-blue-50/70', borderCard: 'border-blue-300', bgIcon: 'bg-blue-400' }
+      : { colorText: 'text-blue-600', bgCard: 'bg-blue-50', borderCard: 'border-blue-200', bgIcon: 'bg-blue-500' };
+    if (code.startsWith('A')) return isOT
+      ? { colorText: 'text-orange-500', bgCard: 'bg-orange-50/70', borderCard: 'border-orange-300', bgIcon: 'bg-orange-400' }
+      : { colorText: 'text-orange-500', bgCard: 'bg-orange-50', borderCard: 'border-orange-200', bgIcon: 'bg-orange-500' };
+    if (code.startsWith('N')) return isOT
+      ? { colorText: 'text-purple-600', bgCard: 'bg-purple-50/70', borderCard: 'border-purple-300', bgIcon: 'bg-purple-400' }
+      : { colorText: 'text-purple-600', bgCard: 'bg-purple-50', borderCard: 'border-purple-200', bgIcon: 'bg-purple-500' };
+    return { colorText: 'text-gray-500', bgCard: 'bg-gray-50', borderCard: 'border-gray-200', bgIcon: 'bg-gray-400' };
+  };
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
@@ -692,44 +675,38 @@ export default function ShiftMatrix() {
 
             <div className="p-6 bg-slate-50/50 max-h-[60vh] overflow-y-auto">
               <div className="w-full grid grid-cols-3 gap-3">
-                {shiftOptions.map((option) => {
-                  const isChecked = tempShifts.includes(option.value);
-                  const isOff = option.value === 'OFF';
+                {shiftTypes.map((shiftType) => {
+                  const isChecked = tempShifts.includes(shiftType.code);
+                  const isOff = shiftType.code === 'OFF';
+                  const style = getShiftStyle(shiftType.code);
+
                   return (
                     <div
-                      key={option.value}
+                      key={shiftType.code}
                       style={isOff ? { gridColumn: '1 / -1' } : undefined}
                       onClick={() => {
                         if (!isChecked) {
-                          const conflictMap: Record<string, string[]> = {
-                            'ช': ['ช(OT8)', 'ช(OT4)'],
-                            'ช(OT8)': ['ช', 'ช(OT4)'],
-                            'ช(OT4)': ['ช', 'ช(OT8)'],
-                            'บ': ['บ(OT8)', 'บ(OT4)'],
-                            'บ(OT8)': ['บ', 'บ(OT4)'],
-                            'บ(OT4)': ['บ', 'บ(OT8)'],
-                            'ด': ['ด(OT8)', 'ด(OT4)'],
-                            'ด(OT8)': ['ด', 'ด(OT4)'],
-                            'ด(OT4)': ['ด', 'ด(OT8)'],
-                          };
-
-                          const conflicts = conflictMap[option.value] || [];
-                          const found = conflicts.find(c => tempShifts.includes(c));
+                          // conflict: ห้ามเลือกเวรเดียวกัน (base M/A/N) หลายแบบพร้อมกัน
+                          const sameGroup = shiftTypes
+                            .filter(t => t.code !== shiftType.code && t.admission_change_shift_type_id === shiftType.admission_change_shift_type_id && t.code !== 'OFF')
+                            .map(t => t.code);
+                          const found = sameGroup.find(c => tempShifts.includes(c));
                           if (found) {
-                            messageApi.warning(`ไม่สามารถเลือก ${option.value} และ ${found} พร้อมกันได้`);
+                            const foundName = shiftTypes.find(t => t.code === found)?.name || found;
+                            messageApi.warning(`ไม่สามารถเลือก ${shiftType.name} และ ${foundName} พร้อมกันได้`);
                             return;
                           }
                         }
 
                         const newShifts = isChecked
-                          ? tempShifts.filter((s) => s !== option.value)
-                          : [...tempShifts, option.value];
+                          ? tempShifts.filter((s) => s !== shiftType.code)
+                          : [...tempShifts, shiftType.code];
                         setTempShifts(newShifts);
                       }}
                       className={`
                         relative transition-all duration-200 ease-in-out cursor-pointer
                         ${isChecked
-                          ? `transform scale-[1.02] ${option.bgCard} ${option.borderCard} shadow-sm`
+                          ? `transform scale-[1.02] ${style.bgCard} ${style.borderCard} shadow-sm`
                           : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}
                         border rounded-xl
                       `}
@@ -737,7 +714,7 @@ export default function ShiftMatrix() {
                       <div className="flex items-center w-full p-2 pl-1 select-none">
                         <div className={`
                           w-5 h-5 rounded-full border-2 flex items-center justify-center mr-2 shrink-0 transition-all duration-300
-                          ${isChecked ? `${option.bgIcon} border-transparent scale-110` : 'border-gray-200 bg-gray-50'}
+                          ${isChecked ? `${style.bgIcon} border-transparent scale-110` : 'border-gray-200 bg-gray-50'}
                         `}>
                           {isChecked && (
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
@@ -747,18 +724,13 @@ export default function ShiftMatrix() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
-                            <span className={`font-bold text-base ${option.colorText} flex items-center gap-1`}>
-                              {shiftIcons[option.value.charAt(0)] || shiftIcons[option.value]}
-                              {option.value}
+                            <span className={`font-bold text-base ${style.colorText} flex items-center gap-1`}>
+                              {getShiftIcon(shiftType.code)}
+                              {shiftType.name}
                             </span>
-                            {option.time && (
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap ${isChecked ? 'bg-white/60 text-gray-600' : 'bg-gray-100 text-gray-400'}`}>
-                                {option.time}
-                              </span>
-                            )}
-                          </div>
-                          <div className={`text-xs mt-0.5 font-medium truncate ${isChecked ? 'text-gray-700' : 'text-gray-500'}`}>
-                            {option.label}
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap font-mono ${isChecked ? 'bg-white/60 text-gray-600' : 'bg-gray-100 text-gray-400'}`}>
+                              {shiftType.code}
+                            </span>
                           </div>
                         </div>
                       </div>
