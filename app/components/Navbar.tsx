@@ -35,13 +35,12 @@ const Navbar = () => {
     const showRightDrawer = () => setOpenRight(true);
     const onCloseRight = () => setOpenRight(false);
 
-    const handleLogout = () => {
-        // ลบ cookie token โดยตั้ง expire เป็นอดีต
-        document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        // ล้างค่าใน sessionStorage
+    const handleLogout = async () => {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        await fetch('/api/v1/logout', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        document.cookie = 'token=; Max-Age=0; path=/';
         sessionStorage.clear();
-        // Redirect ไปยังหน้า Login
-        router.push('/');
+        router.push("/");
     };
 
     return (
@@ -209,9 +208,9 @@ const Navbar = () => {
                                                 label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
                                             },
                                             {
-                                                key: 'patient_shift_summary',
+                                                key: 'daily_routine',
                                                 icon: <VscChecklist className="w-5 h-5" />,
-                                                label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร</Link>,
+                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร</Link>,
                                             },
                                             // {
                                             //     key: 'fte',

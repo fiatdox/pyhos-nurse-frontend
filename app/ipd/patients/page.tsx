@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message } from 'antd';
+import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message, Avatar } from 'antd';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import { VscSearch, VscRefresh } from "react-icons/vsc";
@@ -211,20 +211,36 @@ export default function PatientList() {
     setIsDrawerOpen(false);
   };
 
-  const filteredPatients = patients.filter(p => 
-    (p.patient_name || '').includes(searchText) || 
-    (p.hn || '').includes(searchText) || 
-    (p.an || '').includes(searchText)
-  );
+  const filteredPatients = patients
+    .filter(p =>
+      (p.patient_name || '').includes(searchText) ||
+      (p.hn || '').includes(searchText) ||
+      (p.an || '').includes(searchText)
+    )
+    .sort((a, b) => (a.bedno || '').localeCompare(b.bedno || '', undefined, { numeric: true }));
 
   const columns: ColumnsType<PatientRecord> = [
+    {
+      title: 'ลำดับ',
+      key: 'index',
+      width: 70,
+      align: 'center',
+      render: (_: unknown, __: PatientRecord, index: number) => index + 1,
+    },
     { title: 'HN', dataIndex: 'hn', key: 'hn', width: 100 },
     { title: 'AN', dataIndex: 'an', key: 'an', width: 100 },
-    { 
-      title: 'ชื่อ-สกุล', 
-      dataIndex: 'patient_name', 
+    {
+      title: 'ชื่อ-สกุล',
+      dataIndex: 'patient_name',
       key: 'patient_name',
-      render: (text) => <span className="font-semibold text-[#006b5f]">{text}</span>
+      render: (text: string) => (
+        <div className="flex items-center gap-2">
+          <Avatar style={{ backgroundColor: '#006b5f', flexShrink: 0 }} size="small">
+            {text?.charAt(0) || '?'}
+          </Avatar>
+          <span className="font-semibold text-[#006b5f]">{text}</span>
+        </div>
+      )
     },
     { title: 'เตียง', dataIndex: 'bedno', key: 'bedno', width: 100 },
     { 
@@ -236,7 +252,7 @@ export default function PatientList() {
     },
     { title: 'ประเภท', dataIndex: 'admission_type_name', key: 'admission_type_name', width: 120 },
     { title: 'แผนก', dataIndex: 'spclty_name', key: 'spclty_name', width: 120 },
-    { title: 'แพทย์เจ้าของไข้', dataIndex: 'incharge_doctor', key: 'incharge_doctor', width: 150 },
+    { title: 'แพทย์เจ้าของไข้', dataIndex: 'incharge_doctor', key: 'incharge_doctor', width: 250 },
     {
       title: 'ดำเนินการ',
       key: 'action',

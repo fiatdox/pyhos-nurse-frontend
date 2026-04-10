@@ -2,7 +2,6 @@
 
 import 'regenerator-runtime/runtime';
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { message, Button, Card, Tag } from 'antd';
 import { AudioOutlined, AudioMutedOutlined, DeleteOutlined } from '@ant-design/icons';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
@@ -10,7 +9,6 @@ import Navbar from '../components/Navbar';
 import ActivityChart from './ActivityChart';
 
 const Main = () => {
-  const router = useRouter();
   const [isClient, setIsClient] = useState(false);
 
   const {
@@ -22,14 +20,8 @@ const Main = () => {
 
   // 1. จัดการเรื่อง Hydration และ Auth
   useEffect(() => {
-    setIsClient(true); // บอกว่าตอนนี้อยู่บน Browser แล้วนะ
-
-    const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-    if (!token) {
-      message.error('เซสชันหมดอายุ หรือยังไม่ได้เข้าสู่ระบบ');
-      router.push('/');
-    }
-  }, [router]);
+    setIsClient(true);
+  }, []);
 
   // 2. ถ้ายังโหลดหน้าเว็บ (SSR) ไม่เสร็จ ให้แสดง Loading เปล่าๆ ไปก่อน
   if (!isClient) {

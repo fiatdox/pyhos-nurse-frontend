@@ -23,3 +23,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sarabun), Arial, Helvetica, sans-serif;
 }
+
+.ant-input-number-handler-wrap {
+  opacity: 1 !important;
+}

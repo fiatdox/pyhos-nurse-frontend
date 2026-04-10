@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Swal from "sweetalert2";
 
 interface UserProfile {
-  loginname: string;
+  id: number;
+  username: string;
   name: string;
+  mission_name: string;
+  major_name: string;
+  position_name: string;
 }
 
 interface LoginResponse {
@@ -24,47 +28,21 @@ export default function Home() {
   
   const router = useRouter();
 
-  useEffect(() => {
-    // ตรวจสอบ Token จาก Cookie แทน sessionStorage
-    const getCookie = (name: string) => {
-      return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
-    };
-    if (getCookie('token')) {
-      router.push("/main");
-    }
-  }, [router]);
-
-  // ฟังก์ชัน Helper สำหรับสร้าง Cookie (ปลอดภัยกว่าและรองรับ Next.js Middleware)
-  const setAuthCookie = (token: string, days: number = 1) => {
-    const date = new Date();
-    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-    const expires = "; expires=" + date.toUTCString();
-    
-    // ตรวจสอบว่าเป็น HTTPS หรือไม่ (ถ้ารันบน localhost ที่เป็น HTTP จะไม่ใส่ Secure)
-    const isSecure = window.location.protocol === 'https:' ? 'Secure;' : '';
-    document.cookie = "token=" + (token || "") + expires + "; path=/; " + isSecure + " SameSite=Lax";
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
-      // ใช้ Relative Path เพื่อให้วิ่งผ่าน Next.js Rewrites (แก้ปัญหา CORS และ Network Error)
-      const response = await axios.post<LoginResponse>("/api/v1/login", {
+      const response = await axios.post<LoginResponse>("api/v1/login", {
         username,
         password,
       });
 
       const { success, token, data: userProfile } = response.data;
 
-      // บาง API อาจส่ง code เป็น string หรือ number เช็คให้ดี
-      if (success && token) {
-        // เปลี่ยนจาก sessionStorage เป็น Cookie
-        setAuthCookie(token);
-        
-        // user_profile อาจเก็บใน sessionStorage ได้เพราะไม่ใช่ข้อมูลลับขั้นวิกฤตเท่า token
+      if (success) {
+        document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 8}`;
         sessionStorage.setItem("user_profile", JSON.stringify(userProfile));
         router.push("/main");
       } else {

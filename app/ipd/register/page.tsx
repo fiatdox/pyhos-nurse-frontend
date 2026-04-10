@@ -356,19 +356,17 @@ export default function RegisterPage() {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const response = await axios.post('/api/v1/register-patient', payload, { headers });
-      console.log('✅ Response:', response.data);
+      await axios.post('/api/v1/register-patient', payload, { headers });
 
+      onCloseDrawer();
       Swal.fire({
         icon: 'success',
         title: 'สำเร็จ',
         text: 'ลงทะเบียนสำเร็จ',
         confirmButtonColor: '#006b5f',
         confirmButtonText: 'ตกลง',
-      }).then(() => {
-        router.push('/ipd/shift-patient');
       });
-      onCloseDrawer();
+      if (selectedWard) handleWardChange(selectedWard);
 
     } catch (error: any) {
       const status = error?.response?.status;
