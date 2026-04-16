@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Card, Select, Typography, DatePicker, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import 'antd/dist/reset.css'; // อย่าลืม import css ของ antd (ถ้าใช้เวอร์ชัน 5 ไม่ต้องใช้บรรทัดนี้)
 import Navbar from '../../components/Navbar';
 import axios from 'axios';
 import dayjs from 'dayjs';

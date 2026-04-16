@@ -14,6 +14,28 @@ interface CareLevelOption {
   name: string;
 }
 
+interface ShiftSummaryItem {
+  admission_change_shift_type_id: number;
+  shift_name: string;
+  weight: string;
+  count_remain: string;
+  count_new_patient: string;
+  count_get_ward_patient: string;
+  count_discharge: string;
+  count_transfer_out: string;
+  count_refer: string;
+  count_dead: string;
+  care_normal: string;
+  care_o2: string;
+  care_hfnc: string;
+  care_vent_cs: string;
+  severity_1: string;
+  severity_2: string;
+  severity_3: string;
+  severity_4: string;
+  severity_5: string;
+}
+
 interface PatientInfo {
   admission_list_id: number | string;
   hn: string;
@@ -66,7 +88,7 @@ const levelColors: Record<number, string> = {
   5: '#9333ea',
 };
 
-const LevelCell = ({ value, onLevelChange }: { value?: number | null; onLevelChange?: (level: number | null) => void }) => {
+const LevelCell = ({ value, onLevelChange, disabled }: { value?: number | null; onLevelChange?: (level: number | null) => void; disabled?: boolean }) => {
   const bg = value ? levelColors[value] : undefined;
   return (
     <div className="flex justify-center">
@@ -76,6 +98,7 @@ const LevelCell = ({ value, onLevelChange }: { value?: number | null; onLevelCha
         size="small"
         value={value ?? null}
         onChange={onLevelChange}
+        disabled={disabled}
         style={{ width: 54, backgroundColor: bg, borderColor: bg }}
         className={value ? '[&_input]:text-white! [&_input]:font-bold! [&_input]:bg-transparent!' : ''}
       />
@@ -95,6 +118,8 @@ function DailyRoutineContent() {
   const [selectedWard, setSelectedWard] = useState<string>();
   const [selectedDate, setSelectedDate] = useState<dayjs.Dayjs>(dayjs());
   const [wards, setWards] = useState<{ label: string; value: string }[]>([]);
+  const [wardList, setWardList] = useState<{ his_code: string; general: number; crisis: number }[]>([]);
+  const wardConfig = wardList.find(w => String(w.his_code) === String(selectedWard)) ?? { general: 0, crisis: 0 };
   const [patients, setPatients] = useState<PatientInfo[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [careLevels, setCareLevels] = useState<CareLevelOption[]>([]);
@@ -105,12 +130,21 @@ function DailyRoutineContent() {
   const [loadingRecords, setLoadingRecords] = useState(false);
   // key กำลัง save อยู่
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
+  // summary card data keyed by shiftKey (night/morning/afternoon)
+  const [shiftSummary, setShiftSummary] = useState<Record<string, ShiftSummaryItem>>({});
 
-  // TODO: คำนวณจากข้อมูลจริงเมื่อทราบสูตร
-  const movements: Record<string, Record<string, number>> = {
-    night:     { newAdmit: 0, transferIn: 0, discharge: 0, death: 0, transferOut: 0 },
-    morning:   { newAdmit: 0, transferIn: 0, discharge: 0, death: 0, transferOut: 0 },
-    afternoon: { newAdmit: 0, transferIn: 0, discharge: 0, death: 0, transferOut: 0 },
+  const shiftIdToKey: Record<number, string> = { 1: 'night', 2: 'morning', 3: 'afternoon' };
+
+  const getMovements = (shiftKey: string): Record<string, number> => {
+    const s = shiftSummary[shiftKey];
+    if (!s) return { newAdmit: 0, transferIn: 0, discharge: 0, death: 0, transferOut: 0 };
+    return {
+      newAdmit:    Number(s.count_new_patient),
+      transferIn:  Number(s.count_get_ward_patient),
+      discharge:   Number(s.count_discharge),
+      death:       Number(s.count_dead),
+      transferOut: Number(s.count_transfer_out),
+    };
   };
 
   // Modal state
@@ -133,6 +167,29 @@ function DailyRoutineContent() {
     level,
   });
 
+  const fetchShiftSummary = async (ward?: string, date?: string) => {
+    const w = ward ?? selectedWard;
+    const d = date ?? selectedDate.format('YYYY-MM-DD');
+    if (!w) return;
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    try {
+      const res = await axios.post('/api/v1/patient-shift-daily-records-summary', {
+        ward: w,
+        date: d,
+      }, { headers });
+      const list: ShiftSummaryItem[] = res.data?.data || [];
+      const map: Record<string, ShiftSummaryItem> = {};
+      list.forEach(item => {
+        const key = shiftIdToKey[item.admission_change_shift_type_id];
+        if (key) map[key] = item;
+      });
+      setShiftSummary(map);
+    } catch (e) {
+      console.error('Error fetching shift summary:', e);
+    }
+  };
+
   const postRecord = async (payload: ReturnType<typeof buildPayload>) => {
     const token = getToken();
     const headers = {
@@ -142,6 +199,7 @@ function DailyRoutineContent() {
     try {
       await axios.post('/api/v1/admission-shift-daily-records', payload, { headers });
       notification.success({ title: 'บันทึกสำเร็จ', duration: 2 });
+      fetchShiftSummary();
     } catch (e: unknown) {
       if (axios.isAxiosError(e)) {
         console.error('Error saving record:', e.response?.status, e.response?.data);
@@ -220,6 +278,7 @@ function DailyRoutineContent() {
       });
       setRadioSelections(newRadios);
       setLevelScores(newLevels);
+      fetchShiftSummary();
       notification.success({ title: 'ดึงข้อมูลเวรก่อนหน้าสำเร็จ', duration: 2 });
     } catch (e: unknown) {
       if (axios.isAxiosError(e)) {
@@ -255,7 +314,12 @@ function DailyRoutineContent() {
         const list = Array.isArray(res.data) ? res.data : res.data.data || [];
         const options = list.map((w: { ward_name: string; his_code: string }) => ({ label: w.ward_name, value: w.his_code }));
         setWards(options);
-        if (options.length > 0) setSelectedWard(options[0].value);
+        setWardList(list.map((w: { his_code: string; general: string; crisis: string }) => ({
+          his_code: w.his_code,
+          general: parseFloat(w.general) || 0,
+          crisis: parseFloat(w.crisis) || 0,
+        })));
+        // ไม่ set ค่าเริ่มต้น ให้ user เลือกเอง
       } catch (e) {
         console.error('Error fetching wards:', e);
       }
@@ -276,6 +340,12 @@ function DailyRoutineContent() {
   }, []);
 
   useEffect(() => {
+    // เคลียร์ค่าเก่าก่อน fetch ใหม่
+    setShiftSummary({});
+    setRadioSelections({});
+    setLevelScores({});
+    setPatients([]);
+
     if (!selectedWard) return;
     const token = getToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -284,7 +354,8 @@ function DailyRoutineContent() {
       setLoadingPatients(true);
       try {
         const res = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
-        setPatients(Array.isArray(res.data) ? res.data : res.data.data || []);
+        const list = Array.isArray(res.data) ? res.data : res.data.data || [];
+        setPatients(list);
       } catch (e) {
         console.error('Error fetching patients:', e);
       } finally {
@@ -334,6 +405,7 @@ function DailyRoutineContent() {
 
     fetchPatients();
     fetchExistingRecords();
+    fetchShiftSummary(selectedWard, selectedDate.format('YYYY-MM-DD'));
   }, [selectedWard, selectedDate]);
 
   const currentShift = getCurrentShift();
@@ -348,13 +420,27 @@ function DailyRoutineContent() {
     return counts;
   };
 
-  const calcFte = (counts: Record<string, number>) =>
-    careLevels.reduce((sum, l, i) => {
-      const style = careLevelStyles[i] ?? careLevelStyles[careLevelStyles.length - 1];
-      return sum + (counts[String(l.admission_shift_care_level_id)] ?? 0) * style.fte;
-    }, 0);
+  const calcFte = (counts: Record<string, number>, weight: number) => {
+    let sum = 0;
+    careLevels.forEach(l => {
+      const id = l.admission_shift_care_level_id;
+      const count = counts[String(id)] ?? 0;
+      const multiplier = id === 4 ? wardConfig.crisis : wardConfig.general;
+      sum += count * multiplier;
+    });
+    return Math.ceil((sum * weight / 100 / 7) * 100) / 100;
+  };
 
   const dateLabel = selectedDate.format('D/M/YYYY');
+
+  // ตรวจสอบว่า selectedDate อยู่ก่อนวัน admit ของผู้ป่วยหรือไม่
+  // admitDate จาก API เป็น ค.ศ. format "DD/MM/YYYY" — split แปลงเป็น YYYY-MM-DD ก่อน parse
+  const isBeforeAdmit = (record: PatientInfo): boolean => {
+    if (!record.admitDate) return false;
+    const [dd, mm, yyyy] = record.admitDate.split('/');
+    const admitDay = dayjs(`${yyyy}-${mm}-${dd}`).startOf('day');
+    return selectedDate.startOf('day').isBefore(admitDay);
+  };
 
   const shiftChildren = (shiftKey: string, cellBg: string) => {
     const dCell = () => ({ style: { backgroundColor: cellBg } });
@@ -369,12 +455,13 @@ function DailyRoutineContent() {
         render: (_: unknown, record: PatientInfo) => {
           const stateKey = `${record.admission_list_id}_${shiftKey}`;
           if (loadingRecords) return <Skeleton.Button active size="small" style={{ width: 20, minWidth: 20, height: 20 }} />;
+          const beforeAdmit = isBeforeAdmit(record);
           return (
             <div className="flex justify-center">
               <Radio
                 checked={radioSelections[stateKey] === String(levelId)}
                 onChange={() => setRadio(record, shiftKey, levelId)}
-                disabled={savingKeys.has(stateKey)}
+                disabled={savingKeys.has(stateKey) || beforeAdmit}
               />
             </div>
           );
@@ -395,6 +482,7 @@ function DailyRoutineContent() {
             <LevelCell
               value={levelScores[`${record.admission_list_id}_${shiftKey}`]}
               onLevelChange={(level) => saveLevel(record, shiftKey, level)}
+              disabled={isBeforeAdmit(record)}
             />
           );
         },
@@ -419,7 +507,21 @@ function DailyRoutineContent() {
       render: (_: unknown, __: PatientInfo, index: number) => index + 1,
     },
     { title: 'AN', dataIndex: 'an', key: 'an', width: 90, align: 'center' },
-    { title: 'ชื่อ-นามสกุล', dataIndex: 'name', key: 'name', width: 180, fixed: 'left' },
+    {
+      title: 'ชื่อ-นามสกุล', key: 'name', width: 180, fixed: 'left',
+      render: (_: unknown, record: PatientInfo) => {
+        const [dd, mm, yyyy] = (record.admitDate ?? '').split('/');
+        const isNewToday = record.admitDate && dayjs(`${yyyy}-${mm}-${dd}`).isSame(selectedDate, 'day');
+        return (
+          <span className="flex items-center gap-1">
+            {record.name}
+            {isNewToday && (
+              <span className="text-[10px] font-bold bg-green-500 text-white px-1 rounded-full leading-tight">รับใหม่</span>
+            )}
+          </span>
+        );
+      },
+    },
     { title: 'เตียง', dataIndex: 'bed', key: 'bed', width: 70, align: 'center' },
     {
       title: (
@@ -433,7 +535,7 @@ function DailyRoutineContent() {
           </Tooltip>
         </div>
       ),
-      children: shiftChildren('night', '#f3f4f6'),
+      children: shiftChildren('night', '#ede9fe'),
     },
     {
       title: (
@@ -493,10 +595,8 @@ function DailyRoutineContent() {
   ];
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans">
-      <Navbar />
-      <div className="p-4">
-        <Card className="shadow-xl rounded-2xl border-none">
+    <div className="p-4">
+      <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <h2 className="text-xl font-bold text-[#006b5f] m-0">Daily Routine</h2>
             <div className="flex items-center gap-2 ml-auto flex-wrap">
@@ -510,66 +610,83 @@ function DailyRoutineContent() {
           </div>
 
           {/* Summary Cards */}
-          <div className="flex gap-1.5 mb-4 flex-wrap">
+          <div className="grid grid-cols-3 gap-3 mb-4">
             {(['night', 'morning', 'afternoon'] as const).map(shiftKey => {
-              const counts = countByLevel(shiftKey);
-              const fte = calcFte(counts);
+              const s = shiftSummary[shiftKey];
+              const careKeys = ['care_normal', 'care_o2', 'care_hfnc', 'care_vent_cs'] as const;
+              const counts = s
+                ? Object.fromEntries(
+                    careLevels.map((l, i) => [String(l.admission_shift_care_level_id), Number(s[careKeys[i]] ?? 0)])
+                  )
+                : countByLevel(shiftKey);
+              const weight = s ? Number(s.weight ?? 0) : 0;
+              const fte = calcFte(counts, weight);
               const isActive = shiftKey === currentShift;
               const shiftLabel = shiftLabelMap[shiftKey];
               return (
                 <div
                   key={shiftKey}
                   style={{ background: isActive ? shiftBg[shiftKey] : '#f8fafc', borderColor: isActive ? '#006b5f' : '#e2e8f0' }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-xl border transition-all"
+                  className="flex flex-wrap gap-1 items-center px-2 py-1 rounded-xl border transition-all"
                 >
-                  <div className="flex flex-col items-center shrink-0 w-7">
-                    <span className="text-sm">{shiftIconMap[shiftKey]}</span>
-                    <span className={`text-[10px] font-bold leading-tight ${isActive ? 'text-[#006b5f]' : 'text-gray-400'}`}>
-                      {shiftLabel}
-                    </span>
-                    {isActive && (
-                      <span className="text-[8px] bg-[#006b5f] text-white px-1 rounded-full leading-tight">เวรนี้</span>
-                    )}
-                  </div>
-
-                  <div className="flex gap-1">
-                    {careLevels.map((level, i) => {
-                      const style = careLevelStyles[i] ?? careLevelStyles[careLevelStyles.length - 1];
-                      const id = String(level.admission_shift_care_level_id);
-                      return (
-                        <div key={id} style={{ background: style.bg, color: style.text }}
-                          className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9">
-                          <span className="text-[9px] font-medium leading-none text-center">{level.name}</span>
-                          <span className="text-sm font-bold leading-tight">{counts[id] ?? 0}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="w-px h-7 bg-gray-200 shrink-0" />
-
-                  <div className="flex gap-1">
-                    {movementConfig.map(({ key, label, bg, text }) => (
-                      <div key={key} style={{ background: bg, color: text }}
-                        className="flex flex-col items-center rounded-md px-1.5 py-0.5 w-9">
-                        <span className="text-[9px] font-medium leading-none whitespace-nowrap">{label}</span>
-                        <span className="text-sm font-bold leading-tight">{movements[shiftKey][key]}</span>
+                  {careLevels.map((level, i) => {
+                    const style = careLevelStyles[i] ?? careLevelStyles[careLevelStyles.length - 1];
+                    const id = String(level.admission_shift_care_level_id);
+                    return (
+                      <div key={id} style={{ background: style.bg, color: style.text }}
+                        className="flex flex-col items-center px-1.5 py-0.5 rounded-md min-w-9">
+                        <span className="text-[10px] font-medium leading-none text-center">{level.name}</span>
+                        <span className="text-sm font-bold leading-tight">{counts[id] ?? 0}</span>
                       </div>
-                    ))}
-                  </div>
-
+                    );
+                  })}
+                  {movementConfig.map(({ key, label, bg, text }) => (
+                    <React.Fragment key={key}>
+                      <div style={{ background: bg, color: text }}
+                        className="flex flex-col items-center rounded-md px-1.5 py-0.5 w-9">
+                        <span className="text-[10px] font-medium leading-none whitespace-nowrap">{label}</span>
+                        <span className="text-sm font-bold leading-tight">{getMovements(shiftKey)[key]}</span>
+                      </div>
+                      {key === 'transferIn' && (
+                        <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
+                          style={{ background: '#e0f2fe', color: '#0c4a6e' }}>
+                          <span className="text-[10px] font-medium leading-none">คงอยู่</span>
+                          <span className="text-sm font-bold leading-tight">{s ? Number(s.count_remain) : 0}</span>
+                        </div>
+                      )}
+                      {key === 'death' && (
+                        <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
+                          style={{ background: '#f1f5f9', color: '#475569' }}>
+                          <span className="text-[10px] font-medium leading-none">Refer</span>
+                          <span className="text-sm font-bold leading-tight">{s ? Number(s.count_refer) : 0}</span>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  {([1, 2, 3, 4, 5] as const).map(n => (
+                    <div key={n} className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
+                      style={{ background: levelColors[n] + '22', color: levelColors[n] }}>
+                      <span className="text-[10px] font-medium leading-none">Lv{n}</span>
+                      <span className="text-sm font-bold leading-tight">{s ? Number(s[`severity_${n}`]) : 0}</span>
+                    </div>
+                  ))}
                   <div className="w-px h-7 bg-gray-200 shrink-0" />
-
                   <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
                     style={{ background: '#d1fae5', color: '#064e3b' }}>
-                    <span className="text-[9px] font-medium leading-none">FTE</span>
-                    <span className="text-sm font-bold leading-tight">{fte.toFixed(1)}</span>
+                    <span className="text-[10px] font-medium leading-none">FTE</span>
+                    <span className="text-sm font-bold leading-tight">{fte.toFixed(2)}</span>
                   </div>
-
                   <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
                     style={{ background: '#fce7f3', color: '#831843' }}>
-                    <span className="text-[9px] font-medium leading-none">Product</span>
+                    <span className="text-[10px] font-medium leading-none">Product</span>
                     <span className="text-sm font-bold leading-tight">—</span>
+                  </div>
+                  <div className="flex items-center gap-0.5 ml-auto">
+                    {isActive && (
+                      <span className="text-[7px] bg-[#006b5f] text-white px-1 rounded-full leading-tight">เวรนี้</span>
+                    )}
+                    <span className="text-base">{shiftIconMap[shiftKey]}</span>
+                    <span className={`text-sm font-bold ${isActive ? 'text-[#006b5f]' : 'text-gray-400'}`}>{shiftLabel}</span>
                   </div>
                 </div>
               );
@@ -592,8 +709,7 @@ function DailyRoutineContent() {
               [&_.ant-table-thead_.ant-table-cell]:text-center!
             "
           />
-        </Card>
-      </div>
+      </Card>
 
       {/* Modal: ดึงข้อมูลเวรก่อนหน้า */}
       <Modal
@@ -652,8 +768,11 @@ function DailyRoutineContent() {
 
 export default function DailyRoutinePage() {
   return (
-    <App>
-      <DailyRoutineContent />
-    </App>
+    <div className="bg-slate-50 min-h-screen font-sans">
+      <Navbar />
+      <App>
+        <DailyRoutineContent />
+      </App>
+    </div>
   );
 }
