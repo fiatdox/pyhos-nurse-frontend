@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message, Avatar } from 'antd';
+import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message, Avatar, Form, Row, Col, Tabs, Dropdown } from 'antd';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
-import { VscSearch, VscRefresh } from "react-icons/vsc";
-import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold } from 'react-icons/pi';
+import { VscSearch, VscRefresh, VscSave, VscListFlat } from "react-icons/vsc";
+import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold, PiClipboardTextBold, PiHeartbeatBold, PiNotePencilBold, PiListChecksBold, PiDropBold, PiPillBold, PiStarBold, PiBookOpenBold, PiArrowsLeftRightBold, PiSignOutBold, PiPersonSimpleBold, PiShieldWarningBold, PiThermometerBold, PiScissorsBold, PiLinkBold, PiBrainBold, PiSmileyNervousBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
-import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import Swal from 'sweetalert2';
 
@@ -15,12 +14,28 @@ interface PatientRecord {
   admission_list_id: number;
   hn: string;
   an: string;
-  patient_name: string;
-  reg_datetime: string;
-  admission_type_name: string;
-  incharge_doctor: string;
-  spclty_name: string;
-  bedno: string;
+  // API ส่งกลับ field ชื่อต่างกัน
+  name: string;
+  patient_name?: string;
+  age?: number;
+  ward?: string;
+  wardName?: string;
+  bed?: string;
+  bedno?: string;
+  admitDate?: string;
+  admitDateTimeIso?: string;
+  reg_datetime?: string;
+  spcltyName?: string;
+  spclty_name?: string;
+  doctorName?: string;
+  incharge_doctor?: string;
+  admission_type_id?: number;
+  admission_type_name?: string;
+  spclty?: number | string;
+  before_ward?: string;
+  birth_date?: string;
+  gender?: string;
+  admission_change_shift_type_id?: number;
 }
 
 interface Ward {
@@ -29,40 +44,50 @@ interface Ward {
   his_code: string;
 }
 
+interface AdmissionType {
+  admission_type_id: number;
+  admission_type_name: string;
+}
+
+interface Specialty {
+  spclty: string;
+  name: string;
+}
+
 const { Option } = Select;
 
 export default function PatientList() {
-  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<string>('current');
   const [selectedWard, setSelectedWard] = useState<string>();
   const [searchText, setSearchText] = useState('');
   const [wards, setWards] = useState<Ward[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // State สำหรับ Tab ผู้ป่วยจำหน่าย
+  const [dischargedPatients, setDischargedPatients] = useState<PatientRecord[]>([]);
+  const [dischargedLoading, setDischargedLoading] = useState(false);
+  const [dischargedDateRange, setDischargedDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().startOf('month'), dayjs()]);
+
+  // State สำหรับ Drawer แก้ไขผู้ป่วย
+  const [editForm] = Form.useForm();
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+  const [editPatient, setEditPatient] = useState<PatientRecord | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [admissionTypes, setAdmissionTypes] = useState<AdmissionType[]>([]);
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const editAdmissionTypeIdValue = Form.useWatch('admissionTypeId', editForm);
+
   // State สำหรับ Drawer จำหน่าย/ย้ายผู้ป่วย
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null);
-  const [destination, setDestination] = useState<string | undefined>();
+  const [move_to_ward, setMoveToWard] = useState<string | undefined>();
   const [referHospital, setReferHospital] = useState<string>('');
   const [admitDateTime, setAdmitDateTime] = useState<dayjs.Dayjs | null>(null);
   const [dischargeDate, setDischargeDate] = useState<dayjs.Dayjs | null>(null);
   const [dischargeType, setDischargeType] = useState<string>('transfer');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shiftTypeId, setShiftTypeId] = useState<number | undefined>();
-
-  // ข้อมูลตัวเลือกสำหรับฟอร์มจำหน่าย/ย้าย
-  const destinations = [
-    { ward: '02', name: 'ศัลยกรรมชาย' },
-    { ward: '03', name: 'ศัลยกรรมหญิง' },
-    { ward: '04', name: 'อายุรกรรมชาย' },
-    { ward: '05', name: 'อายุรกรรมหญิง' },
-    { ward: '06', name: 'กุมารเวชกรรม' },
-    { ward: '10', name: 'หอผู้ป่วยวิกฤต (ICU)' },
-    { ward: '11', name: 'หอผู้ป่วยวิกฤต (NICU)' },
-    { ward: '20', name: 'สูตินารีเวชกรรม' },
-    { ward: 'HOME', name: 'กลับบ้าน (Discharge)' },
-    { ward: 'OTHER', name: 'ส่งต่อโรงพยาบาลอื่น' },
-  ];
 
   const dischargeTypes = [
     { value: 'transfer', label: 'ย้ายหอผู้ป่วย', icon: <PiArrowRightBold className="w-4 h-4" /> },
@@ -75,6 +100,26 @@ export default function PatientList() {
     { admission_change_shift_type_id: 2, shift_name: "เช้า" },
     { admission_change_shift_type_id: 3, shift_name: "บ่าย" }
   ];
+
+  // --- Fetch Dropdown Data ---
+  useEffect(() => {
+    const fetchDropdowns = async () => {
+      try {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        if (!token) return;
+        const headers = { Authorization: `Bearer ${token}` };
+        const [admTypeRes, spcltyRes] = await Promise.all([
+          axios.get('/api/v1/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/spclty', { headers }).catch(() => ({ data: { data: [] } })),
+        ]);
+        setAdmissionTypes(admTypeRes.data.data || []);
+        setSpecialties(spcltyRes.data.data || []);
+      } catch (error) {
+        console.error('Error fetching dropdowns:', error);
+      }
+    };
+    fetchDropdowns();
+  }, []);
 
   useEffect(() => {
     const fetchWards = async () => {
@@ -94,9 +139,6 @@ export default function PatientList() {
           const wardList = Array.isArray(response.data) ? response.data : response.data.data || [];
           setWards(wardList);
           
-          if (wardList.length > 0) {
-             setSelectedWard(wardList[0].his_code);
-          }
         }
       } catch (error) {
         console.error("Error fetching wards:", error);
@@ -134,6 +176,37 @@ export default function PatientList() {
     fetchPatients();
   }, [fetchPatients]);
 
+  const fetchDischargedPatients = useCallback(async () => {
+    if (!selectedWard) {
+      setDischargedPatients([]);
+      return;
+    }
+    setDischargedLoading(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post('/api/v1/view-discharged-patient-by-ward', {
+        ward: selectedWard,
+        ds1: dischargedDateRange[0].format('YYYY-MM-DD'),
+        ds2: dischargedDateRange[1].format('YYYY-MM-DD'),
+      }, { headers });
+      if (response.data && response.data.success) {
+        setDischargedPatients(response.data.data || []);
+      } else {
+        setDischargedPatients([]);
+      }
+    } catch (error) {
+      console.error('Error fetching discharged patients:', error);
+      setDischargedPatients([]);
+    } finally {
+      setDischargedLoading(false);
+    }
+  }, [selectedWard, dischargedDateRange]);
+
+  useEffect(() => {
+    fetchDischargedPatients();
+  }, [fetchDischargedPatients]);
+
   const handleWardChange = (value: string) => {
     setSelectedWard(value);
   };
@@ -167,7 +240,7 @@ export default function PatientList() {
   };
 
   const handleConfirmShift = async () => {
-    if (dischargeType === 'transfer' && !destination) return message.warning('กรุณาเลือกหอผู้ป่วยปลายทาง');
+    if (dischargeType === 'transfer' && !move_to_ward) return message.warning('กรุณาเลือกหอผู้ป่วยปลายทาง');
     if (dischargeType === 'refer' && !referHospital.trim()) return message.warning('กรุณาระบุโรงพยาบาลปลายทาง');
     if (!admitDateTime) return message.warning('กรุณาระบุวันที่เวลารับเข้าตึก');
     if (!dischargeDate) return message.warning('กรุณาเลือกวันและเวลาที่จำหน่าย/ย้าย');
@@ -176,21 +249,21 @@ export default function PatientList() {
       admission_list_id: selectedPatient!.admission_list_id,
       discharge_type_id: dischargeTypeIdMap[dischargeType],
       discharge_datetime: dischargeDate.format('YYYY-MM-DD HH:mm:ss'),
-      move_to_ward: dischargeType === 'transfer' ? (destination ?? '') : null,
-      before_ward: '',
-      status: dischargeType === 'transfer' ? '2' : '3',
+      move_to_ward: dischargeType === 'transfer' ? (move_to_ward ?? '') : null,
+      status: 2,
       los,
     };
-   
+    console.log('discharge payload:', payload);
 
     setIsSubmitting(true);
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       await axios.post('/api/v1/discharge-patient', payload, { headers });
-      message.success('บันทึกการจำหน่ายผู้ป่วยสำเร็จ');
+      Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการจำหน่ายผู้ป่วยสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       handleCancelShift();
       fetchPatients();
+      fetchDischargedPatients();
     } catch (error: any) {
       const status = error?.response?.status;
       Swal.fire({ icon: 'error', title: `ผิดพลาด (${status ?? 'Network Error'})`, text: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
@@ -199,10 +272,79 @@ export default function PatientList() {
     }
   };
 
+  // --- Edit Drawer ---
+  const openEditDrawer = (record: PatientRecord) => {
+    setEditPatient(record);
+    editForm.resetFields();
+    const admitDate = record.reg_datetime ? (() => {
+      const d = dayjs(record.reg_datetime);
+      return d.year() > 2500 ? d.year(d.year() - 543) : d;
+    })() : dayjs();
+    editForm.setFieldsValue({
+      wardId: record.ward || selectedWard,
+      admissionTypeId: record.admission_type_id ?? undefined,
+      referFromWardId: record.before_ward || undefined,
+      specialtyCode: record.spclty ?? undefined,
+      doctor_name: record.doctorName || record.incharge_doctor,
+      admitDate: admitDate,
+      shiftTypeId: record.admission_change_shift_type_id ?? getShiftIdFromTime(admitDate),
+      bed: record.bed || record.bedno,
+      birthDate: record.birth_date ? dayjs(record.birth_date) : undefined,
+    });
+    setIsEditDrawerOpen(true);
+  };
+
+  const closeEditDrawer = () => {
+    setIsEditDrawerOpen(false);
+    setEditPatient(null);
+  };
+
+  const handleAdmitDateChange = (date: dayjs.Dayjs | null) => {
+    if (date) editForm.setFieldsValue({ shiftTypeId: getShiftIdFromTime(date) });
+  };
+
+  const onEditFinish = async (values: any) => {
+    if (!editPatient) return;
+
+    const regDatetime = values.admitDate
+      ? dayjs(values.admitDate).format('YYYY-MM-DD HH:mm:ss')
+      : dayjs().format('YYYY-MM-DD HH:mm:ss');
+
+    const payload = {
+      admission_list_id: editPatient.admission_list_id,
+      patient_name: editPatient.name || editPatient.patient_name || '',
+      reg_datetime: regDatetime,
+      ward: String(values.wardId),
+      before_ward: values.referFromWardId != null ? String(values.referFromWardId) : null,
+      birth_date: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
+      spclty: values.specialtyCode != null ? String(values.specialtyCode) : null,
+      bedno: values.bed != null ? String(values.bed) : null,
+      admission_type_id: values.admissionTypeId ?? null,
+      status: 1,
+      admission_change_shift_type_id: values.shiftTypeId ?? null,
+      incharge_doctor: values.doctor_name?.trim() || '',
+    };
+
+    setEditSubmitting(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.post('/api/v1/update-patient', payload, { headers });
+      closeEditDrawer();
+      Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'แก้ไขข้อมูลสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      fetchPatients();
+    } catch (error: any) {
+      const status = error?.response?.status;
+      Swal.fire({ icon: 'error', title: `ผิดพลาด (${status ?? 'Network Error'})`, text: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const handleCancelShift = () => {
     setIsSubmitting(false);
     setSelectedPatient(null);
-    setDestination(undefined);
+    setMoveToWard(undefined);
     setReferHospital('');
     setAdmitDateTime(null);
     setDischargeDate(null);
@@ -213,11 +355,11 @@ export default function PatientList() {
 
   const filteredPatients = patients
     .filter(p =>
-      (p.patient_name || '').includes(searchText) ||
+      (p.name || p.patient_name || '').includes(searchText) ||
       (p.hn || '').includes(searchText) ||
       (p.an || '').includes(searchText)
     )
-    .sort((a, b) => (a.bedno || '').localeCompare(b.bedno || '', undefined, { numeric: true }));
+    .sort((a, b) => (a.bed || a.bedno || '').localeCompare(b.bed || b.bedno || '', undefined, { numeric: true }));
 
   const columns: ColumnsType<PatientRecord> = [
     {
@@ -231,55 +373,96 @@ export default function PatientList() {
     { title: 'AN', dataIndex: 'an', key: 'an', width: 100 },
     {
       title: 'ชื่อ-สกุล',
-      dataIndex: 'patient_name',
-      key: 'patient_name',
-      render: (text: string) => (
-        <div className="flex items-center gap-2">
-          <Avatar style={{ backgroundColor: '#006b5f', flexShrink: 0 }} size="small">
-            {text?.charAt(0) || '?'}
-          </Avatar>
-          <span className="font-semibold text-[#006b5f]">{text}</span>
-        </div>
-      )
+      key: 'name',
+      render: (_, r) => {
+        const displayName = r.name || r.patient_name || '';
+        return (
+          <div className="flex items-center gap-2">
+            <Avatar style={{ backgroundColor: '#006b5f', flexShrink: 0 }} size="small">
+              {displayName?.charAt(0) || '?'}
+            </Avatar>
+            <span className="font-semibold text-[#006b5f]">{displayName}</span>
+          </div>
+        );
+      }
     },
-    { title: 'เตียง', dataIndex: 'bedno', key: 'bedno', width: 100 },
-    { 
-      title: 'วันที่ Admit', 
-      dataIndex: 'reg_datetime', 
-      key: 'reg_datetime', 
+    { title: 'เตียง', key: 'bed', width: 100, render: (_, r) => r.bed || r.bedno || '-' },
+    {
+      title: 'วันที่ Admit',
+      key: 'admitDate',
       width: 150,
-      render: (text) => text ? dayjs(text).format('DD/MM/YYYY HH:mm') : '-'
+      render: (_, r) => {
+        const dt = r.admitDateTimeIso || r.reg_datetime;
+        return dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : (r.admitDate || '-');
+      }
     },
-    { title: 'ประเภท', dataIndex: 'admission_type_name', key: 'admission_type_name', width: 120 },
-    { title: 'แผนก', dataIndex: 'spclty_name', key: 'spclty_name', width: 120 },
-    { title: 'แพทย์เจ้าของไข้', dataIndex: 'incharge_doctor', key: 'incharge_doctor', width: 250 },
+    { title: 'ประเภท', key: 'admission_type_name', width: 120, render: (_, r) => r.admission_type_name || '-' },
+    { title: 'แผนก', key: 'spclty_name', width: 120, render: (_, r) => r.spcltyName || r.spclty_name || '-' },
+    { title: 'แพทย์เจ้าของไข้', key: 'incharge_doctor', width: 250, render: (_, r) => r.doctorName || r.incharge_doctor || '-' },
     {
       title: 'ดำเนินการ',
       key: 'action',
       align: 'center',
-      width: 200,
-      
+      width: 300,
+
       render: (_, record) => (
         <Space>
-          <Button 
-            className="text-blue-600 border-blue-600 hover:bg-blue-50 flex items-center justify-center"
-            icon={<PiFolderOpenBold className="text-lg" />}
-            title="สรุปข้อมูลผู้ป่วย"
-            onClick={() => window.open(`/ipd/summary/${record.an}`, '_blank')}
-          />
-          <Button 
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'group1', type: 'group', label: <span className="text-[#006b5f] font-bold text-xs uppercase tracking-wide">แบบบันทึก</span>, children: [
+                  { key: 'admit', icon: <PiClipboardTextBold className="text-[#006b5f] text-base" />, label: 'การบันทึกการรับผู้ป่วย' },
+                  { key: 'vital', icon: <PiHeartbeatBold className="text-red-500 text-base" />, label: 'แบบบันทึกสัญญาณชีพ (Vital Signs Record)' },
+                  { key: 'nursing', icon: <PiNotePencilBold className="text-blue-600 text-base" />, label: 'บันทึกทางการพยาบาล (Nursing Progress Notes)' },
+                  { key: 'careplan', icon: <PiListChecksBold className="text-green-600 text-base" />, label: 'แผนการพยาบาล (Nursing Care Plan)' },
+                  { key: 'io', icon: <PiDropBold className="text-cyan-500 text-base" />, label: 'บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)' },
+                  { key: 'mar', icon: <PiPillBold className="text-purple-500 text-base" />, label: 'บันทึกการให้ยา (MAR)' },
+                  { key: 'special', icon: <PiStarBold className="text-amber-500 text-base" />, label: 'บันทึกการดูแลพิเศษ (Special Care Records)' },
+                  { key: 'education', icon: <PiBookOpenBold className="text-indigo-500 text-base" />, label: 'บันทึกการศึกษาและให้ความรู้ (Patient Education)' },
+                  { key: 'handover', icon: <PiArrowsLeftRightBold className="text-orange-500 text-base" />, label: 'บันทึกการส่งเวร (Nursing Handover / SBAR)' },
+                  { key: 'discharge', icon: <PiSignOutBold className="text-rose-600 text-base" />, label: 'บันทึกการจำหน่าย (Discharge Record)' },
+                ]},
+                { type: 'divider' },
+                { key: 'group2', type: 'group', label: <span className="text-orange-600 font-bold text-xs uppercase tracking-wide">แบบประเมิน</span>, children: [
+                  { key: 'fall-risk', icon: <PiPersonSimpleBold className="text-orange-500 text-base" />, label: 'แบบประเมินความเสี่ยงพลัดตกหกล้ม (Fall Risk)' },
+                  { key: 'braden', icon: <PiShieldWarningBold className="text-yellow-600 text-base" />, label: 'แบบประเมินแผลกดทับ (Braden Scale)' },
+                  { key: 'pain', icon: <PiThermometerBold className="text-red-400 text-base" />, label: 'แบบประเมินความปวด (Pain Assessment)' },
+                  { key: 'wound-care', icon: <PiScissorsBold className="text-pink-500 text-base" />, label: 'บันทึกการทำแผล (Wound Care Record)' },
+                  { key: 'restraint', icon: <PiLinkBold className="text-gray-600 text-base" />, label: 'บันทึกการผูกยึด (Restraint Record)' },
+                  { key: 'gcs', icon: <PiBrainBold className="text-violet-600 text-base" />, label: 'แบบประเมินระดับความรู้สึกตัว (GCS)' },
+                  { key: 'mental-health', icon: <PiSmileyNervousBold className="text-teal-500 text-base" />, label: 'แบบประเมินสุขภาพจิต/ความวิตกกังวล' },
+                ]},
+              ],
+              onClick: ({ key }) => {
+                if (key === 'group1' || key === 'group2') return;
+                window.open(`/ipd/${key}/${record.an}`, '_blank');
+              },
+              className: '[&_.ant-dropdown-menu]:rounded-xl [&_.ant-dropdown-menu]:shadow-2xl [&_.ant-dropdown-menu]:border [&_.ant-dropdown-menu]:border-gray-100 [&_.ant-dropdown-menu-item]:rounded-lg [&_.ant-dropdown-menu-item]:mx-1 [&_.ant-dropdown-menu-item:hover]:bg-teal-50',
+            }}
+            trigger={['click']}
+          >
+            <Button
+              type="primary"
+              className="bg-[#006b5f] hover:bg-[#00554c] flex items-center justify-center"
+              icon={<VscListFlat className="text-lg" />}
+            >
+              แบบบันทึก
+            </Button>
+          </Dropdown>
+          <Button
             className="text-yellow-600 border-yellow-600 hover:bg-yellow-50"
-            onClick={() => router.push(`/ipd/edit-patient?an=${record.an}`)}
+            onClick={() => openEditDrawer(record)}
           >
             แก้ไข
           </Button>
-          <Button 
-            type="primary" 
+          <Button
+            type="primary"
             className="bg-[#006b5f] hover:bg-[#00554c]"
             onClick={() => {
               setSelectedPatient(record);
               setIsDrawerOpen(true);
-              const admit = record.reg_datetime ? (() => { const d = dayjs(record.reg_datetime); return d.year() > 2500 ? d.year(d.year() - 543) : d; })() : null;
+              const rawDt = record.admitDateTimeIso || record.reg_datetime;
+              const admit = rawDt ? (() => { const d = dayjs(rawDt); return d.year() > 2500 ? d.year(d.year() - 543) : d; })() : null;
               const now = dayjs();
               setAdmitDateTime(admit);
               setDischargeDate(now);
@@ -295,6 +478,102 @@ export default function PatientList() {
 
   const currentWardName = wards.find(w => w.his_code === selectedWard)?.ward_name || '-';
 
+  const filteredDischargedPatients = dischargedPatients
+    .filter(p =>
+      (p.name || p.patient_name || '').includes(searchText) ||
+      (p.hn || '').includes(searchText) ||
+      (p.an || '').includes(searchText)
+    );
+
+  const dischargedColumns: ColumnsType<PatientRecord> = [
+    {
+      title: 'ลำดับ',
+      key: 'index',
+      width: 70,
+      align: 'center',
+      render: (_: unknown, __: PatientRecord, index: number) => index + 1,
+    },
+    { title: 'HN', dataIndex: 'hn', key: 'hn', width: 100,align: 'center' },
+    { title: 'AN', dataIndex: 'an', key: 'an', width: 100,align: 'center' },
+    {
+      title: 'ชื่อ-สกุล',
+      key: 'name',
+      render: (_, r) => {
+        const displayName = r.name || r.patient_name || '';
+        return (
+          <div className="flex items-center gap-2">
+            <Avatar style={{ backgroundColor: '#888', flexShrink: 0 }} size="small">
+              {displayName?.charAt(0) || '?'}
+            </Avatar>
+            <span className="font-semibold text-gray-600">{displayName}</span>
+          </div>
+        );
+      }
+    },
+    { title: 'เตียง',align: 'center', key: 'bed', width: 100, render: (_, r) => r.bed || r.bedno || '-' },
+    {
+      title: 'วันที่ Admit',
+      key: 'admitDate',
+      width: 150,
+      align: 'center',
+      render: (_, r) => {
+        const dt = r.admitDateTimeIso || r.reg_datetime;
+        return dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : (r.admitDate || '-');
+      }
+    },
+    { title: 'แผนก', key: 'spclty_name',align: 'center', width: 120, render: (_, r) => r.spcltyName || r.spclty_name || '-' },
+    { title: 'แพทย์เจ้าของไข้', key: 'incharge_doctor', width: 250, render: (_, r) => r.doctorName || r.incharge_doctor || '-' },
+    { title: 'ประเภทการจำหน่าย', dataIndex: 'discharge_type_name', key: 'discharge_type_name',align: 'center', width: 150, render: (text) => text || '-' },
+    {
+      title: 'ดำเนินการ',
+      key: 'action',
+      align: 'center',
+      width: 200,
+      render: (_, record) => (
+        <Space>
+          <Button
+            className="text-blue-600 border-blue-600 hover:bg-blue-50 flex items-center justify-center"
+            icon={<PiFolderOpenBold className="text-lg" />}
+            title="สรุปข้อมูลผู้ป่วย"
+            onClick={() => window.open(`/ipd/summary/${record.an}`, '_blank')}
+          />
+          <Button
+            type="primary"
+            danger
+            onClick={() => {
+              Swal.fire({
+                title: 'ยกเลิกจำหน่าย',
+                text: `ยืนยันยกเลิกจำหน่ายผู้ป่วย ${record.name || record.patient_name} (AN: ${record.an}) ?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#006b5f',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'ยืนยัน',
+                cancelButtonText: 'ปิด',
+              }).then(async (result) => {
+                if (result.isConfirmed) {
+                  try {
+                    const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+                    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                    await axios.get(`/api/v1/cancel-discharge/${record.admission_list_id}`, { headers });
+                    Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'ยกเลิกจำหน่ายสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+                    fetchPatients();
+                    fetchDischargedPatients();
+                  } catch (error: any) {
+                    const st = error?.response?.status;
+                    Swal.fire({ icon: 'error', title: `ผิดพลาด (${st ?? 'Network Error'})`, text: 'เกิดข้อผิดพลาด กรุณาลองใหม่', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+                  }
+                }
+              });
+            }}
+          >
+            ยกเลิกจำหน่าย
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
@@ -307,42 +586,84 @@ export default function PatientList() {
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
               <span className="text-gray-600">เลือกหอผู้ป่วย:</span>
-              <Select 
+              <Select
                 value={selectedWard}
-                style={{ width: 200 }} 
+                style={{ width: 200 }}
                 onChange={handleWardChange}
                 className="min-w-50"
-                placeholder="กำลังโหลดข้อมูล..."
-                
+                placeholder="เลือกหอผู้ป่วย..."
               >
                 {wards.map(w => <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>)}
               </Select>
-              
-              <Button 
-                icon={<VscRefresh />} 
-                onClick={fetchPatients}
-                loading={loading}
-              >
-                รีเฟรช
-              </Button>
 
-              <Input 
-                prefix={<VscSearch className="text-gray-400" />} 
-                placeholder="ค้นหา HN หรือ ชื่อ" 
+              <Input
+                prefix={<VscSearch className="text-gray-400" />}
+                placeholder="ค้นหา HN หรือ ชื่อ"
                 style={{ width: 200 }}
                 onChange={e => setSearchText(e.target.value)}
               />
             </div>
           </div>
 
-          <Table 
-            columns={columns} 
-            dataSource={filteredPatients} 
-            rowKey="hn"
-            pagination={{ pageSize: 10 }}
-            size="middle"
-            loading={loading}
-            className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            type="card"
+            className="[&_.ant-tabs-tab-active]:bg-[#006b5f]! [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-white! [&_.ant-tabs-tab]:font-semibold [&_.ant-tabs-tab]:px-6 [&_.ant-tabs-tab]:py-2"
+            tabBarExtraContent={
+              activeTab === 'current' ? (
+                <Button icon={<VscRefresh />} onClick={fetchPatients} loading={loading}>
+                  รีเฟรช
+                </Button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600">ช่วงวันที่จำหน่าย:</span>
+                  <DatePicker.RangePicker
+                    value={dischargedDateRange}
+                    onChange={(dates) => { if (dates && dates[0] && dates[1]) setDischargedDateRange([dates[0], dates[1]]); }}
+                    format="DD/MM/YYYY"
+                    allowClear={false}
+                  />
+                  <Button icon={<VscRefresh />} onClick={fetchDischargedPatients} loading={dischargedLoading}>
+                    รีเฟรช
+                  </Button>
+                </div>
+              )
+            }
+            items={[
+              {
+                key: 'current',
+                label: `ผู้ป่วยปัจจุบัน (${filteredPatients.length})`,
+                children: (
+                  <Table
+                      columns={columns}
+                      dataSource={filteredPatients}
+                      rowKey="admission_list_id"
+                      pagination={{ pageSize: 10 }}
+                      size="middle"
+                      loading={loading}
+                      locale={{ emptyText: 'ไม่พบข้อมูล หรือยังไม่ได้เลือกหอผู้ป่วย' }}
+                      className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
+                    />
+                ),
+              },
+              {
+                key: 'discharged',
+                label: `ผู้ป่วยจำหน่าย (${filteredDischargedPatients.length})`,
+                children: (
+                  <Table
+                      columns={dischargedColumns}
+                      dataSource={filteredDischargedPatients}
+                      rowKey="admission_list_id"
+                      pagination={{ pageSize: 10 }}
+                      size="middle"
+                      loading={dischargedLoading}
+                      locale={{ emptyText: 'ไม่พบข้อมูลผู้ป่วยจำหน่าย' }}
+                      className="[&_.ant-table-thead_.ant-table-cell]:bg-gray-500! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
+                    />
+                ),
+              },
+            ]}
           />
         </Card>
 
@@ -362,7 +683,7 @@ export default function PatientList() {
                     <PiUserBold className="w-7 h-7 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 m-0">{selectedPatient.patient_name}</h3>
+                    <h3 className="text-lg font-bold text-gray-800 m-0">{selectedPatient.name || selectedPatient.patient_name}</h3>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <Tag color="blue" className="m-0">HN: {selectedPatient.hn}</Tag>
                       <Tag color="orange" className="m-0">AN: {selectedPatient.an}</Tag>
@@ -377,7 +698,7 @@ export default function PatientList() {
                   </div>
                   <div>
                     <span className="text-gray-500 block text-xs">เตียง</span>
-                    <span className="font-semibold text-gray-800">{selectedPatient.bedno ? `เตียง ${selectedPatient.bedno}` : '-'}</span>
+                    <span className="font-semibold text-gray-800">{(selectedPatient.bed || selectedPatient.bedno) ? `เตียง ${selectedPatient.bed || selectedPatient.bedno}` : '-'}</span>
                   </div>
                 </div>
               </div>
@@ -415,17 +736,17 @@ export default function PatientList() {
                     </label>
                     <Select
                       placeholder="เลือกหอผู้ป่วยปลายทาง"
-                      value={destination}
-                      onChange={setDestination}
+                      value={move_to_ward}
+                      onChange={setMoveToWard}
                       className="w-full"
                       size="medium"
                       showSearch
                       optionFilterProp="children"
                     >
-                      {destinations
-                        .filter(d => d.ward !== selectedWard)
-                        .map(d => (
-                          <Option key={d.ward} value={d.ward}>{d.name}</Option>
+                      {wards
+                        .filter(w => w.his_code !== selectedWard)
+                        .map(w => (
+                          <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>
                         ))
                       }
                     </Select>
@@ -530,6 +851,105 @@ export default function PatientList() {
               </div>
             </div>
           )}
+        </Drawer>
+
+        {/* Edit Drawer */}
+        <Drawer
+          title={<span className="text-white font-bold text-lg">แก้ไขข้อมูลผู้ป่วย</span>}
+          placement="right"
+          styles={{ wrapper: { width: 500 } }}
+          onClose={closeEditDrawer}
+          open={isEditDrawerOpen}
+          className="[&_.ant-drawer-header]:bg-[#005a50] [&_.ant-drawer-close]:text-white"
+        >
+          {editPatient && (
+            <div className="mb-4 p-4 bg-teal-50 rounded-lg border border-teal-100">
+              <span className="text-lg font-bold text-[#006b5f] block">{editPatient.name || editPatient.patient_name}</span>
+              <div className="flex gap-4 text-gray-600 mt-1">
+                <span>HN: <strong className="text-gray-800">{editPatient.hn}</strong></span>
+                <span>AN: <strong className="text-gray-800">{editPatient.an}</strong></span>
+              </div>
+            </div>
+          )}
+
+          <Form layout="vertical" form={editForm} onFinish={onEditFinish}>
+            <Form.Item label="รับเข้าตึก" name="wardId" rules={[{ required: true, message: 'กรุณาเลือกหอผู้ป่วย' }]}>
+              <Select placeholder="เลือกหอผู้ป่วย" showSearch optionFilterProp="children">
+                {wards.map(w => <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>)}
+              </Select>
+            </Form.Item>
+
+            <Form.Item label="ประเภทการรับเข้า" name="admissionTypeId" rules={[{ required: true, message: 'กรุณาเลือกประเภทการรับเข้า' }]}>
+              <Select placeholder="เลือกประเภท">
+                {admissionTypes.map(t => (
+                  <Option key={t.admission_type_id} value={t.admission_type_id}>{t.admission_type_name}</Option>
+                ))}
+              </Select>
+            </Form.Item>
+
+            {editAdmissionTypeIdValue === 2 && (
+              <Form.Item label="รับย้ายจากหอผู้ป่วย" name="referFromWardId" rules={[{ required: true, message: 'กรุณาเลือกหอผู้ป่วยต้นทาง' }]}>
+                <Select placeholder="เลือกหอผู้ป่วย" showSearch optionFilterProp="children">
+                  {wards.map(w => <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>)}
+                </Select>
+              </Form.Item>
+            )}
+
+            <Form.Item label="แผนกการรักษา" name="specialtyCode" rules={[{ required: true, message: 'กรุณาเลือกแผนก' }]}>
+              <Select placeholder="เลือกแผนก" showSearch optionFilterProp="children">
+                {specialties.map(s => <Option key={s.spclty} value={s.spclty}>{s.name}</Option>)}
+              </Select>
+            </Form.Item>
+
+            <Form.Item label="แพทย์เจ้าของไข้" name="doctor_name">
+              <Input placeholder="ระบุชื่อแพทย์" />
+            </Form.Item>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item label="วันที่รับการรักษา" name="admitDate" rules={[{ required: true, message: 'กรุณาระบุวันที่' }]}>
+                  <DatePicker
+                    showTime
+                    format="DD/MM/YYYY HH:mm"
+                    className="w-full"
+                    placeholder="เลือกวันเวลา"
+                    onChange={handleAdmitDateChange}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="เวร" name="shiftTypeId" rules={[{ required: true, message: 'กรุณาเลือกเวร' }]}>
+                  <Select placeholder="เลือกเวร" disabled>
+                    {shiftTypes.map(s => (
+                      <Option key={s.admission_change_shift_type_id} value={s.admission_change_shift_type_id}>
+                        {s.shift_name}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item label="เตียง" name="bed" rules={[{ required: true, message: 'ระบุเตียง' }]}>
+                  <Input placeholder="ระบุเลขเตียง" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="วันเกิด" name="birthDate">
+                  <DatePicker format="DD/MM/YYYY" className="w-full" placeholder="ไม่ระบุ" disabled />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+              <Button onClick={closeEditDrawer}>ยกเลิก</Button>
+              <Button type="primary" htmlType="submit" icon={<VscSave />} loading={editSubmitting} className="bg-[#006b5f]">
+                บันทึกข้อมูล
+              </Button>
+            </div>
+          </Form>
         </Drawer>
       </div>
     </div>

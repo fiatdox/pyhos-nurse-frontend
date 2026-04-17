@@ -198,11 +198,6 @@ const Navbar = () => {
                                                 label: <Link href="/ipd/patients" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนผู้ป่วย</Link>,
                                             },
                                             {
-                                                key: 'discharge',
-                                                icon: <RiShareForwardFill  className="w-5 h-5" />,
-                                                label: <Link href="/ipd/discharge" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนจำหน่าย</Link>,
-                                            },
-                                            {
                                                 key: 'food_order',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
                                                 label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
@@ -210,7 +205,7 @@ const Navbar = () => {
                                             {
                                                 key: 'daily_routine',
                                                 icon: <VscChecklist className="w-5 h-5" />,
-                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="text-white block w-full text-left">สรุปยอดผู้ป่วยรายเวร</Link>,
+                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="text-white block w-full text-left">รายงานประจำวัน </Link>,
                                             },
                                             // {
                                             //     key: 'fte',

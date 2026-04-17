@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, Input, Button, Table, Drawer, Form, Select, DatePicker, message, Row, Col, Typography, Radio } from 'antd';
+import { Card, Input, Button, Table, Drawer, Form, Select, DatePicker, message, Row, Col, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -25,7 +25,7 @@ interface Patient {
   doctor_name?: string;
   regdate?: string;
   ward?: string;
-  gender?: string;
+  sex?: string;
   birthday?: string;
 }
 
@@ -52,40 +52,23 @@ interface ShiftType {
   shift_name: string;
 }
 
-interface SeverityLevel {
-  severity_level_id: number;
-  severity_level_name: string;
-}
-
-// ✅ interface ตรงกับ Elysia Backend schema ทุก field
-//
-// กฎ Elysia Type:
-//   t.String()                                    → required, ห้าม null/undefined
-//   t.Optional(t.String())                        → string | undefined   ⚠️ ห้ามส่ง null!
-//   t.Optional(t.Union([t.String(), t.Null()]))   → string | null | undefined  ✅ ส่ง null ได้
-//
 interface RegisterPayload {
   // required
   an: string;
   hn: string;
   patient_name: string;
   reg_datetime: string;
-  before_ward?: string | null;
   ward: string;
-  // Optional(Union(...Null)) → null ได้
+  // optional
+  before_ward?: string | null;
   birth_date?: string | null;
   spclty?: string | null;
-  admission_type_id?: number | null;
-  status?: number | string | null;
-  serverity_level_id?: number | null;
-  severity_level_id?: number | null;
   gender?: string | null;
   bedno?: string | null;
-  // Optional(String) → ห้ามส่ง null! ใช้ spread omit เมื่อไม่มีค่า
-  incharge_doctor?: string;
-  is_ventilator?: string;
-  oxygen_support_type?: number | null;
+  admission_type_id?: number | null;
+  status?: number | null;
   admission_change_shift_type_id?: number | null;
+  incharge_doctor?: string;
 }
 
 export default function RegisterPage() {
@@ -104,18 +87,8 @@ export default function RegisterPage() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
   const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([]);
-  const [severityLevels, setSeverityLevels] = useState<SeverityLevel[]>([]);
 
-  const severityLevelValue = Form.useWatch('severityLevelId', form);
   const admissionTypeIdValue = Form.useWatch('admissionTypeId', form);
-  const isVentilatorValue = Form.useWatch('isVentilator', form);
-  const wardIdValue = Form.useWatch('wardId', form);
-
-  // ✅ declare isLaborRoom เพียงครั้งเดียว (ลบอันซ้ำออก)
-  const isLaborRoom = useMemo(() => {
-    const selected = wards.find(w => String(w.his_code) === String(wardIdValue) || String(w.ward) === String(wardIdValue));
-    return selected?.is_labor_room === 'Y';
-  }, [wardIdValue, wards]);
 
   // --- Fetch Dropdown Data ---
   useEffect(() => {
@@ -124,12 +97,11 @@ export default function RegisterPage() {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-        const [admTypeRes, spcltyRes, wardRes, shiftRes, severityRes] = await Promise.all([
+        const [admTypeRes, spcltyRes, wardRes, shiftRes] = await Promise.all([
           axios.get('/api/v1/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
           axios.get('/api/v1/spclty', { headers }).catch(() => ({ data: { data: [] } })),
           axios.get('/api/v1/wardsV1', { headers }).catch(() => axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } }))),
           axios.get('/api/v1/admission-change-shift-types', { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/admission-severity-levels', { headers }).catch(() => ({ data: { data: [] } })),
         ]);
 
         setAdmissionTypes(admTypeRes.data.data || []);
@@ -137,7 +109,6 @@ export default function RegisterPage() {
         const wardList = Array.isArray(wardRes.data) ? wardRes.data : wardRes.data.data || [];
         setWards(wardList);
         setShiftTypes(shiftRes.data.data || []);
-        setSeverityLevels(severityRes.data.data || []);
       } catch (error) {
         console.error('Error fetching dropdown data:', error);
         mockDropdownData();
@@ -160,13 +131,6 @@ export default function RegisterPage() {
       { admission_change_shift_type_id: 1, shift_name: 'ดึก' },
       { admission_change_shift_type_id: 2, shift_name: 'เช้า' },
       { admission_change_shift_type_id: 3, shift_name: 'บ่าย' },
-    ]);
-    setSeverityLevels([
-      { severity_level_id: 1, severity_level_name: 'ผู้ป่วยทั่วไป / อาการดี' },
-      { severity_level_id: 2, severity_level_name: 'ผู้ป่วยต้องช่วยเหลือบางส่วน' },
-      { severity_level_id: 3, severity_level_name: 'ผู้ป่วยมีอาการปานกลาง' },
-      { severity_level_id: 4, severity_level_name: 'ผู้ป่วยอาการหนัก ต้องการดูแลพิเศษ' },
-      { severity_level_id: 5, severity_level_name: 'ผู้ป่วยวิกฤติ (Critical)' },
     ]);
   };
 
@@ -214,11 +178,6 @@ export default function RegisterPage() {
         confirmButtonText: 'รับทราบ',
       });
     }
-    // รีเซตค่าทุกครั้งที่เปลี่ยนตึก เพื่อป้องกันค่าหลุดข้าม mode (labor ↔ non-labor)
-    form.setFieldsValue({
-      isVentilator: 'N',
-      oxygenSupportType: 1,
-    });
   };
 
   // --- Search ---
@@ -280,8 +239,6 @@ export default function RegisterPage() {
       bed: patient.bedno,
       doctor_name: patient.doctor_name,
       wardId: patient.ward || selectedWard,
-      isVentilator: 'N',
-      oxygenSupportType: 1,
       birthDate: patient.birthday ? dayjs(patient.birthday) : undefined,
     });
     setIsDrawerOpen(true);
@@ -330,22 +287,18 @@ export default function RegisterPage() {
       hn: selectedPatient.hn,
       patient_name: selectedPatient.ptname,
       reg_datetime: regDatetime,
-      before_ward: String(values.referFromWardId) ?? null,
+      before_ward: values.referFromWardId != null ? String(values.referFromWardId) : null,
       ward: String(values.wardId),
       birth_date: values.birthDate ? dayjs(values.birthDate).format('YYYY-MM-DD') : null,
 
       spclty: values.specialtyCode != null ? String(values.specialtyCode) : null,
-      gender: selectedPatient.gender != null ? String(selectedPatient.gender) : null,
+      gender: selectedPatient.sex != null ? String(selectedPatient.sex) : null,
       bedno: values.bed != null ? String(values.bed) : null,
 
       admission_type_id: values.admissionTypeId ?? null,
       status: 1,
-      serverity_level_id: values.severityLevelId ?? null,
-      severity_level_id: values.severityLevelId ?? null,
       admission_change_shift_type_id: values.shiftTypeId ?? null,
 
-      is_ventilator: values.isVentilator || 'N',
-      oxygen_support_type: values.isVentilator === 'N' ? values.oxygenSupportType : null,
       ...(values.doctor_name?.trim()
         ? { incharge_doctor: values.doctor_name.trim() }
         : {}
@@ -417,15 +370,6 @@ export default function RegisterPage() {
       ),
     },
   ];
-
-  // --- Severity color map ---
-  const severityColors: Record<number, { bg: string; border: string; text: string; selectedBg: string }> = {
-    1: { bg: '#f6ffed', border: '#b7eb8f', text: '#389e0d', selectedBg: '#52c41a' },
-    2: { bg: '#fffbe6', border: '#ffe58f', text: '#d48806', selectedBg: '#faad14' },
-    3: { bg: '#fff7e6', border: '#ffd591', text: '#d46b08', selectedBg: '#fa8c16' },
-    4: { bg: '#fff1f0', border: '#ffccc7', text: '#cf1322', selectedBg: '#f5222d' },
-    5: { bg: '#f9f0ff', border: '#d3adf7', text: '#531dab', selectedBg: '#722ed1' },
-  };
 
   // --- Render ---
   return (
@@ -530,102 +474,6 @@ export default function RegisterPage() {
             <Form.Item label="แพทย์เจ้าของไข้" name="doctor_name">
               <Input placeholder="ระบุชื่อแพทย์" />
             </Form.Item>
-
-            {/* Severity */}
-            <Form.Item label="ระดับความรุนแรง" name="severityLevelId" rules={[{ required: true, message: 'กรุณาเลือกระดับความรุนแรง' }]}>
-              <Radio.Group className="w-full">
-                <div className="grid grid-cols-2 gap-2">
-                  {severityLevels.map(level => {
-                    const isSelected = severityLevelValue === level.severity_level_id;
-                    const theme = severityColors[level.severity_level_id] || {
-                      bg: '#fafafa', border: '#d9d9d9', text: 'rgba(0,0,0,0.88)', selectedBg: '#1677ff',
-                    };
-                    return (
-                      <Radio.Button
-                        key={level.severity_level_id}
-                        value={level.severity_level_id}
-                        style={{
-                          backgroundColor: isSelected ? theme.selectedBg : theme.bg,
-                          borderColor: isSelected ? theme.selectedBg : theme.border,
-                          color: isSelected ? '#fff' : theme.text,
-                          height: 'auto', textAlign: 'center', padding: '8px 4px',
-                          lineHeight: '1.2', borderWidth: '1px', borderStyle: 'solid',
-                        }}
-                        className="transition-all"
-                      >
-                        <span className="text-xs whitespace-normal">{level.severity_level_name.split(' / ')[0]}</span>
-                      </Radio.Button>
-                    );
-                  })}
-                </div>
-              </Radio.Group>
-            </Form.Item>
-
-            {/* Ventilator / Patient Condition */}
-            {isLaborRoom ? (
-              <Form.Item
-                label="สภาวะผู้ป่วย"
-                name="isVentilator"
-                rules={[{ required: true, message: 'กรุณาระบุสภาวะผู้ป่วย' }]}
-              >
-                <Radio.Group
-                  optionType="button"
-                  buttonStyle="solid"
-                  className="w-full flex"
-                  onChange={e => {
-                    if (e.target.value !== 'N') form.setFieldsValue({ oxygenSupportType: 1 });
-                  }}
-                >
-                  <Radio.Button value="N" className="flex-1 text-center font-semibold">
-                    คลอดปกติ
-                  </Radio.Button>
-                  <Radio.Button value="C" className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">
-                    C/S Complication อื่นๆ
-                  </Radio.Button>
-                </Radio.Group>
-              </Form.Item>
-            ) : (
-              <Form.Item
-                label="การใช้เครื่องช่วยหายใจ (Ventilator)"
-                name="isVentilator"
-                rules={[{ required: true, message: 'กรุณาระบุข้อมูลการใช้เครื่องช่วยหายใจ' }]}
-              >
-                <Radio.Group
-                  optionType="button"
-                  buttonStyle="solid"
-                  className="w-full flex"
-                  onChange={e => {
-                    if (e.target.value !== 'N') form.setFieldsValue({ oxygenSupportType: 1 });
-                  }}
-                >
-                  <Radio.Button value="Y" className="flex-1 text-center font-semibold [&.ant-radio-button-wrapper-checked]:bg-orange-500 [&.ant-radio-button-wrapper-checked]:border-orange-500">
-                    ใส่เครื่องช่วยหายใจ
-                  </Radio.Button>
-                  <Radio.Button value="N" className="flex-1 text-center font-semibold text-slate-500">
-                    ไม่ใส่เครื่องช่วยหายใจ
-                  </Radio.Button>
-                </Radio.Group>
-              </Form.Item>
-            )}
-
-            {/* Oxygen Support — แสดงเมื่อ isVentilator === 'N' (ทั้ง labor room และ ward ทั่วไป) */}
-            {isVentilatorValue === 'N' && (
-              <Form.Item
-                label="การให้ออกซิเจน (Oxygen Support)"
-                name="oxygenSupportType"
-                rules={[{ required: true, message: 'กรุณาเลือกประเภทการให้ออกซิเจน' }]}
-              >
-                <Radio.Group
-                  optionType="button"
-                  buttonStyle="solid"
-                  className="w-full flex"
-                >
-                  <Radio.Button value={1} className="flex-1 text-center">ปกติ (Room Air)</Radio.Button>
-                  <Radio.Button value={2} className="flex-1 text-center">Oxygen (O2)</Radio.Button>
-                  <Radio.Button value={3} className="flex-1 text-center">HFNC</Radio.Button>
-                </Radio.Group>
-              </Form.Item>
-            )}
 
             {/* Date + Shift */}
             <Row gutter={16}>
