@@ -6,11 +6,25 @@ import dynamic from 'next/dynamic';
 const AdmitRecord = dynamic(() => import('../../components/AdmitRecord'), { ssr: false });
 const VitalSignsRecord = dynamic(() => import('../../components/VitalSignsRecord'), { ssr: false });
 const NursingProgressNotes = dynamic(() => import('../../components/NursingProgressNotes'), { ssr: false });
+const NursingCarePlan = dynamic(() => import('../../components/NursingCarePlan'), { ssr: false });
+const IORecord = dynamic(() => import('../../components/IORecord'), { ssr: false });
+const MedicationRecord = dynamic(() => import('../../components/MedicationRecord'), { ssr: false });
+const SpecialCareRecord = dynamic(() => import('../../components/SpecialCareRecord'), { ssr: false });
+const PatientEducation = dynamic(() => import('../../components/PatientEducation'), { ssr: false });
+const NursingHandover = dynamic(() => import('../../components/NursingHandover'), { ssr: false });
+const DischargeRecord = dynamic(() => import('../../components/DischargeRecord'), { ssr: false });
 
 const moduleComponents: Record<string, React.ComponentType<{ an: string }>> = {
   admit: AdmitRecord,
   vital: VitalSignsRecord,
   nursing: NursingProgressNotes,
+  careplan: NursingCarePlan,
+  io: IORecord,
+  mar: MedicationRecord,
+  special: SpecialCareRecord,
+  education: PatientEducation,
+  handover: NursingHandover,
+  discharge: DischargeRecord,
 };
 
 const moduleNames: Record<string, string> = {
