@@ -407,6 +407,12 @@ export default function PatientList() {
 
       render: (_, record) => (
         <Space>
+          <Button
+            className="text-blue-600 border-blue-600 hover:bg-blue-50 flex items-center justify-center"
+            icon={<PiFolderOpenBold className="text-lg" />}
+            title="สรุปข้อมูลผู้ป่วย"
+            onClick={() => window.open(`/ipd/summary/${record.an}`, '_blank')}
+          />
           <Dropdown
             menu={{
               items: [
@@ -435,7 +441,7 @@ export default function PatientList() {
               ],
               onClick: ({ key }) => {
                 if (key === 'group1' || key === 'group2') return;
-                window.open(`/ipd/${key}/${record.an}`, '_blank');
+                window.open(`/ipd/nursing-records/${key}/${record.an}`, '_blank');
               },
               className: '[&_.ant-dropdown-menu]:rounded-xl [&_.ant-dropdown-menu]:shadow-2xl [&_.ant-dropdown-menu]:border [&_.ant-dropdown-menu]:border-gray-100 [&_.ant-dropdown-menu-item]:rounded-lg [&_.ant-dropdown-menu-item]:mx-1 [&_.ant-dropdown-menu-item:hover]:bg-teal-50',
             }}

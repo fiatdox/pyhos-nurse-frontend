@@ -44,7 +44,7 @@ const Navbar = () => {
     };
 
     return (
-        <nav className="bg-[#006b5f] shadow-lg">
+        <nav className="bg-[#006b5f] shadow-lg sticky top-0 z-50">
             <div className="max-w-full mx-auto px-2 sm:px-6 lg:px-8">
                 <div className="relative flex items-center justify-between h-16">
                     {/* Hamburger Menu (Left) - Visible on Mobile only */}
