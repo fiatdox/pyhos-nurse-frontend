@@ -13,6 +13,13 @@ const SpecialCareRecord = dynamic(() => import('../../components/SpecialCareReco
 const PatientEducation = dynamic(() => import('../../components/PatientEducation'), { ssr: false });
 const NursingHandover = dynamic(() => import('../../components/NursingHandover'), { ssr: false });
 const DischargeRecord = dynamic(() => import('../../components/DischargeRecord'), { ssr: false });
+const FallRiskAssessment = dynamic(() => import('../../components/FallRiskAssessment'), { ssr: false });
+const BradenScale = dynamic(() => import('../../components/BradenScale'), { ssr: false });
+const PainAssessment = dynamic(() => import('../../components/PainAssessment'), { ssr: false });
+const WoundCareRecord = dynamic(() => import('../../components/WoundCareRecord'), { ssr: false });
+const RestraintRecord = dynamic(() => import('../../components/RestraintRecord'), { ssr: false });
+const GCSAssessment = dynamic(() => import('../../components/GCSAssessment'), { ssr: false });
+const MentalHealthAssessment = dynamic(() => import('../../components/MentalHealthAssessment'), { ssr: false });
 
 const moduleComponents: Record<string, React.ComponentType<{ an: string }>> = {
   admit: AdmitRecord,
@@ -25,6 +32,13 @@ const moduleComponents: Record<string, React.ComponentType<{ an: string }>> = {
   education: PatientEducation,
   handover: NursingHandover,
   discharge: DischargeRecord,
+  'fall-risk': FallRiskAssessment,
+  braden: BradenScale,
+  pain: PainAssessment,
+  'wound-care': WoundCareRecord,
+  restraint: RestraintRecord,
+  gcs: GCSAssessment,
+  'mental-health': MentalHealthAssessment,
 };
 
 const moduleNames: Record<string, string> = {
