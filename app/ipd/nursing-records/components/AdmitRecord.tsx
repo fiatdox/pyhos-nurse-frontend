@@ -6,6 +6,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
+import { getUserProfile } from '../../../lib/auth';
 import { VscSave } from 'react-icons/vsc';
 import { PiClipboardTextBold, PiHeartbeatBold, PiUserBold, PiUsersFourBold, PiNotePencilBold } from 'react-icons/pi';
 
@@ -18,6 +19,7 @@ interface PatientInfo {
   an: string;
   name?: string;
   patient_name?: string;
+  ptname?: string;
   age?: number;
   gender?: string;
   sex?: string;
@@ -58,8 +60,9 @@ interface AdmitRecordData {
   height?: string;
   bmi?: string;
   pain_score?: number;
-  fall_risk?: string;
   nutrition_screening?: string;
+  diagnosis_summary?: string;
+  treatment_summary?: string;
   general_appearance?: string;
   skin_condition?: string;
   mobility?: string;
@@ -92,7 +95,7 @@ export default function AdmitRecord({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.get(`/api/v1/view-patient-by-an/${an}`, { headers });
+        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -100,15 +103,13 @@ export default function AdmitRecord({ an }: { an: string }) {
         try {
           const recordRes = await axios.get(`/api/v1/nursing-records/admit/${an}`, { headers });
           if (recordRes.data?.success && recordRes.data.data) {
-            const record = recordRes.data.data;
+            const raw = recordRes.data.data;
+            const record = Array.isArray(raw) ? raw[0] : raw;
+            if (!record) throw new Error('no record');
             setExistingRecord(record);
-            form.setFieldsValue({
-              ...record,
-              record_datetime: record.record_datetime ? dayjs(record.record_datetime) : dayjs(),
-            });
           }
         } catch {
-          form.setFieldsValue({ record_datetime: dayjs() });
+          // ไม่มีข้อมูลเดิม — ใช้ค่า default
         }
       } catch (error) {
         console.error('Error fetching patient data:', error);
@@ -118,6 +119,21 @@ export default function AdmitRecord({ an }: { an: string }) {
     };
     fetchData();
   }, [an, getHeaders, form]);
+
+  // เติมค่าลงฟอร์มหลัง loading เสร็จและ form fields render แล้ว
+  useEffect(() => {
+    if (loading) return;
+    if (existingRecord) {
+      form.setFieldsValue({
+        ...existingRecord,
+        nurse_name: existingRecord.nurse_name || getUserProfile()?.fullname || '',
+        pain_score: existingRecord.pain_score !== null && existingRecord.pain_score !== undefined ? Number(existingRecord.pain_score) : undefined,
+        record_datetime: existingRecord.record_datetime ? dayjs(existingRecord.record_datetime) : dayjs(),
+      });
+    } else {
+      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
+    }
+  }, [loading, existingRecord, form]);
 
   const calculateBMI = () => {
     const weight = parseFloat(form.getFieldValue('weight'));
@@ -133,17 +149,37 @@ export default function AdmitRecord({ an }: { an: string }) {
     setSaving(true);
     try {
       const headers = getHeaders();
-      const payload: AdmitRecordData = {
+      const payload: any = {
         ...values,
         an,
-        admission_list_id: patient?.admission_list_id,
+        admission_list_id: patient?.admission_list_id ?? null,
+        ward_code: patient?.ward || getUserProfile()?.ward_code || '',
+        ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
+        id: getUserProfile()?.id || null,
+        staff_id: String(getUserProfile()?.id || ''),
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
+        vital_t: values.vital_t ? parseFloat(values.vital_t) : null,
+        vital_p: values.vital_p ? parseInt(values.vital_p, 10) : null,
+        vital_r: values.vital_r ? parseInt(values.vital_r, 10) : null,
+        vital_o2sat: values.vital_o2sat ? parseInt(String(values.vital_o2sat).replace('%', ''), 10) : null,
+        weight: values.weight ? parseFloat(values.weight) : null,
+        height: values.height ? parseFloat(values.height) : null,
+        bmi: values.bmi ? parseFloat(values.bmi) : null,
+        pain_score: values.pain_score !== undefined && values.pain_score !== null ? Number(values.pain_score) : null,
       };
-      if (existingRecord?.id) {
-        await axios.put(`/api/v1/nursing-records/admit/${existingRecord.id}`, payload, { headers });
-      } else {
-        await axios.post('/api/v1/nursing-records/admit', payload, { headers });
-      }
+
+      // แปลงค่า undefined ที่มาจาก Form ให้เป็น null ทั้งหมดก่อนส่งไปยัง API
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === undefined) {
+          payload[key] = null;
+        }
+      });
+
+      console.log('AdmitRecord Payload:', payload);
+
+      const response = await axios.post('/api/v1/nursing-records/admit', payload, { headers });
+      
+      console.log('API Response:', response.data);
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกข้อมูลการรับผู้ป่วยสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
     } catch (error: any) {
       const status = error?.response?.status;
@@ -153,7 +189,7 @@ export default function AdmitRecord({ an }: { an: string }) {
     }
   };
 
-  const patientName = patient?.name || patient?.patient_name || '-';
+  const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
   const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
@@ -191,12 +227,13 @@ export default function AdmitRecord({ an }: { an: string }) {
           </div>
         </div>
 
+        <Form form={form} layout="vertical" onFinish={onFinish} size="small"
+          className="[&_.ant-form-item]:mb-3 [&_.ant-form-item-label]:pb-0.5 [&_.ant-form-item-label_label]:text-gray-600 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold"
+        >
         {loading ? (
           <div className="flex justify-center py-20"><Spin size="large" description="กำลังโหลดข้อมูล..." /></div>
         ) : (
-          <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-            className="[&_.ant-form-item]:mb-3 [&_.ant-form-item-label]:pb-0.5 [&_.ant-form-item-label_label]:text-gray-600 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold"
-          >
+          <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Left Column */}
               <div className="space-y-6">
@@ -263,16 +300,13 @@ export default function AdmitRecord({ an }: { an: string }) {
                     </Row>
                   </div>
                   <Row gutter={12}>
-                    <Col span={6}><Form.Item label="ความรู้สึกตัว" name="consciousness"><Select placeholder="เลือก">
+                    <Col span={8}><Form.Item label="ความรู้สึกตัว" name="consciousness"><Select placeholder="เลือก">
                       <Option value="alert">Alert</Option><Option value="drowsy">Drowsy</Option><Option value="stupor">Stupor</Option><Option value="coma">Coma</Option>
                     </Select></Form.Item></Col>
-                    <Col span={6}><Form.Item label="Pain (0-10)" name="pain_score"><Select placeholder="เลือก">
+                    <Col span={8}><Form.Item label="Pain (0-10)" name="pain_score"><Select placeholder="เลือก">
                       {[...Array(11)].map((_, i) => <Option key={i} value={i}>{i}</Option>)}
                     </Select></Form.Item></Col>
-                    <Col span={6}><Form.Item label="Fall Risk" name="fall_risk"><Select placeholder="เลือก">
-                      <Option value="low">Low</Option><Option value="moderate">Moderate</Option><Option value="high">High</Option>
-                    </Select></Form.Item></Col>
-                    <Col span={6}><Form.Item label="Nutrition" name="nutrition_screening"><Select placeholder="เลือก">
+                    <Col span={8}><Form.Item label="Nutrition" name="nutrition_screening"><Select placeholder="เลือก">
                       <Option value="normal">ปกติ</Option><Option value="risk">เสี่ยง</Option><Option value="malnutrition">ขาดสารอาหาร</Option>
                     </Select></Form.Item></Col>
                   </Row>
@@ -300,7 +334,11 @@ export default function AdmitRecord({ an }: { an: string }) {
 
                 {/* แผนการพยาบาล / ผู้บันทึก */}
                 <Card size="small" className="shadow-sm rounded-xl border border-gray-100 hover:shadow-md transition-shadow"
-                  title={sectionLabel(<PiNotePencilBold />, 'แผนการพยาบาล / ผู้บันทึก', 'bg-indigo-500')}>
+                  title={sectionLabel(<PiNotePencilBold />, 'การวินิจฉัยและแผนการรักษา/พยาบาล', 'bg-indigo-500')}>
+                  <Row gutter={12}>
+                    <Col span={12}><Form.Item label="สรุปการวินิจฉัยโรค (Diagnosis Summary)" name="diagnosis_summary"><TextArea rows={2} placeholder="ระบุสรุปการวินิจฉัยโรคจากแพทย์" /></Form.Item></Col>
+                    <Col span={12}><Form.Item label="สรุปแผนการรักษา (Treatment Summary)" name="treatment_summary"><TextArea rows={2} placeholder="ระบุสรุปแผนการรักษาของแพทย์" /></Form.Item></Col>
+                  </Row>
                   <Row gutter={12}>
                     <Col span={12}><Form.Item label="ข้อวินิจฉัยทางการพยาบาล" name="nursing_diagnosis"><TextArea rows={2} placeholder="ระบุข้อวินิจฉัย" /></Form.Item></Col>
                     <Col span={12}><Form.Item label="แผนการพยาบาล" name="nursing_plan"><TextArea rows={2} placeholder="ระบุแผนการพยาบาล" /></Form.Item></Col>
@@ -317,8 +355,9 @@ export default function AdmitRecord({ an }: { an: string }) {
                 </Card>
               </div>
             </div>
-          </Form>
+          </>
         )}
+        </Form>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
+import { getUserProfile } from '../../../lib/auth';
 import { VscSave, VscTrash } from 'react-icons/vsc';
 import { PiSmileySadBold, PiListBulletsBold, PiChartLineUpBold } from 'react-icons/pi';
 
@@ -20,10 +21,13 @@ interface PatientInfo {
   an: string;
   name?: string;
   patient_name?: string;
+  ptname?: string;
   bed?: string;
   bedno?: string;
   admitDateTimeIso?: string;
   reg_datetime?: string;
+  ward?: string;
+  wardName?: string;
 }
 
 interface MentalHealthRecord {
@@ -184,7 +188,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.get(`/api/v1/view-patient-by-an/${an}`, { headers });
+        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -222,6 +226,9 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       const headers = getHeaders();
       const payload = {
         an, admission_list_id: patient?.admission_list_id,
+        ward_code: patient?.ward || getUserProfile()?.ward_code || '',
+        ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
+        staff_id: getUserProfile()?.staff_id || '',
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         shift: values.shift || null,
         assessment_tool: selectedTool,
@@ -247,7 +254,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       await axios.post('/api/v1/nursing-records/mental-health', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: selectedTool });
+      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: selectedTool, nurse_name: getUserProfile()?.fullname || '' });
       setLiveScore(0);
       await fetchRecords();
     } catch (error: any) {
@@ -275,10 +282,9 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
   const sortedRecords = [...records].sort((a, b) => dayjs(b.record_datetime).unix() - dayjs(a.record_datetime).unix());
   const latestRecord = sortedRecords[0];
 
-  const getQuestions = () => {
-    if (selectedTool === 'ST-5') return st5Questions;
+  const getQuestions = (): { key: string; label: string; options: { value: number; label: string }[] }[] => {
     if (selectedTool === '2Q') return twoQQuestions;
-    return nineQQuestions;
+    return st5Questions;
   };
 
   const columns: ColumnsType<MentalHealthRecord> = [
@@ -306,7 +312,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
     },
   ];
 
-  const patientName = patient?.name || patient?.patient_name || '-';
+  const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
   const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
@@ -350,7 +356,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-violet-600 font-bold text-sm">ประเมินสุขภาพจิต</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), assessment_tool: 'ST-5' }}
+                initialValues={{ record_datetime: dayjs(), assessment_tool: 'ST-5', nurse_name: getUserProfile()?.fullname || '' }}
                 onValuesChange={recalcScore}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >

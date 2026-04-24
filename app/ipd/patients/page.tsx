@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message, Avatar, Form, Row, Col, Tabs, Dropdown } from 'antd';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
-import { VscSearch, VscRefresh, VscSave, VscListFlat } from "react-icons/vsc";
+import { VscSearch, VscRefresh, VscSave } from "react-icons/vsc";
 import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold, PiClipboardTextBold, PiHeartbeatBold, PiNotePencilBold, PiListChecksBold, PiDropBold, PiPillBold, PiStarBold, PiBookOpenBold, PiArrowsLeftRightBold, PiSignOutBold, PiPersonSimpleBold, PiShieldWarningBold, PiThermometerBold, PiScissorsBold, PiLinkBold, PiBrainBold, PiSmileyNervousBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
 import Navbar from '../../components/Navbar';
@@ -416,33 +416,18 @@ export default function PatientList() {
           <Dropdown
             menu={{
               items: [
-                { key: 'group1', type: 'group', label: <span className="text-[#006b5f] font-bold text-xs uppercase tracking-wide">แบบบันทึก</span>, children: [
-                  { key: 'admit', icon: <PiClipboardTextBold className="text-[#006b5f] text-base" />, label: 'การบันทึกการรับผู้ป่วย' },
-                  { key: 'vital', icon: <PiHeartbeatBold className="text-red-500 text-base" />, label: 'แบบบันทึกสัญญาณชีพ (Vital Signs Record)' },
-                  { key: 'nursing', icon: <PiNotePencilBold className="text-blue-600 text-base" />, label: 'บันทึกทางการพยาบาล (Nursing Progress Notes)' },
-                  { key: 'careplan', icon: <PiListChecksBold className="text-green-600 text-base" />, label: 'แผนการพยาบาล (Nursing Care Plan)' },
-                  { key: 'io', icon: <PiDropBold className="text-cyan-500 text-base" />, label: 'บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)' },
-                  { key: 'mar', icon: <PiPillBold className="text-purple-500 text-base" />, label: 'บันทึกการให้ยา (MAR)' },
-                  { key: 'special', icon: <PiStarBold className="text-amber-500 text-base" />, label: 'บันทึกการดูแลพิเศษ (Special Care Records)' },
-                  { key: 'education', icon: <PiBookOpenBold className="text-indigo-500 text-base" />, label: 'บันทึกการศึกษาและให้ความรู้ (Patient Education)' },
-                  { key: 'handover', icon: <PiArrowsLeftRightBold className="text-orange-500 text-base" />, label: 'บันทึกการส่งเวร (Nursing Handover / SBAR)' },
-                  { key: 'discharge', icon: <PiSignOutBold className="text-rose-600 text-base" />, label: 'บันทึกการจำหน่าย (Discharge Record)' },
-                ]},
-                { type: 'divider' },
-                { key: 'group2', type: 'group', label: <span className="text-orange-600 font-bold text-xs uppercase tracking-wide">แบบประเมิน</span>, children: [
-                  { key: 'fall-risk', icon: <PiPersonSimpleBold className="text-orange-500 text-base" />, label: 'แบบประเมินความเสี่ยงพลัดตกหกล้ม (Fall Risk)' },
-                  { key: 'braden', icon: <PiShieldWarningBold className="text-yellow-600 text-base" />, label: 'แบบประเมินแผลกดทับ (Braden Scale)' },
-                  { key: 'pain', icon: <PiThermometerBold className="text-red-400 text-base" />, label: 'แบบประเมินความปวด (Pain Assessment)' },
-                  { key: 'wound-care', icon: <PiScissorsBold className="text-pink-500 text-base" />, label: 'บันทึกการทำแผล (Wound Care Record)' },
-                  { key: 'restraint', icon: <PiLinkBold className="text-gray-600 text-base" />, label: 'บันทึกการผูกยึด (Restraint Record)' },
-                  { key: 'gcs', icon: <PiBrainBold className="text-violet-600 text-base" />, label: 'แบบประเมินระดับความรู้สึกตัว (GCS)' },
-                  { key: 'mental-health', icon: <PiSmileyNervousBold className="text-teal-500 text-base" />, label: 'แบบประเมินสุขภาพจิต/ความวิตกกังวล' },
-                ]},
+                { key: 'admit', icon: <PiClipboardTextBold className="text-[#006b5f] text-base" />, label: 'การบันทึกการรับผู้ป่วย' },
+                { key: 'vital', icon: <PiHeartbeatBold className="text-red-500 text-base" />, label: 'สัญญาณชีพ (Vital Signs)' },
+                { key: 'nursing', icon: <PiNotePencilBold className="text-blue-600 text-base" />, label: 'บันทึกทางการพยาบาล (Progress Notes)' },
+                { key: 'careplan', icon: <PiListChecksBold className="text-green-600 text-base" />, label: 'แผนการพยาบาล (Care Plan)' },
+                { key: 'io', icon: <PiDropBold className="text-cyan-500 text-base" />, label: 'บันทึกสารน้ำ (I/O Record)' },
+                { key: 'mar', icon: <PiPillBold className="text-purple-500 text-base" />, label: 'บันทึกการให้ยา (MAR)' },
+                { key: 'special', icon: <PiStarBold className="text-amber-500 text-base" />, label: 'การดูแลพิเศษ (Special Care)' },
+                { key: 'education', icon: <PiBookOpenBold className="text-indigo-500 text-base" />, label: 'การให้ความรู้ (Patient Education)' },
+                { key: 'handover', icon: <PiArrowsLeftRightBold className="text-orange-500 text-base" />, label: 'การส่งเวร (Handover / SBAR)' },
+                { key: 'discharge', icon: <PiSignOutBold className="text-rose-600 text-base" />, label: 'การจำหน่าย (Discharge)' },
               ],
-              onClick: ({ key }) => {
-                if (key === 'group1' || key === 'group2') return;
-                window.open(`/ipd/nursing-records/${key}/${record.an}`, '_blank');
-              },
+              onClick: ({ key }) => window.open(`/ipd/nursing-records/${key}/${record.an}`, '_blank'),
               className: '[&_.ant-dropdown-menu]:rounded-xl [&_.ant-dropdown-menu]:shadow-2xl [&_.ant-dropdown-menu]:border [&_.ant-dropdown-menu]:border-gray-100 [&_.ant-dropdown-menu-item]:rounded-lg [&_.ant-dropdown-menu-item]:mx-1 [&_.ant-dropdown-menu-item:hover]:bg-teal-50',
             }}
             trigger={['click']}
@@ -450,9 +435,32 @@ export default function PatientList() {
             <Button
               type="primary"
               className="bg-[#006b5f] hover:bg-[#00554c] flex items-center justify-center"
-              icon={<VscListFlat className="text-lg" />}
+              icon={<PiClipboardTextBold className="text-lg" />}
             >
               แบบบันทึก
+            </Button>
+          </Dropdown>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'fall-risk', icon: <PiPersonSimpleBold className="text-orange-500 text-base" />, label: 'ความเสี่ยงพลัดตกหกล้ม (Fall Risk)' },
+                { key: 'braden', icon: <PiShieldWarningBold className="text-yellow-600 text-base" />, label: 'แผลกดทับ (Braden Scale)' },
+                { key: 'pain', icon: <PiThermometerBold className="text-red-400 text-base" />, label: 'ความปวด (Pain Assessment)' },
+                { key: 'wound-care', icon: <PiScissorsBold className="text-pink-500 text-base" />, label: 'การทำแผล (Wound Care)' },
+                { key: 'restraint', icon: <PiLinkBold className="text-gray-600 text-base" />, label: 'การผูกยึด (Restraint)' },
+                { key: 'gcs', icon: <PiBrainBold className="text-violet-600 text-base" />, label: 'ระดับความรู้สึกตัว (GCS)' },
+                { key: 'mental-health', icon: <PiSmileyNervousBold className="text-teal-500 text-base" />, label: 'สุขภาพจิต/ความวิตกกังวล' },
+              ],
+              onClick: ({ key }) => window.open(`/ipd/nursing-records/${key}/${record.an}`, '_blank'),
+              className: '[&_.ant-dropdown-menu]:rounded-xl [&_.ant-dropdown-menu]:shadow-2xl [&_.ant-dropdown-menu]:border [&_.ant-dropdown-menu]:border-gray-100 [&_.ant-dropdown-menu-item]:rounded-lg [&_.ant-dropdown-menu-item]:mx-1 [&_.ant-dropdown-menu-item:hover]:bg-teal-50',
+            }}
+            trigger={['click']}
+          >
+            <Button
+              className="text-orange-600 border-orange-400 hover:bg-orange-50 flex items-center justify-center"
+              icon={<PiShieldWarningBold className="text-lg" />}
+            >
+              แบบประเมิน
             </Button>
           </Dropdown>
           <Button

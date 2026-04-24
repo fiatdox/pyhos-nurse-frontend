@@ -6,3 +6,20 @@ export function getAuthHeaders(): { Authorization: string } | Record<string, nev
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+export interface UserProfile {
+  staff_id?: number | string;
+  fullname?: string;
+  ward_code?: string;
+  ward_name?: string;
+  [key: string]: any;
+}
+
+export function getUserProfile(): UserProfile | null {
+  try {
+    const raw = sessionStorage.getItem('user_profile');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}

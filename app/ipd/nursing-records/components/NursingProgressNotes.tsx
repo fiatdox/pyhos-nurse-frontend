@@ -7,6 +7,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
+import { getUserProfile } from '../../../lib/auth';
 import { VscSave, VscTrash, VscEdit } from 'react-icons/vsc';
 import { PiNotePencilBold, PiListBulletsBold } from 'react-icons/pi';
 
@@ -19,6 +20,7 @@ interface PatientInfo {
   an: string;
   name?: string;
   patient_name?: string;
+  ptname?: string;
   bed?: string;
   bedno?: string;
   admitDateTimeIso?: string;
@@ -27,6 +29,8 @@ interface PatientInfo {
   spclty_name?: string;
   doctorName?: string;
   incharge_doctor?: string;
+  ward?: string;
+  wardName?: string;
 }
 
 interface NursingNote {
@@ -114,7 +118,7 @@ export default function NursingProgressNotes({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.get(`/api/v1/view-patient-by-an/${an}`, { headers });
+        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -132,7 +136,7 @@ export default function NursingProgressNotes({ an }: { an: string }) {
   const resetForm = () => {
     setEditingNote(null);
     form.resetFields();
-    form.setFieldsValue({ record_datetime: dayjs(), note_type: 'DAR' });
+    form.setFieldsValue({ record_datetime: dayjs(), note_type: 'DAR', nurse_name: getUserProfile()?.fullname || '' });
   };
 
   const onFinish = async (values: any) => {
@@ -142,6 +146,9 @@ export default function NursingProgressNotes({ an }: { an: string }) {
       const payload = {
         an,
         admission_list_id: patient?.admission_list_id,
+        ward_code: patient?.ward || getUserProfile()?.ward_code || '',
+        ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
+        staff_id: getUserProfile()?.staff_id || '',
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         shift: values.shift || null,
         focus: values.focus || null,
@@ -222,7 +229,7 @@ export default function NursingProgressNotes({ an }: { an: string }) {
     },
   ];
 
-  const patientName = patient?.name || patient?.patient_name || '-';
+  const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
   const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
@@ -263,7 +270,7 @@ export default function NursingProgressNotes({ an }: { an: string }) {
                 </div>
               }>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), note_type: 'DAR' }}
+                initialValues={{ record_datetime: dayjs(), note_type: 'DAR', nurse_name: getUserProfile()?.fullname || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>

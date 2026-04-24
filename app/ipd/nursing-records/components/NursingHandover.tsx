@@ -7,6 +7,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
+import { getUserProfile } from '../../../lib/auth';
 import { VscSave, VscTrash, VscEdit } from 'react-icons/vsc';
 import { PiArrowsLeftRightBold, PiListBulletsBold, PiNotePencilBold } from 'react-icons/pi';
 
@@ -19,10 +20,13 @@ interface PatientInfo {
   an: string;
   name?: string;
   patient_name?: string;
+  ptname?: string;
   bed?: string;
   bedno?: string;
   admitDateTimeIso?: string;
   reg_datetime?: string;
+  ward?: string;
+  wardName?: string;
 }
 
 interface HandoverRecord {
@@ -118,7 +122,7 @@ export default function NursingHandover({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.get(`/api/v1/view-patient-by-an/${an}`, { headers });
+        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -136,7 +140,7 @@ export default function NursingHandover({ an }: { an: string }) {
   const resetForm = () => {
     setEditingRecord(null);
     form.resetFields();
-    form.setFieldsValue({ handover_datetime: dayjs() });
+    form.setFieldsValue({ handover_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
   };
 
   const onFinish = async (values: any) => {
@@ -145,6 +149,9 @@ export default function NursingHandover({ an }: { an: string }) {
       const headers = getHeaders();
       const payload = {
         an, admission_list_id: patient?.admission_list_id,
+        ward_code: patient?.ward || getUserProfile()?.ward_code || '',
+        ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
+        staff_id: getUserProfile()?.staff_id || '',
         handover_datetime: values.handover_datetime ? dayjs(values.handover_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         shift_from: values.shift_from, shift_to: values.shift_to,
         nurse_from: values.nurse_from || null, nurse_to: values.nurse_to || null,
@@ -218,7 +225,7 @@ export default function NursingHandover({ an }: { an: string }) {
     },
   ];
 
-  const patientName = patient?.name || patient?.patient_name || '-';
+  const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
   const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
@@ -257,7 +264,7 @@ export default function NursingHandover({ an }: { an: string }) {
                 </div>
               }>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ handover_datetime: dayjs() }}
+                initialValues={{ handover_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Form.Item label="วันที่/เวลา" name="handover_datetime" rules={[{ required: true, message: 'กรุณาระบุ' }]}>

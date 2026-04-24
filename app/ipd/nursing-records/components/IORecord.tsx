@@ -7,6 +7,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
+import { getUserProfile } from '../../../lib/auth';
 import { VscSave, VscTrash } from 'react-icons/vsc';
 import { PiDropBold, PiListBulletsBold, PiChartBarBold } from 'react-icons/pi';
 
@@ -18,12 +19,15 @@ interface PatientInfo {
   an: string;
   name?: string;
   patient_name?: string;
+  ptname?: string;
   bed?: string;
   bedno?: string;
   admitDateTimeIso?: string;
   reg_datetime?: string;
   doctorName?: string;
   incharge_doctor?: string;
+  ward?: string;
+  wardName?: string;
 }
 
 interface IOEntry {
@@ -107,7 +111,7 @@ export default function IORecord({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.get(`/api/v1/view-patient-by-an/${an}`, { headers });
+        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -129,6 +133,9 @@ export default function IORecord({ an }: { an: string }) {
       const payload = {
         an,
         admission_list_id: patient?.admission_list_id,
+        ward_code: patient?.ward || getUserProfile()?.ward_code || '',
+        ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
+        staff_id: getUserProfile()?.staff_id || '',
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         shift: values.shift || null,
         io_type: ioType,
@@ -143,7 +150,7 @@ export default function IORecord({ an }: { an: string }) {
       await axios.post('/api/v1/nursing-records/io', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), unit: 'ml' });
+      form.setFieldsValue({ record_datetime: dayjs(), unit: 'ml', nurse_name: getUserProfile()?.fullname || '' });
       await fetchEntries();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -219,7 +226,7 @@ export default function IORecord({ an }: { an: string }) {
     },
   ];
 
-  const patientName = patient?.name || patient?.patient_name || '-';
+  const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
   const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
@@ -272,7 +279,7 @@ export default function IORecord({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-cyan-600 font-bold text-sm">บันทึก I/O</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), unit: 'ml' }}
+                initialValues={{ record_datetime: dayjs(), unit: 'ml', nurse_name: getUserProfile()?.fullname || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>

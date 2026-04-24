@@ -1,5 +1,11 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(grep -l \"ptname?: string;\" *.tsx)",
+      "Bash(grep -c \"patient?.ptname\" *.tsx)",
+      "Bash(grep -l \"loading ? \" *.tsx)"
+    ],
     "additionalDirectories": [
       "g:\\nextjs\\nurse\\app\\ipd\\nursing-records\\[module]"
     ]

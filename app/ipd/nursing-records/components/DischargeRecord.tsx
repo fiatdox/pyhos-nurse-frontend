@@ -6,6 +6,7 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
+import { getUserProfile } from '../../../lib/auth';
 import { VscSave } from 'react-icons/vsc';
 import { PiSignOutBold, PiCheckCircleBold, PiHeartbeatBold, PiBookOpenBold, PiUserBold } from 'react-icons/pi';
 
@@ -18,12 +19,15 @@ interface PatientInfo {
   an: string;
   name?: string;
   patient_name?: string;
+  ptname?: string;
   bed?: string;
   bedno?: string;
   admitDateTimeIso?: string;
   reg_datetime?: string;
   doctorName?: string;
   incharge_doctor?: string;
+  ward?: string;
+  wardName?: string;
 }
 
 interface DischargeData {
@@ -99,7 +103,7 @@ export default function DischargeRecord({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.get(`/api/v1/view-patient-by-an/${an}`, { headers });
+        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -116,7 +120,7 @@ export default function DischargeRecord({ an }: { an: string }) {
             });
           }
         } catch {
-          form.setFieldsValue({ discharge_datetime: dayjs(), record_datetime: dayjs() });
+          form.setFieldsValue({ discharge_datetime: dayjs(), record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -135,6 +139,9 @@ export default function DischargeRecord({ an }: { an: string }) {
         ...values,
         an,
         admission_list_id: patient?.admission_list_id,
+        ward_code: patient?.ward || getUserProfile()?.ward_code || '',
+        ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
+        staff_id: getUserProfile()?.staff_id || '',
         discharge_datetime: values.discharge_datetime ? dayjs(values.discharge_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
       };
@@ -152,7 +159,7 @@ export default function DischargeRecord({ an }: { an: string }) {
     }
   };
 
-  const patientName = patient?.name || patient?.patient_name || '-';
+  const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
   const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
