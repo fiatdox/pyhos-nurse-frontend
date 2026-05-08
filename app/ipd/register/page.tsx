@@ -98,10 +98,10 @@ export default function RegisterPage() {
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
         const [admTypeRes, spcltyRes, wardRes, shiftRes] = await Promise.all([
-          axios.get('/api/v1/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/spclty', { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/wardsV1', { headers }).catch(() => axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } }))),
-          axios.get('/api/v1/admission-change-shift-types', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/system/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/system/spclty', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/system/wardsV1', { headers }).catch(() => axios.get('/api/v1/system/wards', { headers }).catch(() => ({ data: { data: [] } }))),
+          axios.get('/api/v1/system/admission-change-shift-types', { headers }).catch(() => ({ data: { data: [] } })),
         ]);
 
         setAdmissionTypes(admTypeRes.data.data || []);
@@ -141,7 +141,7 @@ export default function RegisterPage() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.post('/api/v1/patients-list-by-ward', { ward }, { headers });
+      const response = await axios.post('/api/v1/patients/patients-list-by-ward', { ward }, { headers });
       if (response.data.success && Array.isArray(response.data.data)) {
         setPatients(response.data.data);
       } else if (Array.isArray(response.data)) {
@@ -187,7 +187,7 @@ export default function RegisterPage() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.post('/api/v1/patient-by-an', { an: anInput }, { headers });
+      const response = await axios.post('/api/v1/patients/patient-by-an', { an: anInput }, { headers });
       if (response.data.success && response.data.data) {
         setPatients(response.data.data);
         if (response.data.data.length === 0) {

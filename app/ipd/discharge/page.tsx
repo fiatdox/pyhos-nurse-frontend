@@ -54,7 +54,7 @@ export default function DischargePage() {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const response = await axios.get('/api/v1/wardsV1', { headers });
+        const response = await axios.get('/api/v1/system/wardsV1', { headers });
         const wardList = Array.isArray(response.data) ? response.data : response.data.data || [];
         setWards(wardList);
       } catch {
@@ -75,7 +75,7 @@ export default function DischargePage() {
         date_from: dateRange[0] ? dateRange[0].format('YYYY-MM-DD') : null,
         date_to: dateRange[1] ? dateRange[1].format('YYYY-MM-DD') : null,
       };
-      const res = await axios.post('/api/v1/patient-discharge-by-ward', body, { headers });
+      const res = await axios.post('/api/v1/patients/discharged-list', body, { headers });
       setRecords(res.data.data || []);
     } catch {
       setRecords([]);
@@ -103,7 +103,7 @@ export default function DischargePage() {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        await axios.post('/api/v1/cancel-discharge', { admission_list_id: record.admission_list_id }, { headers });
+        await axios.patch(`/api/v1/patients/cancel-discharge/${record.admission_list_id}`, null, { headers });
         Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'ยกเลิก DC เรียบร้อยแล้ว', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
         fetchRecords();
       } catch (error: any) {

@@ -311,7 +311,7 @@ export default function ShiftPatientPage() {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) return;
 
-        const response = await axios.get('/api/v1/wardsV1', {
+        const response = await axios.get('/api/v1/system/wardsV1', {
           headers: { Authorization: `Bearer ${token}` }
         });
 

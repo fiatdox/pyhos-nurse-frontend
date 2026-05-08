@@ -155,7 +155,7 @@ export default function RestraintRecord({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.post('/api/v1/patient-by-an', { an }, { headers });
+        const patientRes = await axios.post('/api/v1/patients/by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);

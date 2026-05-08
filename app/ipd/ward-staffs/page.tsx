@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Select, Button, Typography, message, Transfer, Table } from 'antd';
+import { Card, Select, Button, Typography, Transfer, Table } from 'antd';
 import type { GetProp, TableColumnsType, TableProps, TransferProps } from 'antd';
 import axios from 'axios';
 import Navbar from '../../components/Navbar';
@@ -104,22 +104,17 @@ export default function WardStaffPage() {
                 const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
                 const [wardRes, staffRes] = await Promise.all([
-                    axios.get('/api/v1/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
-                    axios.get('/api/v1/staffs', { headers }).catch(() => ({ data: { data: [] } }))
+                    axios.get('/api/v1/system/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
+                    axios.get('/api/v1/staffs/', { headers }).catch(() => ({ data: { data: [] } }))
                 ]);
 
                 const fetchedWards = Array.isArray(wardRes.data) ? wardRes.data : wardRes.data.data || [];
                 setWards(fetchedWards);
 
                 const fetchedStaff = Array.isArray(staffRes.data) ? staffRes.data : staffRes.data.data || [];
-                if (fetchedStaff.length > 0) {
-                    setStaffList(fetchedStaff);
-                } else {
-                    mockStaffData();
-                }
+                setStaffList(fetchedStaff);
             } catch (error) {
                 console.error("Error fetching data:", error);
-                mockStaffData();
             } finally {
                 setLoading(false);
             }
@@ -128,18 +123,9 @@ export default function WardStaffPage() {
         fetchData();
     }, []);
 
-    const mockStaffData = () => {
-        setStaffList([
-            { staff_id: 1, fullname: 'นางสาวสมหญิง จริงใจ' },
-            { staff_id: 2, fullname: 'นายใจดี รักษา' },
-            { staff_id: 3, fullname: 'นางสาวพยาบาล ทำงานดี' },
-            { staff_id: 4, fullname: 'นายสมชาย มั่นคง' },
-        ]);
-    };
-
     const handleSave = async () => {
         if (!selectedWard) {
-            message.warning('กรุณาเลือกหอผู้ป่วยก่อนบันทึก');
+            Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'กรุณาเลือกหอผู้ป่วยก่อนบันทึก', timer: 2000, showConfirmButton: false });
             return;
         }
 
@@ -178,7 +164,7 @@ export default function WardStaffPage() {
                 ward: selectedWard
             }));
 
-            await axios.post('/api/v1/ward-staffs', payload, { headers });
+            await axios.post('/api/v1/staffs/ward-staffs', payload, { headers });
 
             Swal.fire({
                 icon: 'success',
@@ -226,11 +212,11 @@ export default function WardStaffPage() {
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
             // เรียก API DELETE เพื่อลบข้อมูลเจ้าหน้าที่ทั้งหมดของตึกนี้
-            await axios.delete(`/api/v1/ward-staffs-clear/${selectedWard}`, { headers });
+            await axios.delete(`/api/v1/staffs/ward-staffs-clear/${selectedWard}`, { headers });
 
-            setTargetKeys([]); // ล้างรายการบน UI
+            setTargetKeys([]);
 
-            message.success('นำเจ้าหน้าที่ทั้งหมดออกจากตึกเรียบร้อยแล้ว');
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'นำเจ้าหน้าที่ทั้งหมดออกจากตึกเรียบร้อยแล้ว', timer: 2000, showConfirmButton: false });
         } catch (error) {
             console.error("Error clearing data:", error);
 
@@ -254,7 +240,7 @@ export default function WardStaffPage() {
             const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-            const response = await axios.get(`/api/v1/ward-staffs/${value}`, { headers });
+            const response = await axios.get(`/api/v1/staffs/ward-staffs/${value}`, { headers });
             const resData = Array.isArray(response.data) ? response.data : response.data?.data || [];
             const assignedStaffIds = resData.map((staff: any) => String(staff.staff_id));
             setTargetKeys(assignedStaffIds);
@@ -267,7 +253,7 @@ export default function WardStaffPage() {
             }
         } catch (error) {
             console.error("Error fetching assigned staff:", error);
-            message.error('ไม่สามารถดึงข้อมูลเจ้าหน้าที่ประจำตึกได้');
+            Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่สามารถดึงข้อมูลเจ้าหน้าที่ประจำตึกได้', timer: 2500, showConfirmButton: false });
             setTargetKeys([]);
         } finally {
             setLoading(false);

@@ -54,6 +54,7 @@ export default function ShiftMatrix() {
   const [editingCell, setEditingCell] = useState<{ empId: number; day: number } | null>(null);
   const [tempShifts, setTempShifts] = useState<string[]>([]);
   const [shiftTypes, setShiftTypes] = useState<NurseShiftType[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // โหลด ward list และชั่วโมงเวร
   useEffect(() => {
@@ -61,8 +62,16 @@ export default function ShiftMatrix() {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        
-        const response = await axios.get('/api/v1/wardsV1', { headers });
+
+        try {
+          const parts = token?.split('.');
+          if (parts && parts.length === 3) {
+            const decoded = JSON.parse(atob(parts[1]));
+            if (decoded.id) setUserId(String(decoded.id));
+          }
+        } catch { /* ignore decode error */ }
+
+        const response = await axios.get('/api/v1/system/wardsV1', { headers });
         const wardList = Array.isArray(response.data) ? response.data : response.data?.data || [];
         setWards(wardList);
 
@@ -71,7 +80,7 @@ export default function ShiftMatrix() {
           setShiftTypes(shiftsRes.data.data.sort((a: any, b: any) => a.display_order - b.display_order));
         }
       } catch (error) {
-        console.error("Error fetching initial data:", error);
+        // console.error("Error fetching initial data:", error);
         messageApi.error("เกิดข้อผิดพลาดในการโหลดข้อมูลเบื้องต้น");
       }
     };
@@ -107,7 +116,7 @@ export default function ShiftMatrix() {
 
         setDutyData(newDutyData);
       } catch (error) {
-        console.error("Error fetching shift data by date:", error);
+        // console.error("Error fetching shift data by date:", error);
       }
     };
 
@@ -123,7 +132,7 @@ export default function ShiftMatrix() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.get(`/api/v1/ward-staffs/${value}`, { headers });
+      const response = await axios.get(`/api/v1/staffs/ward-staffs/${value}`, { headers });
       const resData = Array.isArray(response.data) ? response.data : response.data?.data || [];
 
       const staffRecords: StaffRecord[] = resData.map((s: any) => ({
@@ -134,7 +143,7 @@ export default function ShiftMatrix() {
 
       setDataSource(staffRecords);
     } catch (error) {
-      console.error("Error fetching ward staffs:", error);
+      // console.error("Error fetching ward staffs:", error);
       messageApi.error("ไม่สามารถดึงรายชื่อเจ้าหน้าที่ได้");
     } finally {
       setLoadingStaff(false);
@@ -181,11 +190,7 @@ export default function ShiftMatrix() {
       }));
     } catch (error: any) {
       if (error.response?.status === 404) {
-        console.error(`API URL Not Found (404): ${error.config?.url}`);
-        // แจ้งเตือนแบบเงียบๆ เนื่องจากบางทีอาจจะแปลว่ายังไม่มีเวร
-        // messageApi.warning(`ไม่พบ API (404): ${error.config?.url}`);
       } else {
-        console.error("Error fetching shift detail:", error);
       }
     }
   };
@@ -208,11 +213,9 @@ export default function ShiftMatrix() {
           admission_change_shift_type_id: shiftType?.admission_change_shift_type_id ?? 0,
           description: shiftType?.description ?? '',
           ward: selectedWard,
-          created_by: 1 // TODO: ควรเปลี่ยนเป็น ID ผู้ล็อกอินใช้งานจริงจาก session หรือ decode จาก token
+          created_by: userId
         };
       });
-
-      console.log("Payload to send to API:", JSON.stringify(payload, null, 2));
 
       // 2. การยิง API เพื่อบันทึกข้อมูล
       try {
@@ -221,8 +224,6 @@ export default function ShiftMatrix() {
         await axios.post('/api/v1/nurse/nurse-schedules', payload, { headers });
         messageApi.success('บันทึกเวรสำเร็จ');
       } catch (error: any) {
-        console.error("Error saving shift:", error);
-        console.error("Response data:", error.response?.data);
         if (error.response?.status === 404) {
           messageApi.error(`ไม่พบ API (404): ${error.config?.url}`);
         } else {

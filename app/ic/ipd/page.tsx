@@ -70,7 +70,7 @@ const InfectionControlPage = () => {
 
         const [patientResponse, wardResponse] = await Promise.all([
           axios.get('/api/v1/ic/ipd-patient-history-daily', { headers }),
-          axios.get('/api/v1/wards', { headers }).catch(() => ({ data: { data: [] } }))
+          axios.get('/api/v1/system/wardsV1', { headers }).catch(() => ({ data: { data: [] } }))
         ]);
 
         if (patientResponse.data.success && Array.isArray(patientResponse.data.data)) {

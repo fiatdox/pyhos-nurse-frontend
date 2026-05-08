@@ -109,8 +109,8 @@ export default function PatientList() {
         if (!token) return;
         const headers = { Authorization: `Bearer ${token}` };
         const [admTypeRes, spcltyRes] = await Promise.all([
-          axios.get('/api/v1/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/spclty', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/system/admission-types', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/system/spclty', { headers }).catch(() => ({ data: { data: [] } })),
         ]);
         setAdmissionTypes(admTypeRes.data.data || []);
         setSpecialties(spcltyRes.data.data || []);
@@ -128,7 +128,7 @@ export default function PatientList() {
         if (!token) return;
 
         // เรียก API ไปที่ /api/v1/wards (ผ่าน Proxy) พร้อมแนบ Token
-        const response = await axios.get('/api/v1/wardsV1', {
+        const response = await axios.get('/api/v1/system/wardsV1', {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -157,7 +157,7 @@ export default function PatientList() {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       
-      const response = await axios.get(`/api/v1/view-patient-by-ward/${selectedWard}`, { headers });
+      const response = await axios.get(`/api/v1/patients/view-patient-by-ward/${selectedWard}`, { headers });
       
       if (response.data && response.data.success) {
         setPatients(response.data.data || []);
@@ -185,7 +185,7 @@ export default function PatientList() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.post('/api/v1/view-discharged-patient-by-ward', {
+      const response = await axios.post('/api/v1/patients/view-discharged-patient-by-ward', {
         ward: selectedWard,
         ds1: dischargedDateRange[0].format('YYYY-MM-DD'),
         ds2: dischargedDateRange[1].format('YYYY-MM-DD'),
@@ -259,7 +259,7 @@ export default function PatientList() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.post('/api/v1/discharge-patient', payload, { headers });
+      await axios.post('/api/v1/patients/discharge', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการจำหน่ายผู้ป่วยสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       handleCancelShift();
       fetchPatients();
@@ -569,7 +569,7 @@ export default function PatientList() {
                   try {
                     const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
                     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-                    await axios.get(`/api/v1/cancel-discharge/${record.admission_list_id}`, { headers });
+                    await axios.patch(`/api/v1/patients/cancel-discharge/${record.admission_list_id}`, null, { headers });
                     Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'ยกเลิกจำหน่ายสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
                     fetchPatients();
                     fetchDischargedPatients();

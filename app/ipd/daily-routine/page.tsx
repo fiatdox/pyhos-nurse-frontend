@@ -174,7 +174,7 @@ function DailyRoutineContent() {
     const token = getToken();
     const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
     try {
-      const res = await axios.post('/api/v1/patient-shift-daily-records-summary', {
+      const res = await axios.post('/api/v1/patients/patient-shift-daily-records-summary', {
         ward: w,
         date: d,
       }, { headers });
@@ -197,7 +197,7 @@ function DailyRoutineContent() {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
     try {
-      await axios.post('/api/v1/admission-shift-daily-records', payload, { headers });
+      await axios.post('/api/v1/patients/admission-shift-daily-records', payload, { headers });
       notification.success({ title: 'บันทึกสำเร็จ', duration: 2 });
       fetchShiftSummary();
     } catch (e: unknown) {
@@ -252,9 +252,9 @@ function DailyRoutineContent() {
     };
 
     try {
-      await axios.post('/api/v1/patient-shift-daily-records/copy-previous', body, { headers });
+      await axios.post('/api/v1/patients/patient-shift-daily-records/copy-previous', body, { headers });
       // โหลดข้อมูลใหม่หลัง copy สำเร็จ
-      const res = await axios.post('/api/v1/patient-shift-daily-records', {
+      const res = await axios.post('/api/v1/patients/patient-shift-daily-records', {
         ward: selectedWard,
         date: selectedDate.format('YYYY-MM-DD'),
       }, { headers });
@@ -310,7 +310,7 @@ function DailyRoutineContent() {
       try {
         const token = getToken();
         if (!token) return;
-        const res = await axios.get('/api/v1/wardsV1', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await axios.get('/api/v1/system/wardsV1', { headers: { Authorization: `Bearer ${token}` } });
         const list = Array.isArray(res.data) ? res.data : res.data.data || [];
         const options = list.map((w: { ward_name: string; his_code: string }) => ({ label: w.ward_name, value: w.his_code }));
         setWards(options);
@@ -328,7 +328,7 @@ function DailyRoutineContent() {
       try {
         const token = getToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await axios.get('/api/v1/admission-shift-care-levels', { headers });
+        const res = await axios.get('/api/v1/system/admission-shift-care-levels', { headers });
         const data: CareLevelOption[] = Array.isArray(res.data) ? res.data : res.data.data || [];
         setCareLevels(data);
       } catch (e) {
@@ -353,7 +353,7 @@ function DailyRoutineContent() {
     const fetchPatients = async () => {
       setLoadingPatients(true);
       try {
-        const res = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
+        const res = await axios.get(`/api/v1/patients/patients-register-by-ward/${selectedWard}`, { headers });
         const list = Array.isArray(res.data) ? res.data : res.data.data || [];
         setPatients(list);
       } catch (e) {
@@ -366,7 +366,7 @@ function DailyRoutineContent() {
     const fetchExistingRecords = async () => {
       setLoadingRecords(true);
       try {
-        const res = await axios.post('/api/v1/patient-shift-daily-records', {
+        const res = await axios.post('/api/v1/patients/patient-shift-daily-records', {
           ward: selectedWard,
           date: selectedDate.format('YYYY-MM-DD'),
         }, { headers: { ...headers, 'Content-Type': 'application/json' } });

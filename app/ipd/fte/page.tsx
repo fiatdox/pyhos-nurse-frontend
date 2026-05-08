@@ -1,10 +1,11 @@
 "use client"
-import React, { useState, useEffect } from 'react';
-import { Table, Card, Select, Typography, DatePicker, message } from 'antd';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Table, Card, Select, Typography, DatePicker, Button } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import Navbar from '../../components/Navbar';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
 
 const { Title } = Typography;
 
@@ -12,7 +13,26 @@ interface Ward {
   ward: number;
   ward_name: string;
   his_code: string;
+  general?: number;
+  crisis?: number;
 }
+
+const bold = (val: number | string) => (Number(val) > 0 ? <strong>{val}</strong> : <span>{val}</span>);
+
+const NUMERIC_FIELDS = [
+  'ptNormal', 'ptO2', 'ptHfnc', 'ptVent', 'fte',
+  'noOtRn', 'noOtTn', 'noOtPn',
+  'ot8Rn', 'ot8Tn', 'ot8Pn',
+  'ot4Rn', 'ot4Tn', 'ot4Pn',
+  'diff', 'prod1',
+  't1', 't2', 't3', 't4', 't5',
+  'total', 'prod2',
+] as const;
+
+type NumericField = typeof NUMERIC_FIELDS[number];
+
+const SHIFT_COLORS: Record<string, string> = { N: '#e6f7ff', D: '#fff7e6', E: '#fff1f0' };
+const SHIFT_LABELS: Record<string, string> = { N: 'รวมเวรดึก (N)', D: 'รวมเวรเช้า (D)', E: 'รวมเวรบ่าย (E)' };
 
 const ScheduleTableAntd = () => {
   // กำหนดโครงสร้างคอลัมน์ (Columns)
@@ -51,9 +71,9 @@ const ScheduleTableAntd = () => {
     {
       title: 'ยอด ที่ไม่ on ventilator',
       children: [
-        { title: 'ปกติ', dataIndex: 'ptNormal', key: 'ptNormal', align: 'center', width: 50 },
-        { title: 'O2', dataIndex: 'ptO2', key: 'ptO2', align: 'center', width: 50 },
-        { title: 'HFNC', dataIndex: 'ptHfnc', key: 'ptHfnc', align: 'center', width: 50 },
+        { title: 'ปกติ', dataIndex: 'ptNormal', key: 'ptNormal', align: 'center', width: 50, render: bold },
+        { title: 'O2', dataIndex: 'ptO2', key: 'ptO2', align: 'center', width: 50, render: bold },
+        { title: 'HFNC', dataIndex: 'ptHfnc', key: 'ptHfnc', align: 'center', width: 50, render: bold },
       ]
     },
     {
@@ -62,6 +82,7 @@ const ScheduleTableAntd = () => {
       key: 'ptVent',
       align: 'center',
       width: 70,
+      render: bold,
     },
     {
       title: 'FTE',
@@ -69,33 +90,33 @@ const ScheduleTableAntd = () => {
       key: 'fte',
       align: 'center',
       width: 60,
+      render: bold,
     },
     {
       title: 'ขึ้นตามตารางเวร',
-      // ใช้ children เพื่อสร้าง Header ซ้อนกัน (Nested Header)
       children: [
         {
           title: 'ไม่ใช่ OT',
           children: [
-            { title: 'RN', dataIndex: 'noOtRn', key: 'noOtRn', align: 'center', width: 40, className: 'text-red-500' },
-            { title: 'TN', dataIndex: 'noOtTn', key: 'noOtTn', align: 'center', width: 40, className: 'text-blue-500' },
-            { title: 'PN', dataIndex: 'noOtPn', key: 'noOtPn', align: 'center', width: 40, className: 'text-blue-500' },
+            { title: 'RN', dataIndex: 'noOtRn', key: 'noOtRn', align: 'center', width: 40, className: 'text-red-500', render: bold },
+            { title: 'TN', dataIndex: 'noOtTn', key: 'noOtTn', align: 'center', width: 40, className: 'text-blue-500', render: bold },
+            { title: 'PN', dataIndex: 'noOtPn', key: 'noOtPn', align: 'center', width: 40, className: 'text-blue-500', render: bold },
           ],
         },
         {
           title: 'OT 8 hr',
           children: [
-            { title: 'RN', dataIndex: 'ot8Rn', key: 'ot8Rn', align: 'center', width: 40, className: 'text-red-500' },
-            { title: 'TN', dataIndex: 'ot8Tn', key: 'ot8Tn', align: 'center', width: 40, className: 'text-blue-500' },
-            { title: 'PN', dataIndex: 'ot8Pn', key: 'ot8Pn', align: 'center', width: 40, className: 'text-blue-500' },
+            { title: 'RN', dataIndex: 'ot8Rn', key: 'ot8Rn', align: 'center', width: 40, className: 'text-red-500', render: bold },
+            { title: 'TN', dataIndex: 'ot8Tn', key: 'ot8Tn', align: 'center', width: 40, className: 'text-blue-500', render: bold },
+            { title: 'PN', dataIndex: 'ot8Pn', key: 'ot8Pn', align: 'center', width: 40, className: 'text-blue-500', render: bold },
           ],
         },
         {
           title: 'OT 4 hr',
           children: [
-            { title: 'RN', dataIndex: 'ot4Rn', key: 'ot4Rn', align: 'center', width: 40, className: 'text-red-500' },
-            { title: 'TN', dataIndex: 'ot4Tn', key: 'ot4Tn', align: 'center', width: 40, className: 'text-blue-500' },
-            { title: 'PN', dataIndex: 'ot4Pn', key: 'ot4Pn', align: 'center', width: 40, className: 'text-blue-500' },
+            { title: 'RN', dataIndex: 'ot4Rn', key: 'ot4Rn', align: 'center', width: 40, className: 'text-red-500', render: bold },
+            { title: 'TN', dataIndex: 'ot4Tn', key: 'ot4Tn', align: 'center', width: 40, className: 'text-blue-500', render: bold },
+            { title: 'PN', dataIndex: 'ot4Pn', key: 'ot4Pn', align: 'center', width: 40, className: 'text-blue-500', render: bold },
           ],
         },
       ],
@@ -107,7 +128,7 @@ const ScheduleTableAntd = () => {
       align: 'center',
       width: 70,
       render: (val) => (
-        <span style={{ color: val < 0 ? 'red' : 'inherit' }}>{val}</span>
+        <span style={{ color: val < 0 ? 'red' : 'inherit', fontWeight: val !== 0 ? 'bold' : 'normal' }}>{val}</span>
       ),
     },
     {
@@ -117,15 +138,16 @@ const ScheduleTableAntd = () => {
       align: 'center',
       width: 80,
       onCell: () => ({ style: { backgroundColor: '#f0f5ff' } }),
+      render: bold,
     },
     {
       title: 'ประเภทผู้ป่วย',
       children: [
-        { title: '1', dataIndex: 't1', key: 't1', align: 'center', width: 40 },
-        { title: '2', dataIndex: 't2', key: 't2', align: 'center', width: 40 },
-        { title: '3', dataIndex: 't3', key: 't3', align: 'center', width: 40 },
-        { title: '4', dataIndex: 't4', key: 't4', align: 'center', width: 40 },
-        { title: '5', dataIndex: 't5', key: 't5', align: 'center', width: 40 },
+        { title: '1', dataIndex: 't1', key: 't1', align: 'center', width: 40, render: bold },
+        { title: '2', dataIndex: 't2', key: 't2', align: 'center', width: 40, render: bold },
+        { title: '3', dataIndex: 't3', key: 't3', align: 'center', width: 40, render: bold },
+        { title: '4', dataIndex: 't4', key: 't4', align: 'center', width: 40, render: bold },
+        { title: '5', dataIndex: 't5', key: 't5', align: 'center', width: 40, render: bold },
       ],
     },
     {
@@ -134,7 +156,8 @@ const ScheduleTableAntd = () => {
       key: 'total',
       align: 'center',
       width: 60,
-      onCell: () => ({ style: { backgroundColor: '#d9f7be', fontWeight: 'bold' } }), // สีเขียวอ่อน
+      onCell: () => ({ style: { backgroundColor: '#d9f7be', fontWeight: 'bold' } }),
+      render: bold,
     },
     {
       title: 'product\nตาม\nประเภท',
@@ -142,6 +165,7 @@ const ScheduleTableAntd = () => {
       key: 'prod2',
       align: 'center',
       width: 80,
+      render: bold,
     },
   ];
 
@@ -153,13 +177,18 @@ const ScheduleTableAntd = () => {
   const [tableData, setTableData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const wardConfig = useMemo(() => {
+    const w = wards.find(x => x.his_code === selectedWard);
+    return { general: w?.general, crisis: w?.crisis };
+  }, [wards, selectedWard]);
+
   // 1. ดึงรายชื่อหอผู้ป่วย
   useEffect(() => {
     const fetchWards = async () => {
       try {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) return;
-        const response = await axios.get('/api/v1/wardsV1', {
+        const response = await axios.get('/api/v1/system/wardsV1', {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (response.data) {
@@ -198,58 +227,80 @@ const ScheduleTableAntd = () => {
         
         if (response.data && response.data.success) {
           const rawData = response.data.data || [];
-          
-          // จัดกลุ่มตามวัน เพื่อทำ rowSpan ให้ถูกต้อง
-          const daysMap: Record<string, any[]>  = {};
+
+          const daysMap: Record<string, any[]> = {};
           rawData.forEach((item: any) => {
-            if (!daysMap[item.shift_date]) daysMap[item.shift_date] = [];
-            daysMap[item.shift_date].push(item);
+            const dateKey = item.record_date;
+            if (!daysMap[dateKey]) daysMap[dateKey] = [];
+            daysMap[dateKey].push(item);
           });
-          
+
           let finalData: any[] = [];
           Object.keys(daysMap).sort().forEach(dateKey => {
-            const shiftsForDay = daysMap[dateKey].sort((a: any, b: any) => a.shift_id - b.shift_id);
+            const shiftsForDay = daysMap[dateKey].sort((a: any, b: any) => a.shift_type_id - b.shift_type_id);
             shiftsForDay.forEach((item: any, index: number) => {
               finalData.push({
-                key: `${item.shift_date}-${item.shift_id}`,
-                date: dayjs(item.shift_date).date(),
+                key: `${item.record_date}-${item.shift_type_id}`,
+                date: dayjs(item.record_date).date(),
                 indexInDay: index,
                 rowSpanForDay: index === 0 ? shiftsForDay.length : 0,
                 shift: item.shift_name === 'ดึก' ? 'N' : item.shift_name === 'เช้า' ? 'D' : 'E',
-                ptNormal: item.normal_count,
-                ptO2: item.o2_count,
-                ptHfnc: item.hfnc_count,
-                ptVent: item.crisis_count,
-                fte: item.fte,
-                t1: item.severity_1,
-                t2: item.severity_2,
-                t3: item.severity_3,
-                t4: item.severity_4,
-                t5: item.severity_5,
-                total: item.total_count,
-                prod1: item.general_score,
-                prod2: item.crisis_score,
-                noOtRn: item.RN_NOT_OT ?? 0,
-                noOtTn: item.TN_NOT_OT ?? 0,
-                noOtPn: item.PN_NOT_OT ?? 0,
-                ot4Rn: item.RN_OT4 ?? 0,
-                ot4Tn: item.TN_OT4 ?? 0,
-                ot4Pn: item.PN_OT4 ?? 0,
-                ot8Rn: item.RN_OT8 ?? 0,
-                ot8Tn: item.TN_OT8 ?? 0,
-                ot8Pn: item.PN_OT8 ?? 0,
+                ptNormal: parseInt(item.normal) || 0,
+                ptO2: parseInt(item.o2) || 0,
+                ptHfnc: parseInt(item.hfnc) || 0,
+                ptVent: parseInt(item.vent_cs) || 0,
+                fte: parseFloat(item.final_score) || 0,
+                t1: parseInt(item.severity_level_1) || 0,
+                t2: parseInt(item.severity_level_2) || 0,
+                t3: parseInt(item.severity_level_3) || 0,
+                t4: parseInt(item.severity_level_4) || 0,
+                t5: parseInt(item.severity_level_5) || 0,
+                total: parseInt(item.total) || 0,
+                prod1: parseFloat(item.total_score) || 0,
+                prod2: parseFloat(item.final_score) || 0,
+                // _n=ดึก(1), _m=เช้า(2), _a=บ่าย(3)
+                ...(item.shift_type_id === 1 ? {
+                  noOtRn: parseInt(item.rn_n) || 0,
+                  noOtTn: parseInt(item.rt_n) || 0,
+                  noOtPn: parseInt(item.pn_n) || 0,
+                  ot8Rn: parseInt(item.rn_n_ot8) || 0,
+                  ot8Tn: parseInt(item.rt_n_ot8) || 0,
+                  ot8Pn: parseInt(item.pn_n_ot8) || 0,
+                  ot4Rn: parseInt(item.rn_n_ot4) || 0,
+                  ot4Tn: parseInt(item.rt_n_ot4) || 0,
+                  ot4Pn: parseInt(item.pn_n_ot4) || 0,
+                } : item.shift_type_id === 2 ? {
+                  noOtRn: parseInt(item.rn_m) || 0,
+                  noOtTn: parseInt(item.rt_m) || 0,
+                  noOtPn: parseInt(item.pn_m) || 0,
+                  ot8Rn: parseInt(item.rn_m_ot8) || 0,
+                  ot8Tn: parseInt(item.rt_m_ot8) || 0,
+                  ot8Pn: parseInt(item.pn_m_ot8) || 0,
+                  ot4Rn: parseInt(item.rn_m_ot4) || 0,
+                  ot4Tn: parseInt(item.rt_m_ot4) || 0,
+                  ot4Pn: parseInt(item.pn_m_ot4) || 0,
+                } : {
+                  noOtRn: parseInt(item.rn_a) || 0,
+                  noOtTn: parseInt(item.rt_a) || 0,
+                  noOtPn: parseInt(item.pn_a) || 0,
+                  ot8Rn: parseInt(item.rn_a_ot8) || 0,
+                  ot8Tn: parseInt(item.rt_a_ot8) || 0,
+                  ot8Pn: parseInt(item.pn_a_ot8) || 0,
+                  ot4Rn: parseInt(item.rn_a_ot4) || 0,
+                  ot4Tn: parseInt(item.rt_a_ot4) || 0,
+                  ot4Pn: parseInt(item.pn_a_ot4) || 0,
+                }),
                 diff: 0
               });
             });
           });
-          
+
           setTableData(finalData);
         } else {
-           setTableData([]);
+          setTableData([]);
         }
       } catch (error) {
         console.error("Error fetching fte data:", error);
-        message.error("เกิดข้อผิดพลาดในการดึงข้อมูล FTE");
         setTableData([]);
       } finally {
         setLoading(false);
@@ -258,6 +309,68 @@ const ScheduleTableAntd = () => {
 
     fetchFteData();
   }, [selectedWard, selectedMonth]);
+
+  const summaryRows = useMemo(() => {
+    const dayCount = tableData.filter(r => r.shift === 'N').length || 1;
+
+    const byShift = ['N', 'D', 'E'].map(shift => {
+      const rows = tableData.filter(r => r.shift === shift);
+      const row: Record<string, number | string> = { shift };
+      NUMERIC_FIELDS.forEach(f => {
+        row[f] = rows.reduce((acc, r) => acc + (Number(r[f]) || 0), 0);
+      });
+      return row;
+    });
+
+    const avgRow: Record<string, number | string> = { shift: 'เฉลี่ย/วัน' };
+    NUMERIC_FIELDS.forEach(f => {
+      const total = tableData.reduce((acc, r) => acc + (Number(r[f]) || 0), 0);
+      avgRow[f] = parseFloat((total / 3 / dayCount).toFixed(2));
+    });
+
+    return [...byShift, avgRow];
+  }, [tableData]);
+
+  const handleExportExcel = () => {
+    const wardObj = wards.find(w => w.his_code === selectedWard);
+    const wardName = wardObj?.ward_name || selectedWard || 'ward';
+    const monthStr = selectedMonth.format('YYYY-MM');
+
+    const HEADERS = [
+      'วันที่', 'เวร',
+      'ปกติ', 'O2', 'HFNC', 'Vent C/S', 'FTE',
+      'ไม่OT-RN', 'ไม่OT-TN', 'ไม่OT-PN',
+      'OT8-RN', 'OT8-TN', 'OT8-PN',
+      'OT4-RN', 'OT4-TN', 'OT4-PN',
+      '-ขาด/+เกิน', 'product',
+      'ประเภท1', 'ประเภท2', 'ประเภท3', 'ประเภท4', 'ประเภท5',
+      'รวม', 'productตามประเภท',
+    ];
+
+    const toRow = (r: Record<string, any>) => [
+      r.date ?? '', r.shift ?? '',
+      ...NUMERIC_FIELDS.map(f => r[f] ?? 0),
+    ];
+
+    const dataRows = tableData.map(toRow);
+    const blankRow = Array(HEADERS.length).fill('');
+    const summaryHeaderRow = ['--- สรุปทั้งเดือน ---', ...Array(HEADERS.length - 1).fill('')];
+    const summaryDataRows = summaryRows.map(r => [SHIFT_LABELS[r.shift as string] || r.shift, '', ...NUMERIC_FIELDS.map(f => r[f] ?? 0)]);
+
+    const configRows = [
+      [`ค่าน้ำหนักผู้ป่วยทั่วไปต่อพยาบาล 1 คน = ${wardConfig.general ?? '-'}`, ...Array(HEADERS.length - 1).fill('')],
+      [`ค่าน้ำหนักผู้ป่วย on ventilator หรือ C/S ต่อพยาบาล 1 คน = ${wardConfig.crisis ?? '-'}`, ...Array(HEADERS.length - 1).fill('')],
+      blankRow,
+    ];
+
+    const wsData = [...configRows, HEADERS, ...dataRows, blankRow, summaryHeaderRow, ...summaryDataRows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = HEADERS.map(() => ({ wch: 12 }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'FTE');
+    XLSX.writeFile(wb, `FTE_${wardName}_${monthStr}.xlsx`);
+  };
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
@@ -281,27 +394,83 @@ const ScheduleTableAntd = () => {
                 optionFilterProp="label"
               />
               <span className="text-gray-600 whitespace-nowrap ml-2">ประจำเดือน:</span>
-              <DatePicker 
-                picker="month" 
+              <DatePicker
+                picker="month"
                 size="middle"
-                value={selectedMonth} 
-                onChange={(date) => setSelectedMonth(date || dayjs())} 
+                value={selectedMonth}
+                onChange={(date) => setSelectedMonth(date || dayjs())}
                 format="MM/YYYY"
                 allowClear={false}
               />
+              <Button
+                size="middle"
+                onClick={handleExportExcel}
+                disabled={tableData.length === 0}
+                style={{ backgroundColor: '#217346', borderColor: '#217346', color: '#fff' }}
+              >
+                ส่งออก Excel
+              </Button>
             </div>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <Table 
-              columns={columns} 
-              dataSource={tableData} 
-              bordered 
-              size="small" 
-              pagination={false} 
-              scroll={{ x: 'max-content' }} 
-              rowClassName={(record) => 'hover:bg-gray-50'}
+            <Table
+              columns={columns}
+              dataSource={tableData}
+              bordered
+              size="small"
+              pagination={false}
+              scroll={{ x: 'max-content' }}
+              rowClassName={() => 'hover:bg-gray-50'}
+              title={() => (
+                <div className="flex flex-col gap-0.5 text-sm font-medium text-white">
+                  <span>
+                    ค่าน้ำหนักผู้ป่วยทั่วไปต่อพยาบาล 1 คน&nbsp;=&nbsp;
+                    <strong>{wardConfig.general ?? '-'}</strong>
+                  </span>
+                  <span>
+                    ค่าน้ำหนักผู้ป่วย on ventilator หรือ C/S ต่อพยาบาล 1 คน&nbsp;=&nbsp;
+                    <strong>{wardConfig.crisis ?? '-'}</strong>
+                  </span>
+                </div>
+              )}
               loading={loading}
+              className="
+                [&_.ant-table-title]:bg-[#006b5f]!
+                [&_.ant-table-title]:border-b-0!
+                [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
+                [&_.ant-table-thead_.ant-table-cell]:text-white!
+                [&_.ant-table-thead_.ant-table-cell]:font-semibold!
+                [&_.ant-table-thead_.ant-table-cell]:border-[#005a50]!
+                [&_.ant-table-thead>tr:nth-child(2)_.ant-table-cell]:bg-[#00897b]!
+                [&_.ant-table-thead>tr:nth-child(3)_.ant-table-cell]:bg-[#26a69a]!
+              "
+              summary={() => (
+                <Table.Summary fixed="bottom">
+                  {summaryRows.map((row, rowIdx) => {
+                    const isAvg = row.shift === 'เฉลี่ย/วัน';
+                    const bg = isAvg ? '#f6ffed' : SHIFT_COLORS[row.shift as string] || '#fafafa';
+                    const label = isAvg ? 'เฉลี่ย/วัน' : SHIFT_LABELS[row.shift as string];
+                    return (
+                      <Table.Summary.Row key={rowIdx} style={{ backgroundColor: bg }}>
+                        <Table.Summary.Cell index={0} colSpan={2} align="center">
+                          <strong style={{ color: isAvg ? '#389e0d' : '#006b5f' }}>{label}</strong>
+                        </Table.Summary.Cell>
+                        {NUMERIC_FIELDS.map((f, fi) => {
+                          const val = Number(row[f]);
+                          return (
+                            <Table.Summary.Cell key={f} index={fi + 2} align="center">
+                              {val > 0
+                                ? <strong>{Number.isInteger(val) ? val : val.toFixed(2)}</strong>
+                                : <span style={{ color: '#ccc' }}>-</span>}
+                            </Table.Summary.Cell>
+                          );
+                        })}
+                      </Table.Summary.Row>
+                    );
+                  })}
+                </Table.Summary>
+              )}
             />
           </div>
         </Card>

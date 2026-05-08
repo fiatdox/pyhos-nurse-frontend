@@ -139,8 +139,8 @@ export default function OrderFoodPage() {
         }
 
         const [wardRes, menuRes] = await Promise.all([
-          axios.get('/api/v1/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
-          axios.get('/api/v1/nutrition-menu', { headers }).catch(() => ({ data: { data: [] } }))
+          axios.get('/api/v1/system/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
+          axios.get('/api/v1/nutrition/menu', { headers }).catch(() => ({ data: { data: [] } }))
         ]);
 
         const wardList = Array.isArray(wardRes.data) ? wardRes.data : wardRes.data.data || [];
@@ -168,7 +168,7 @@ export default function OrderFoodPage() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.post('/api/v1/food-orders-by-ward', {
+      const response = await axios.post('/api/v1/nutrition/food-orders-by-ward', {
         ward: selectedWard,
         date: orderDate.format('YYYY-MM-DD'),
       }, { headers });
@@ -277,30 +277,46 @@ export default function OrderFoodPage() {
   };
 
   // ยืนยันการสั่งเหมือนมื้อล่าสุด
-  const handleConfirmCopyLastMeal = () => {
+  const handleConfirmCopyLastMeal = async () => {
     if (!confirmData) return;
 
-    setPatients(prev =>
-      prev.map(p => {
-        if (selectedRowKeys.includes(p.key)) {
-          const mealData = confirmData.meals[selectedRowKeys.indexOf(p.key)];
-          return {
-            ...p,
-            foodType: mealData?.name || 'อาหารธรรมดา (Normal Diet)',
-            foodItemId: mealData?.foodItemId || 0,
-            foodOrderDate: orderDate.format('YYYY-MM-DD'),
-            foodMealTime: mealTime
-          };
-        }
-        return p;
-      })
-    );
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      if (!token) {
+        Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่พบ token การอนุญาต กรุณา login ใหม่', timer: 2000, showConfirmButton: false });
+        return;
+      }
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-    setIsConfirmOpen(false);
-    setConfirmData(null);
-    setSelectedRowKeys([]); // เคลียร์การเลือก
-    setIsAddonMode(true); // เปลี่ยนไปเป็น addon mode เพื่อแสดงรายการที่สั่ง
-    Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'คัดลอกข้อมูลอาหารจากมื้อล่าสุดสำเร็จ - คลิก Addon เพื่อเพิ่มรายละเอียด', timer: 2500, showConfirmButton: false });
+      const orderData = confirmData.selectedPatients.map((p, idx) => ({
+        admission_list_id: parseInt(p.admissionListId) || 0,
+        an: p.an,
+        ward: selectedWard || '',
+        order_date: orderDate.format('YYYY-MM-DD'),
+        meal: getMealNumber(mealTime),
+        food_item_id: confirmData.meals[idx]?.foodItemId || 0,
+        request_by: String(userId),
+        addon: null,
+      }));
+
+      const response = await axios.post('/api/v1/nutrition/order-menu', orderData, { headers });
+
+      if (response.status === 200 || response.status === 201) {
+        setIsConfirmOpen(false);
+        setConfirmData(null);
+        setSelectedRowKeys([]);
+        setIsAddonMode(true);
+        Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: `บันทึก ${orderData.length} รายการเรียบร้อย สามารถระบุ Addon เพิ่มเติมได้`, timer: 2500, showConfirmButton: false });
+      }
+    } catch (error: any) {
+      if (error.response?.status === 422) {
+        Swal.fire({ icon: 'error', title: 'ข้อมูลไม่ถูกต้อง', text: error.response?.data?.message || 'กรุณาตรวจสอบข้อมูลอีกครั้ง', timer: 3000, showConfirmButton: false });
+      } else if (error.response?.status === 401) {
+        Swal.fire({ icon: 'error', title: 'ไม่มีสิทธิ์', text: 'ต้องเข้าสู่ระบบใหม่', timer: 2000, showConfirmButton: false });
+      } else {
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.message, timer: 3000, showConfirmButton: false });
+      }
+    }
   };
 
 
@@ -349,8 +365,8 @@ export default function OrderFoodPage() {
             order_date: orderDate.format('YYYY-MM-DD'),
             meal: getMealNumber(mealTime),
             food_item_id: p.foodItemId || 0,
-            request_by: userId,
-            addon: p.addonText || ''
+            request_by: String(userId),
+            addon: p.addonText || null
           }));
       } else {
         // สั่งจากการเลือก checkbox
@@ -363,8 +379,8 @@ export default function OrderFoodPage() {
             order_date: orderDate.format('YYYY-MM-DD'),
             meal: getMealNumber(mealTime),
             food_item_id: p.foodItemId || 0,
-            request_by: userId,
-            addon: p.addonText || ''
+            request_by: String(userId),
+            addon: p.addonText || null
           }));
       }
 
@@ -389,13 +405,13 @@ export default function OrderFoodPage() {
       console.log('Sending order data:', JSON.stringify(orderData, null, 2));
       console.log('Headers:', headers);
 
-      const response = await axios.post('/api/v1/order-menu', orderData, { headers });
+      const response = await axios.post('/api/v1/nutrition/order-menu', orderData, { headers });
 
       if (response.status === 200 || response.status === 201) {
         const mealLabel = mealTime === 'breakfast' ? 'มื้อเช้า' : mealTime === 'lunch' ? 'มื้อกลางวัน' : 'มื้อเย็น';
         Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: `บันทึกข้อมูล ${mealLabel} วันที่ ${orderDate.format('DD/MM/YYYY')} จำนวน ${orderData.length} รายการ เรียบร้อยแล้ว`, timer: 2500, showConfirmButton: false });
         setSelectedRowKeys([]);
-        fetchFoodOrders();
+        setIsAddonMode(true);
       }
     } catch (error: any) {
       console.error('Error saving order:', error);
@@ -530,7 +546,7 @@ export default function OrderFoodPage() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' };
-      const response = await axios.post('/api/v1/food-orders-addon-by-ward', {
+      const response = await axios.post('/api/v1/nutrition/food-orders-addon-by-ward', {
         ward: selectedWard,
         date: orderDate.format('YYYY-MM-DD'),
         meal: getMealNumber(mealTime),
@@ -615,7 +631,7 @@ export default function OrderFoodPage() {
         food_order_id: p.food_order_id,
         addon: addonEdits[p.food_order_id] ?? null,
       }));
-      const response = await axios.post('/api/v1/update-food-orders-addon', {
+      const response = await axios.patch('/api/v1/nutrition/update-food-orders-addon', {
         ward: selectedWard,
         date: orderDate.format('YYYY-MM-DD'),
         meal: getMealNumber(mealTime),
@@ -751,6 +767,7 @@ export default function OrderFoodPage() {
                   const next = !isAddonMode;
                   setIsAddonMode(next);
                   if (next) fetchAddonData();
+                  else fetchFoodOrders();
                 }}
                 className={isAddonMode ? "bg-amber-500 hover:bg-amber-400 border-none shadow-md shadow-amber-500/30" : "text-amber-600 border-amber-500 hover:bg-amber-50"}
               >

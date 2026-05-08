@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, Select, DatePicker, Tag, Statistic, Spin } from 'antd';
+import { Select, DatePicker, Tag, Spin } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import axios from 'axios';
@@ -188,7 +188,7 @@ export default function DashboardPage() {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
         if (!token) return;
         const headers = { Authorization: `Bearer ${token}` };
-        const response = await axios.get('/api/v1/wardsV1', { headers });
+        const response = await axios.get('/api/v1/system/wardsV1', { headers });
         const wardList = Array.isArray(response.data) ? response.data : response.data.data || [];
         setWards(wardList);
         if (wardList.length > 0) {
@@ -797,336 +797,228 @@ export default function DashboardPage() {
   const isOverStandard = summary ? (summary.avgCensus / summary.nurseCount) > summary.standardRatio : false;
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans pb-10">
+    <div className="bg-slate-100 min-h-screen font-sans">
       <Navbar />
 
-      <div className="p-6 max-w-full mx-auto">
-        {/* Header */}
-        <Card className="shadow-xl rounded-2xl border-none mb-6">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-[#006b5f] p-2.5 rounded-xl shadow-md">
-                <PiChartBarBold className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-[#006b5f] m-0">Dashboard ภาระงานพยาบาล</h2>
-                <p className="text-sm text-gray-500 m-0">สถิติจำนวนผู้ป่วยและภาระงานตามมาตรฐานการพยาบาล</p>
-              </div>
+      {/* ── Hero Header ── */}
+      <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00897b] px-4 sm:px-6 py-5 shadow-lg">
+        <div className="max-w-full mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          {/* Title */}
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-sm">
+              <PiChartBarBold className="w-6 h-6 text-white" />
             </div>
-
-            {/* Filters */}
-            <div className="flex flex-wrap items-end gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">หอผู้ป่วย</label>
-                <Select
-                  size="middle"
-                  value={selectedWard}
-                  onChange={setSelectedWard}
-                  className="w-52"
-                  placeholder="เลือกหอผู้ป่วย"
-                  options={wards.map(w => ({ label: w.ward_name, value: w.his_code }))}
-                  showSearch
-                  optionFilterProp="label"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">ช่วงเวลา</label>
-                <RangePicker
-                  size="middle"
-                  picker="date"
-                  value={dateRange}
-                  onChange={(dates) => {
-                    if (dates && dates[0] && dates[1]) {
-                      setDateRange([dates[0], dates[1]]);
-                    }
-                  }}
-                  format="DD/MM/YYYY"
-                  allowClear={false}
-                  presets={[
-                    { label: 'เดือนนี้', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
-                    { label: 'เดือนที่แล้ว', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
-                    { label: '3 เดือนล่าสุด', value: [dayjs().subtract(2, 'month').startOf('month'), dayjs().endOf('month')] },
-                  ]}
-                />
-              </div>
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-white m-0 leading-tight">Dashboard ภาระงานพยาบาล</h2>
+              <p className="text-teal-200 text-xs m-0 hidden sm:block">สถิติจำนวนผู้ป่วยและภาระงานตามมาตรฐานการพยาบาล</p>
             </div>
           </div>
-        </Card>
 
+          {/* Filters */}
+          <div className="flex flex-wrap items-end gap-2 sm:gap-3 w-full sm:w-auto">
+            <div className="flex-1 sm:flex-none">
+              <label className="block text-xs font-semibold text-teal-200 mb-1">หอผู้ป่วย</label>
+              <Select
+                size="middle"
+                value={selectedWard}
+                onChange={setSelectedWard}
+                className="w-full sm:w-48"
+                placeholder="เลือกหอผู้ป่วย"
+                options={wards.map(w => ({ label: w.ward_name, value: w.his_code }))}
+                showSearch
+                optionFilterProp="label"
+              />
+            </div>
+            <div className="flex-1 sm:flex-none">
+              <label className="block text-xs font-semibold text-teal-200 mb-1">ช่วงเวลา</label>
+              <RangePicker
+                size="middle"
+                picker="date"
+                value={dateRange}
+                onChange={(dates) => {
+                  if (dates && dates[0] && dates[1]) setDateRange([dates[0], dates[1]]);
+                }}
+                format="DD/MM/YY"
+                allowClear={false}
+                className="w-full sm:w-auto"
+                presets={[
+                  { label: 'เดือนนี้', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+                  { label: 'เดือนที่แล้ว', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+                  { label: '3 เดือนล่าสุด', value: [dayjs().subtract(2, 'month').startOf('month'), dayjs().endOf('month')] },
+                ]}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-3 sm:px-6 py-5 max-w-full mx-auto">
         {loading ? (
-          <div className="flex justify-center items-center py-20">
+          <div className="flex justify-center items-center py-24">
             <Spin size="large" />
           </div>
         ) : summary && (
-          <div className="flex flex-col gap-8 mt-8">
-            {/* Stat Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
-              <StatCard
-                icon={<PiUsersThreeBold />}
-                label="ค่าเฉลี่ย Census/วัน"
-                value={summary.avgCensus}
-                suffix="คน"
-                color="#006b5f"
-              />
-              <StatCard
-                icon={<PiUserPlusBold />}
-                label="รับใหม่ (ทั้งหมด)"
-                value={summary.totalNewAdmit}
-                suffix="คน"
-                color="#22d3ee"
-              />
-              <StatCard
-                icon={<PiArrowsLeftRightBold />}
-                label="รับย้าย (ทั้งหมด)"
-                value={summary.totalTransferIn}
-                suffix="คน"
-                color="#a78bfa"
-              />
-              <StatCard
-                icon={<PiSignOutBold />}
-                label="จำหน่าย (ทั้งหมด)"
-                value={summary.totalDischarge}
-                suffix="คน"
-                color="#f97316"
-              />
-              <StatCard
-                icon={<PiUserBold />}
-                label="จำนวนพยาบาล"
-                value={summary.nurseCount}
-                suffix="คน"
-                color="#006b5f"
-              />
+          <div className="flex flex-col gap-5">
+
+            {/* ── Stat Cards ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <StatCard icon={<PiUsersThreeBold />} label="Census เฉลี่ย/วัน" value={summary.avgCensus} suffix="คน" color="#006b5f" />
+              <StatCard icon={<PiUserPlusBold />} label="รับใหม่รวม" value={summary.totalNewAdmit} suffix="คน" color="#0891b2" />
+              <StatCard icon={<PiArrowsLeftRightBold />} label="รับย้ายรวม" value={summary.totalTransferIn} suffix="คน" color="#7c3aed" />
+              <StatCard icon={<PiSignOutBold />} label="จำหน่ายรวม" value={summary.totalDischarge} suffix="คน" color="#ea580c" />
+              <StatCard icon={<PiUserBold />} label="จำนวนพยาบาล" value={summary.nurseCount} suffix="คน" color="#0f766e" />
               <StatCard
                 icon={<PiScalesBold />}
                 label="ภาระงาน/คน"
-                value={workloadPerNurse}
-                suffix={`(มฐ. 1:${summary.standardRatio})`}
-                color={isOverStandard ? '#ef4444' : '#006b5f'}
+                value={`1:${workloadPerNurse}`}
+                suffix={`มฐ. 1:${summary.standardRatio}`}
+                color={isOverStandard ? '#dc2626' : '#006b5f'}
                 highlight={isOverStandard}
               />
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Gauge Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none"
-                styles={{ body: { padding: '8px 12px 12px' } }}
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2 text-sm">
-                    <PiScalesBold /> สัดส่วนภาระงาน : มาตรฐาน
-                  </span>
-                }
-              >
-                <div ref={gaugeChartRef} style={{ width: '100%', height: 220 }} />
-                <div className="text-center -mt-2">
-                  <Tag
-                    color={isOverStandard ? 'red' : 'green'}
-                    className="text-xs font-bold px-3 py-0.5 rounded-full"
-                  >
+            {/* ── Mini Charts Row ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <ChartCard icon={<PiScalesBold />} title="สัดส่วนภาระงาน : มาตรฐาน">
+                <div ref={gaugeChartRef} style={{ width: '100%', height: 200 }} />
+                <div className="text-center -mt-1 pb-1">
+                  <Tag color={isOverStandard ? 'red' : 'green'} className="font-bold rounded-full">
                     {isOverStandard ? 'เกินมาตรฐาน' : 'อยู่ในเกณฑ์'}
                   </Tag>
-                  <div className="text-[11px] text-gray-400 mt-1">
-                    มาตรฐาน 1:{summary.standardRatio} | {wardName}
+                  <p className="text-[11px] text-gray-400 mt-1 mb-0">มาตรฐาน 1:{summary.standardRatio} · {wardName}</p>
+                </div>
+              </ChartCard>
+
+              <ChartCard icon={<PiBedBold />} title="อัตราครองเตียง">
+                <div ref={bedChartRef} style={{ width: '100%', height: 220 }} />
+              </ChartCard>
+
+              <ChartCard icon={<PiChartPolarBold />} title="การกระจายภาระงาน">
+                <div ref={radarChartRef} style={{ width: '100%', height: 220 }} />
+              </ChartCard>
+            </div>
+
+            {/* ── Main + Severity Charts ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard icon={<PiChartBarBold />} title="สถิติรายวัน — รับใหม่ / รับย้าย / ดูแลต่อเนื่อง / จำหน่าย">
+                <div ref={mainChartRef} style={{ width: '100%', height: 340 }} />
+              </ChartCard>
+              <ChartCard icon={<PiWarningBold />} title="สถิติระดับความรุนแรงผู้ป่วย">
+                <div ref={severityChartRef} style={{ width: '100%', height: 340 }} />
+              </ChartCard>
+            </div>
+
+            {/* ── Nurse Workload + Pie ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Workload */}
+              <div className="lg:col-span-2 bg-white rounded-2xl shadow-md overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white">
+                  <PiClockBold className="text-[#006b5f] text-lg shrink-0" />
+                  <span className="font-bold text-[#006b5f] text-sm">สรุปชั่วโมงการทำงานรายบุคคล — {wardName}</span>
+                </div>
+                <div className="p-4">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-gray-400">
+                    <span>มาตรฐาน <b className="text-gray-600">176 ชม./เดือน</b></span>
+                    <span>เวรเช้า <b className="text-gray-600">08-16</b></span>
+                    <span>เวรบ่าย <b className="text-gray-600">16-24</b></span>
+                    <span>เวรดึก <b className="text-gray-600">00-08</b></span>
+                  </div>
+                  <div ref={nurseChartRef} style={{ width: '100%', height: Math.max(260, nurseWorkload.length * 40 + 80) }} />
+                  <div className="overflow-x-auto mt-3">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead>
+                        <tr className="bg-[#006b5f] text-white text-xs">
+                          <th className="px-3 py-2 text-left rounded-tl-lg font-semibold">ชื่อ-สกุล</th>
+                          <th className="px-2 py-2 text-center font-semibold">ตำแหน่ง</th>
+                          <th className="px-2 py-2 text-center font-semibold">เช้า</th>
+                          <th className="px-2 py-2 text-center font-semibold">บ่าย</th>
+                          <th className="px-2 py-2 text-center font-semibold">ดึก</th>
+                          <th className="px-2 py-2 text-center font-semibold">OT</th>
+                          <th className="px-2 py-2 text-center font-semibold">รวม (ชม.)</th>
+                          <th className="px-2 py-2 text-center font-semibold">ผู้ป่วย</th>
+                          <th className="px-2 py-2 text-center rounded-tr-lg font-semibold">สถานะ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {nurseWorkload.map((n, idx) => {
+                          const over = n.totalHours > 176;
+                          return (
+                            <tr key={idx} className={`border-b border-gray-100 text-xs transition-colors ${over ? 'hover:bg-red-50' : 'hover:bg-teal-50/40'}`}>
+                              <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{n.name}</td>
+                              <td className="px-2 py-2 text-center">
+                                <Tag color={n.position === 'RN' ? 'blue' : 'green'} className="m-0 text-xs">{n.position}</Tag>
+                              </td>
+                              <td className="px-2 py-2 text-center text-cyan-700 font-medium">{n.morningShifts}</td>
+                              <td className="px-2 py-2 text-center text-violet-700 font-medium">{n.afternoonShifts}</td>
+                              <td className="px-2 py-2 text-center text-slate-600 font-medium">{n.nightShifts}</td>
+                              <td className="px-2 py-2 text-center">
+                                {n.otHours > 0 ? <span className="text-orange-500 font-bold">{n.otHours}</span> : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className={`px-2 py-2 text-center font-bold ${over ? 'text-red-500' : 'text-[#006b5f]'}`}>{n.totalHours}</td>
+                              <td className="px-2 py-2 text-center text-gray-600">{n.patientLoad}</td>
+                              <td className="px-2 py-2 text-center">
+                                <Tag color={over ? 'red' : 'green'} className="m-0 font-semibold text-xs">{over ? 'เกิน' : 'ปกติ'}</Tag>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </Card>
+              </div>
 
-              {/* Bed Occupancy Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none"
-                styles={{ body: { padding: '8px 12px 12px' } }}
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2 text-sm">
-                    <PiBedBold /> อัตราครองเตียง
-                  </span>
-                }
-              >
-                <div ref={bedChartRef} style={{ width: '100%', height: 220 }} />
-              </Card>
-
-              {/* Radar Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none"
-                styles={{ body: { padding: '8px 12px 12px' } }}
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2 text-sm">
-                    <PiChartPolarBold /> การกระจายภาระงาน
-                  </span>
-                }
-              >
-                <div ref={radarChartRef} style={{ width: '100%', height: 220 }} />
-              </Card>
+              {/* Pie */}
+              <ChartCard icon={<PiHeartbeatBold />} title="สัดส่วนประเภทผู้ป่วย">
+                <div ref={pieChartRef} style={{ width: '100%', height: 340 }} />
+              </ChartCard>
             </div>
 
-            {/* Charts Row 2 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Main Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none"
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2">
-                    <PiChartBarBold /> สถิติรายวัน — รับใหม่ / รับย้าย / ดูแลต่อเนื่อง / จำหน่าย
-                  </span>
-                }
-              >
-                <div ref={mainChartRef} style={{ width: '100%', height: 380 }} />
-              </Card>
-
-              {/* Severity Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none"
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2">
-                    <PiWarningBold /> สถิติระดับความรุนแรงผู้ป่วย
-                  </span>
-                }
-              >
-                <div ref={severityChartRef} style={{ width: '100%', height: 380 }} />
-              </Card>
-            </div>
-
-            {/* Charts Row 3 */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Nurse Workload Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none lg:col-span-2"
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2">
-                    <PiClockBold /> สรุปชั่วโมงการทำงานรายบุคคล — {wardName}
-                  </span>
-                }
-              >
-                <div className="flex flex-wrap gap-4 mb-3 text-xs text-gray-500">
-                  <span>มาตรฐาน: <b className="text-gray-700">176 ชม./เดือน</b> (22 วัน x 8 ชม.)</span>
-                  <span>|</span>
-                  <span>เวรเช้า <b>08:00-16:00</b></span>
-                  <span>เวรบ่าย <b>16:00-24:00</b></span>
-                  <span>เวรดึก <b>00:00-08:00</b></span>
-                </div>
-                <div
-                  ref={nurseChartRef}
-                  style={{ width: '100%', height: Math.max(300, nurseWorkload.length * 45 + 80) }}
-                />
-
-                {/* Summary Table Below Chart */}
-                <div className="overflow-x-auto mt-4">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-100 text-gray-600">
-                        <th className="p-2.5 text-left rounded-tl-lg">ชื่อ-สกุล</th>
-                        <th className="p-2.5 text-center">ตำแหน่ง</th>
-                        <th className="p-2.5 text-center">เวรเช้า</th>
-                        <th className="p-2.5 text-center">เวรบ่าย</th>
-                        <th className="p-2.5 text-center">เวรดึก</th>
-                        <th className="p-2.5 text-center">OT (ชม.)</th>
-                        <th className="p-2.5 text-center">รวม (ชม.)</th>
-                        <th className="p-2.5 text-center">ผู้ป่วยเฉลี่ย</th>
-                        <th className="p-2.5 text-center rounded-tr-lg">สถานะ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {nurseWorkload.map((n, idx) => {
-                        const over = n.totalHours > 176;
-                        return (
-                          <tr key={idx} className="border-b border-gray-100 hover:bg-teal-50/40">
-                            <td className="p-2.5 font-semibold text-gray-700">{n.name}</td>
-                            <td className="p-2.5 text-center">
-                              <Tag color={n.position === 'RN' ? 'blue' : 'green'} className="m-0">{n.position}</Tag>
-                            </td>
-                            <td className="p-2.5 text-center">{n.morningShifts}</td>
-                            <td className="p-2.5 text-center">{n.afternoonShifts}</td>
-                            <td className="p-2.5 text-center">{n.nightShifts}</td>
-                            <td className="p-2.5 text-center">
-                              {n.otHours > 0 ? <span className="text-orange-500 font-semibold">{n.otHours}</span> : <span className="text-gray-300">-</span>}
-                            </td>
-                            <td className={`p-2.5 text-center font-bold ${over ? 'text-red-500' : 'text-[#006b5f]'}`}>{n.totalHours}</td>
-                            <td className="p-2.5 text-center">{n.patientLoad} คน</td>
-                            <td className="p-2.5 text-center">
-                              <Tag color={over ? 'red' : 'green'} className="m-0 font-semibold">
-                                {over ? 'เกินเกณฑ์' : 'ปกติ'}
-                              </Tag>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              {/* Pie Chart */}
-              <Card
-                className="shadow-md rounded-2xl border-none"
-                styles={{ body: { padding: '8px 12px 12px' } }}
-                title={
-                  <span className="text-[#006b5f] font-bold flex items-center gap-2 text-sm">
-                    <PiHeartbeatBold /> สัดส่วนประเภทผู้ป่วย
-                  </span>
-                }
-              >
-                <div ref={pieChartRef} style={{ width: '100%', height: 350 }} />
-              </Card>
-            </div>
-
-            {/* Summary Table */}
-            <Card className="shadow-md rounded-2xl border-none">
-              <h3 className="text-base font-bold text-[#006b5f] mb-4 flex items-center gap-2">
-                <PiHeartbeatBold /> สรุปภาระงานเทียบมาตรฐาน
-              </h3>
+            {/* ── Summary Table ── */}
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3.5 bg-linear-to-r from-[#006b5f] to-[#00897b]">
+                <PiHeartbeatBold className="text-white text-lg" />
+                <span className="font-bold text-white text-sm">สรุปภาระงานเทียบมาตรฐาน</span>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-[#006b5f] text-white">
-                      <th className="p-3 text-left rounded-tl-lg">รายการ</th>
-                      <th className="p-3 text-center">จำนวน</th>
-                      <th className="p-3 text-center">ค่าเฉลี่ย/วัน</th>
-                      <th className="p-3 text-center rounded-tr-lg">หมายเหตุ</th>
+                    <tr className="bg-slate-50 text-gray-500 text-xs uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left font-semibold">รายการ</th>
+                      <th className="px-4 py-3 text-center font-semibold">จำนวน</th>
+                      <th className="px-4 py-3 text-center font-semibold">เฉลี่ย/วัน</th>
+                      <th className="px-4 py-3 text-center font-semibold">หมายเหตุ</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-gray-100 hover:bg-teal-50/50">
-                      <td className="p-3 font-semibold text-gray-700">รับใหม่</td>
-                      <td className="p-3 text-center">{summary.totalNewAdmit}</td>
-                      <td className="p-3 text-center">{(summary.totalNewAdmit / dailyData.length).toFixed(1)}</td>
-                      <td className="p-3 text-center"><Tag color="cyan">New Admission</Tag></td>
+                    {[
+                      { label: 'รับใหม่', total: summary.totalNewAdmit, tag: <Tag color="cyan" className="text-xs">New Admission</Tag> },
+                      { label: 'รับย้าย', total: summary.totalTransferIn, tag: <Tag color="purple" className="text-xs">Transfer In</Tag> },
+                      { label: 'ดูแลต่อเนื่อง (Patient Day)', total: summary.totalContinued, avg: summary.avgCensus, tag: <Tag color="green" className="text-xs">Continued Care</Tag>, bold: true },
+                      { label: 'จำหน่าย', total: summary.totalDischarge, tag: <Tag color="orange" className="text-xs">Discharge</Tag> },
+                    ].map((row, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-teal-50/30 transition-colors">
+                        <td className={`px-4 py-3 ${row.bold ? 'font-bold text-[#006b5f]' : 'font-medium text-gray-700'}`}>{row.label}</td>
+                        <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[#006b5f]' : ''}`}>{row.total}</td>
+                        <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[#006b5f]' : ''}`}>
+                          {row.avg ?? (row.total / dailyData.length).toFixed(1)}
+                        </td>
+                        <td className="px-4 py-3 text-center">{row.tag}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-b border-gray-100 hover:bg-teal-50/30 transition-colors">
+                      <td className="px-4 py-3 font-medium text-gray-700">จำนวนพยาบาล</td>
+                      <td className="px-4 py-3 text-center" colSpan={2}>{summary.nurseCount} คน</td>
+                      <td className="px-4 py-3 text-center"><Tag color="blue" className="text-xs">Nurse Staff</Tag></td>
                     </tr>
-                    <tr className="border-b border-gray-100 hover:bg-teal-50/50">
-                      <td className="p-3 font-semibold text-gray-700">รับย้าย</td>
-                      <td className="p-3 text-center">{summary.totalTransferIn}</td>
-                      <td className="p-3 text-center">{(summary.totalTransferIn / dailyData.length).toFixed(1)}</td>
-                      <td className="p-3 text-center"><Tag color="purple">Transfer In</Tag></td>
-                    </tr>
-                    <tr className="border-b border-gray-100 hover:bg-teal-50/50">
-                      <td className="p-3 font-semibold text-gray-700">ดูแลต่อเนื่อง (Patient Day)</td>
-                      <td className="p-3 text-center font-bold text-[#006b5f]">{summary.totalContinued}</td>
-                      <td className="p-3 text-center font-bold text-[#006b5f]">{summary.avgCensus}</td>
-                      <td className="p-3 text-center"><Tag color="green">Continued Care</Tag></td>
-                    </tr>
-                    <tr className="border-b border-gray-100 hover:bg-teal-50/50">
-                      <td className="p-3 font-semibold text-gray-700">จำหน่าย</td>
-                      <td className="p-3 text-center">{summary.totalDischarge}</td>
-                      <td className="p-3 text-center">{(summary.totalDischarge / dailyData.length).toFixed(1)}</td>
-                      <td className="p-3 text-center"><Tag color="orange">Discharge</Tag></td>
-                    </tr>
-                    <tr className="border-b border-gray-100 hover:bg-teal-50/50">
-                      <td className="p-3 font-semibold text-gray-700">จำนวนพยาบาล</td>
-                      <td className="p-3 text-center" colSpan={2}>{summary.nurseCount} คน</td>
-                      <td className="p-3 text-center"><Tag color="blue">Nurse Staff</Tag></td>
-                    </tr>
-                    <tr className="bg-gray-50">
-                      <td className="p-3 font-bold text-gray-800 rounded-bl-lg">ภาระงาน / พยาบาล 1 คน</td>
-                      <td className="p-3 text-center font-bold text-lg" colSpan={2}>
-                        <span className={isOverStandard ? 'text-red-500' : 'text-[#006b5f]'}>
-                          1 : {workloadPerNurse}
-                        </span>
-                        <span className="text-gray-400 text-sm ml-2">(มาตรฐาน 1:{summary.standardRatio})</span>
+                    <tr className="bg-teal-50/50">
+                      <td className="px-4 py-3.5 font-bold text-gray-800">ภาระงาน / พยาบาล 1 คน</td>
+                      <td className="px-4 py-3.5 text-center font-bold text-lg" colSpan={2}>
+                        <span className={isOverStandard ? 'text-red-500' : 'text-[#006b5f]'}>1 : {workloadPerNurse}</span>
+                        <span className="text-gray-400 text-xs ml-2">(มาตรฐาน 1:{summary.standardRatio})</span>
                       </td>
-                      <td className="p-3 text-center rounded-br-lg">
-                        <Tag
-                          color={isOverStandard ? 'red' : 'green'}
-                          className="font-bold"
-                        >
+                      <td className="px-4 py-3.5 text-center">
+                        <Tag color={isOverStandard ? 'red' : 'green'} className="font-bold">
                           {isOverStandard ? 'เกินมาตรฐาน' : 'ผ่านเกณฑ์'}
                         </Tag>
                       </td>
@@ -1134,7 +1026,8 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
-            </Card>
+            </div>
+
           </div>
         )}
       </div>
@@ -1159,26 +1052,37 @@ function StatCard({
   highlight?: boolean;
 }) {
   return (
-    <Card
-      className={`shadow-md rounded-2xl border-none transition-all hover:shadow-lg hover:-translate-y-0.5 ${highlight ? 'ring-2 ring-red-400 ring-offset-2' : ''}`}
-      styles={{ body: { padding: '16px' } }}
+    <div
+      className={`relative overflow-hidden rounded-2xl p-4 text-white shadow-md transition-all hover:shadow-xl hover:-translate-y-0.5 ${highlight ? 'ring-2 ring-red-400 ring-offset-2' : ''}`}
+      style={{ background: `linear-gradient(135deg, ${color}ee, ${color}99)` }}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className="p-2 rounded-lg text-white text-xl shrink-0"
-          style={{ backgroundColor: color }}
-        >
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <div className="text-xs text-gray-500 truncate">{label}</div>
-          <Statistic
-            value={value}
-            suffix={<span className="text-xs text-gray-400">{suffix}</span>}
-            styles={{ content: { fontSize: 22, fontWeight: 700, color, lineHeight: 1.2 } }}
-          />
-        </div>
+      <div className="absolute -right-3 -bottom-3 text-7xl opacity-15">{icon}</div>
+      <div className="relative">
+        <p className="text-white/75 text-[11px] font-medium mb-1 leading-tight">{label}</p>
+        <p className="text-2xl sm:text-3xl font-bold leading-none">{value}</p>
+        {suffix && <p className="text-white/60 text-[11px] mt-1">{suffix}</p>}
       </div>
-    </Card>
+    </div>
+  );
+}
+
+// --- Chart Card Component ---
+function ChartCard({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white">
+        <span className="text-[#006b5f] text-base shrink-0">{icon}</span>
+        <span className="font-bold text-[#006b5f] text-sm leading-tight">{title}</span>
+      </div>
+      <div className="p-3">{children}</div>
+    </div>
   );
 }

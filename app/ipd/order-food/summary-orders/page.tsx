@@ -64,8 +64,8 @@ export default function SummaryOrderPage() {
       const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' };
 
       const [addonRes, wardRes] = await Promise.all([
-        axios.post('/api/v1/food-orders-addon-by-ward', { ward, date, meal: MEAL_NUMBER[meal] }, { headers }),
-        axios.get('/api/v1/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
+        axios.post('/api/v1/nutrition/food-orders-addon-by-ward', { ward, date, meal: MEAL_NUMBER[meal] }, { headers }),
+        axios.get('/api/v1/system/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
       ]);
 
       if (addonRes.data?.success) setData(addonRes.data.data || []);
