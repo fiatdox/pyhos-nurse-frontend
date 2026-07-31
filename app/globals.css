@@ -1,4 +1,24 @@
+/*
+  ลำดับ cascade layer — layer ที่ประกาศทีหลังมีความสำคัญกว่า
+  antd ต้องอยู่ "ระหว่าง" base กับ utilities:
+    - หลัง base  : สไตล์ของ antd จึงชนะ preflight ของ Tailwind ที่ล้าง border/padding ของ input
+    - ก่อน utilities : className ที่เขียนกำกับที่ element (เช่น text-white) จึงชนะ `a { color }` ระดับ global ของ antd
+  สไตล์ของ antd ถูกห่อเข้า layer นี้โดย StyleProvider ใน app/AntdStyleProvider.tsx
+*/
+@layer theme, base, antd, components, utilities;
+
 @import "tailwindcss";
+
+/*
+  ตัวยึด layer — ตัวย่อ CSS จะตัดคำสั่ง @layer ด้านบนทิ้งถ้าไม่มีใครใช้ layer นั้นเลย
+  บล็อกนี้ทำให้ layer `antd` ถูกใช้งานจริง คำสั่งกำหนดลำดับด้านบนจึงอยู่รอด
+  (ลำดับยึดตามการประกาศครั้งแรกด้านบน ไม่ใช่ตำแหน่งของบล็อกนี้)
+*/
+@layer antd {
+  :root {
+    --antd-layer-anchor: 1;
+  }
+}
 
 :root {
   --background: #ffffff;

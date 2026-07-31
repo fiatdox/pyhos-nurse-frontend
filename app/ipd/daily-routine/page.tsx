@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Select, DatePicker, Table, Radio, InputNumber, Button, Tooltip, Modal, Tag, App, Skeleton } from 'antd';
+import { Card, Select, DatePicker, Table, Radio, InputNumber, Button, Tooltip, Modal, Tag, App, Skeleton, Spin } from 'antd';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -113,6 +113,30 @@ const prevShiftConfig: Record<string, { shiftKey: string; label: string; prevDay
   afternoon: { shiftKey: 'morning',   label: 'เช้า',  prevDay: false },
 };
 
+// ฟิลด์ระดับการดูแลใน response ของ patient-shift-daily-records ตามคีย์เวร
+const shiftKeyToRecordField: Record<string, 'night_care_level' | 'morning_care_level' | 'evening_care_level'> = {
+  night:     'night_care_level',
+  morning:   'morning_care_level',
+  afternoon: 'evening_care_level',
+};
+
+interface ShiftDailyRecord {
+  admission_list_id: number;
+  an: string;
+  patient_name: string;
+  night_care_level: number | null;
+  morning_care_level: number | null;
+  evening_care_level: number | null;
+}
+
+interface PrevShiftRow {
+  admission_list_id: number | string;
+  an: string;
+  name: string;
+  bed: string;
+  radioValue: string;
+}
+
 function DailyRoutineContent() {
   const { notification } = App.useApp();
   const [selectedWard, setSelectedWard] = useState<string>();
@@ -150,6 +174,8 @@ function DailyRoutineContent() {
   // Modal state
   const [modalTargetShift, setModalTargetShift] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalPatients, setModalPatients] = useState<PrevShiftRow[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // shiftKey → shift_type_id
   const shiftKeyToId: Record<string, number> = { night: 1, morning: 2, afternoon: 3 };
@@ -230,6 +256,8 @@ function DailyRoutineContent() {
   const openPrevShiftModal = (targetShiftKey: string) => {
     setModalTargetShift(targetShiftKey);
     setModalOpen(true);
+    setModalPatients([]);
+    fetchPrevShiftPreview(targetShiftKey);
   };
 
   const handleModalConfirm = async () => {
@@ -297,12 +325,51 @@ function DailyRoutineContent() {
     return { date, label: cfg.label };
   };
 
-  const getPatientsWithData = (targetShift: string): (PatientInfo & { radioValue: string })[] => {
-    const { shiftKey: srcKey } = prevShiftConfig[targetShift] ?? {};
-    if (!srcKey) return [];
-    return patients
-      .filter(p => radioSelections[`${p.admission_list_id}_${srcKey}`])
-      .map(p => ({ ...p, radioValue: radioSelections[`${p.admission_list_id}_${srcKey}`] }));
+  /**
+   * โหลดข้อมูลเวรต้นทางมาแสดงเป็นตัวอย่างในหน้าต่างยืนยัน
+   * ต้องยิง API ตามวันที่ต้นทางจริง เพราะเวรดึกใช้ข้อมูลของเวรบ่ายเมื่อวาน
+   * ซึ่งไม่ได้อยู่ใน radioSelections (เก็บเฉพาะข้อมูลของวันที่เลือกอยู่)
+   */
+  const fetchPrevShiftPreview = async (targetShift: string) => {
+    const cfg = prevShiftConfig[targetShift];
+    if (!cfg || !selectedWard) {
+      setModalPatients([]);
+      return;
+    }
+
+    const sourceDate = (cfg.prevDay ? selectedDate.subtract(1, 'day') : selectedDate).format('YYYY-MM-DD');
+    setModalLoading(true);
+    try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(
+        '/api/v1/patients/patient-shift-daily-records',
+        { ward: selectedWard, date: sourceDate },
+        { headers }
+      );
+      const records: ShiftDailyRecord[] = Array.isArray(res.data) ? res.data : res.data.data || [];
+      const field = shiftKeyToRecordField[cfg.shiftKey];
+
+      setModalPatients(
+        records
+          .filter(r => r[field])
+          .map(r => {
+            const known = patients.find(p => String(p.admission_list_id) === String(r.admission_list_id));
+            return {
+              admission_list_id: r.admission_list_id,
+              an: known?.an ?? r.an,
+              name: known?.name ?? r.patient_name,
+              bed: known?.bed ?? '-',
+              radioValue: String(r[field]),
+            };
+          })
+      );
+    } catch (e) {
+      console.error('Error fetching previous shift preview:', e);
+      setModalPatients([]);
+    } finally {
+      setModalLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -569,9 +636,8 @@ function DailyRoutineContent() {
 
   // Modal computed values
   const modalPrevInfo = modalTargetShift ? getPrevShiftDate(modalTargetShift) : null;
-  const modalPatients = modalTargetShift ? getPatientsWithData(modalTargetShift) : [];
 
-  const modalColumns: ColumnsType<PatientInfo & { radioValue: string }> = [
+  const modalColumns: ColumnsType<PrevShiftRow> = [
     {
       title: 'ลำดับ', key: 'index', align: 'center', width: 60,
       render: (_: unknown, __: unknown, i: number) => i + 1,
@@ -735,7 +801,11 @@ function DailyRoutineContent() {
               </span>{' '}
               ใช่หรือไม่?
             </p>
-            {modalPatients.length === 0 ? (
+            {modalLoading ? (
+              <div className="flex justify-center py-6">
+                <Spin />
+              </div>
+            ) : modalPatients.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-4">
                 ไม่มีข้อมูลผู้ป่วยที่บันทึกในเวรดังกล่าว
               </p>

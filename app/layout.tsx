@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Sarabun } from "next/font/google";
 import "./globals.css";
+import AntdStyleProvider from "./AntdStyleProvider";
 
 const sarabun = Sarabun({
   weight: ['300', '400', '500', '600', '700'],
@@ -25,7 +26,7 @@ export default function RootLayout({
       <body
         className={`${sarabun.variable} antialiased`}
       >
-        {children}
+        <AntdStyleProvider>{children}</AntdStyleProvider>
       </body>
     </html>
   );

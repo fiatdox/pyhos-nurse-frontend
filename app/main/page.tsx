@@ -1,128 +1,206 @@
 'use client';
 
-import 'regenerator-runtime/runtime';
-import React, { useEffect, useState } from 'react';
-import { message, Button, Card, Tag } from 'antd';
-import { AudioOutlined, AudioMutedOutlined, DeleteOutlined } from '@ant-design/icons';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import React from 'react';
+import Link from 'next/link';
+import { Card, Tag, Empty } from 'antd';
+import dayjs from 'dayjs';
+import 'dayjs/locale/th';
+import {
+  PiMegaphoneBold,
+  PiPushPinFill,
+  PiCalendarBlankBold,
+  PiUserPlusBold,
+  PiUsersThreeBold,
+  PiBowlFoodBold,
+  PiClipboardTextBold,
+  PiChartBarBold,
+  PiVirusBold,
+  PiArrowRightBold,
+} from 'react-icons/pi';
 import Navbar from '../components/Navbar';
-import ActivityChart from './ActivityChart';
+
+dayjs.locale('th');
+
+type AnnouncementCategory = 'ประกาศ' | 'อบรม' | 'กิจกรรม' | 'ระบบ';
+
+interface Announcement {
+  id: number;
+  title: string;
+  detail: string;
+  date: string;            // YYYY-MM-DD
+  category: AnnouncementCategory;
+  pinned?: boolean;
+}
+
+/**
+ * เนื้อหาประชาสัมพันธ์
+ * ยังไม่มีตารางข่าวในฐานข้อมูล จึงเก็บไว้ในไฟล์นี้ก่อน — แก้ไข/เพิ่มรายการได้ที่นี่โดยตรง
+ * โครงสร้างตรงกับที่ API จะคืนในอนาคต ถ้าย้ายไปเก็บใน DB เปลี่ยนแค่ที่มาของ announcements
+ */
+const announcements: Announcement[] = [
+  {
+    id: 1,
+    title: 'เปิดใช้งาน Dashboard ภาระงานพยาบาลแล้ววันนี้',
+    detail:
+      'ดูสถิติผู้ป่วยรายวัน อัตราครองเตียง ชั่วโมงการทำงานรายบุคคล และการเปลี่ยนระดับการดูแลข้ามเวร เลือกหอผู้ป่วยและช่วงเวลาที่ต้องการได้จากเมนู IPD → Dashboard',
+    date: '2026-07-31',
+    category: 'ระบบ',
+    pinned: true,
+  },
+  {
+    id: 2,
+    title: 'ขอความร่วมมือบันทึกระดับการดูแลให้ครบทั้ง 3 เวร',
+    detail:
+      'การบันทึกที่ครบถ้วนทั้งเวรดึก เช้า และบ่าย จะทำให้รายงาน FTE และ Dashboard คำนวณภาระงานได้ตรงกับความเป็นจริง กรุณาบันทึกก่อนสิ้นเวรทุกครั้ง',
+    date: '2026-07-28',
+    category: 'ประกาศ',
+    pinned: true,
+  },
+  {
+    id: 3,
+    title: 'อบรมการใช้งานระบบบันทึกทางการพยาบาล รุ่นที่ 2',
+    detail:
+      'สำหรับพยาบาลวิชาชีพและผู้ช่วยพยาบาลที่ยังไม่ผ่านการอบรมรุ่นที่ 1 ลงทะเบียนได้ที่หัวหน้าหอผู้ป่วยของท่าน',
+    date: '2026-07-20',
+    category: 'อบรม',
+  },
+  {
+    id: 4,
+    title: 'ปรับปรุงเมนูอาหารผู้ป่วยประจำเดือนสิงหาคม',
+    detail:
+      'ฝ่ายโภชนาการปรับรายการอาหารเฉพาะโรคใหม่ กรุณาตรวจสอบรายการก่อนสั่งอาหารให้ผู้ป่วยในเมนู IPD → สั่งอาหาร',
+    date: '2026-07-15',
+    category: 'ประกาศ',
+  },
+];
+
+const categoryColor: Record<AnnouncementCategory, string> = {
+  ประกาศ: 'green',
+  อบรม: 'blue',
+  กิจกรรม: 'purple',
+  ระบบ: 'orange',
+};
+
+const quickLinks = [
+  { href: '/ipd/register', label: 'รับผู้ป่วย / รับย้าย', icon: <PiUserPlusBold />, color: '#0891b2' },
+  { href: '/ipd/patients', label: 'ทะเบียนผู้ป่วย', icon: <PiUsersThreeBold />, color: '#006b5f' },
+  { href: '/ipd/daily-routine', label: 'รายงานประจำวัน', icon: <PiClipboardTextBold />, color: '#7c3aed' },
+  { href: '/ipd/order-food', label: 'สั่งอาหาร', icon: <PiBowlFoodBold />, color: '#ea580c' },
+  { href: '/ipd/dashboard', label: 'Dashboard', icon: <PiChartBarBold />, color: '#0f766e' },
+  { href: '/ic/ipd', label: 'IPD Infection Control', icon: <PiVirusBold />, color: '#dc2626' },
+];
 
 const Main = () => {
-  const [isClient, setIsClient] = useState(false);
-
-  const {
-    transcript,
-    listening,
-    resetTranscript,
-    browserSupportsSpeechRecognition
-  } = useSpeechRecognition();
-
-  // 1. จัดการเรื่อง Hydration และ Auth
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // 2. ถ้ายังโหลดหน้าเว็บ (SSR) ไม่เสร็จ ให้แสดง Loading เปล่าๆ ไปก่อน
-  if (!isClient) {
-    return <div className="bg-slate-50 min-h-screen"><Navbar /></div>;
-  }
-
-  // 3. เช็ค Support หลังจากที่มั่นใจว่าเป็น Client-side แล้ว
-  if (!browserSupportsSpeechRecognition) {
-    return (
-      <div className="bg-slate-50 min-h-screen">
-        <Navbar />
-        <div className="max-w-xl mx-auto mt-20 p-6 bg-white rounded-lg shadow text-center">
-          <Tag color="error" className="mb-4">Browser Not Supported</Tag>
-          <p className="text-slate-600">
-            ดูเหมือน Browser นี้จะไม่รองรับ Web Speech API <br />
-            <b>คำแนะนำ:</b> โปรดใช้ Google Chrome หรือ Microsoft Edge ในการทดสอบบน localhost ครับ
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const startListening = () => {
-    SpeechRecognition.startListening({ 
-      continuous: true, 
-      language: 'th-TH' 
-    });
-    message.success('กำลังฟังเสียงภาษาไทย...');
-  };
+  // ปักหมุดขึ้นก่อน แล้วเรียงจากใหม่ไปเก่า
+  const sorted = [...announcements].sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    return dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
+  });
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
-      
-      <div className="max-w-3xl mx-auto px-6 py-12">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800">Voice to Text</h1>
-          <p className="text-slate-500">ทดสอบระบบบันทึกเสียงบน Localhost</p>
-        </header>
 
-        <Card className="shadow-xl rounded-2xl border-none">
-          <div className="flex flex-col items-center py-6">
-            
-            {/* สถานะและปุ่มไมค์ */}
-            <div className="relative mb-6">
-              <Button 
-                type={listening ? "primary" : "default"}
-                danger={listening}
-                shape="circle"
-                onClick={listening ? SpeechRecognition.stopListening : startListening}
-                icon={listening ? <AudioOutlined /> : <AudioMutedOutlined />}
-                style={{ width: 100, height: 100, fontSize: 40 }}
-                className={`flex items-center justify-center shadow-lg transition-transform active:scale-95 ${listening ? 'animate-pulse' : ''}`}
-              />
-              {listening && (
-                <span className="absolute top-0 right-0 flex h-6 w-6">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-6 w-6 bg-red-500"></span>
-                </span>
-              )}
-            </div>
-
-            <div className="text-center mb-8">
-              <p className={`text-lg font-semibold ${listening ? 'text-blue-600' : 'text-slate-400'}`}>
-                {listening ? "ระบบกำลังตั้งใจฟัง..." : "กดปุ่มเพื่อเริ่มพูด"}
-              </p>
-            </div>
-
-            {/* พื้นที่แสดงข้อความ */}
-            <div className="w-full relative group">
-              <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl min-h-[200px] transition-all group-hover:border-blue-200">
-                <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
-                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Transcript</span>
-                   {transcript && (
-                     <Button 
-                        type="text" 
-                        size="small" 
-                        danger 
-                        icon={<DeleteOutlined />} 
-                        onClick={resetTranscript}
-                     >ล้างข้อความ</Button>
-                   )}
-                </div>
-                <p className="text-xl text-slate-700 leading-relaxed">
-                  {transcript || <span className="text-slate-300 italic">ผลลัพธ์จะแสดงที่นี่...</span>}
-                </p>
-              </div>
-            </div>
-
+      {/* ── Hero ── */}
+      <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00897b] px-4 sm:px-6 py-8 shadow-lg">
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
+          <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm shrink-0">
+            <PiMegaphoneBold className="w-7 h-7 text-white" />
           </div>
-        </Card>
-
-        <ActivityChart />
-
-        <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
-          <p className="text-sm text-blue-700">
-            <b>Tips สำหรับ Localhost:</b> <br />
-            1. ตรวจสอบว่าได้เสียบไมโครโฟนเรียบร้อยแล้ว <br />
-            2. หากกดเริ่มแล้วไม่มีอะไรเกิดขึ้น ให้เช็ค "รูปแม่กุญแจ" หน้า URL และกด <b>Allow Microphone</b>
-          </p>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white m-0 leading-tight">ข่าวประชาสัมพันธ์</h1>
+            <p className="text-teal-200 text-sm m-0 mt-1">
+              ข่าวสารและประกาศสำหรับบุคลากรทางการพยาบาล
+            </p>
+          </div>
         </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
+        {/* ── ทางลัดเมนูที่ใช้บ่อย ── */}
+        <section>
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">เมนูที่ใช้บ่อย</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {quickLinks.map(link => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="group bg-white rounded-2xl shadow-md p-4 flex flex-col items-center gap-2 text-center transition-all hover:shadow-xl hover:-translate-y-0.5"
+              >
+                <span
+                  className="text-2xl p-2.5 rounded-xl transition-colors"
+                  style={{ color: link.color, backgroundColor: `${link.color}15` }}
+                >
+                  {link.icon}
+                </span>
+                <span className="text-xs font-semibold text-gray-600 leading-tight group-hover:text-[#006b5f]">
+                  {link.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* ── รายการข่าว ── */}
+        <section>
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+            ประกาศล่าสุด
+          </h2>
+
+          {sorted.length === 0 ? (
+            <Card className="shadow-md rounded-2xl border-none">
+              <Empty description="ยังไม่มีข่าวประชาสัมพันธ์" />
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {sorted.map(item => (
+                <Card
+                  key={item.id}
+                  className={`shadow-md rounded-2xl border-none transition-all hover:shadow-lg ${
+                    item.pinned ? 'ring-1 ring-[#006b5f]/20' : ''
+                  }`}
+                  styles={{ body: { padding: '1rem 1.25rem' } }}
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    {item.pinned && (
+                      <span className="flex items-center gap-1 text-[#006b5f] text-xs font-bold">
+                        <PiPushPinFill /> ปักหมุด
+                      </span>
+                    )}
+                    <Tag color={categoryColor[item.category]} className="m-0 text-xs">
+                      {item.category}
+                    </Tag>
+                    <span className="flex items-center gap-1 text-gray-400 text-xs ml-auto">
+                      <PiCalendarBlankBold />
+                      {/* dayjs ในโปรเจกต์ยังไม่ได้ลง plugin buddhistEra จึงบวกปี พ.ศ. เอง */}
+                      {dayjs(item.date).format('D MMM')} {dayjs(item.date).year() + 543}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-gray-800 m-0 mb-1 leading-snug">{item.title}</h3>
+                  <p className="text-sm text-gray-500 m-0 leading-relaxed">{item.detail}</p>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── ลิงก์ไป Dashboard ── */}
+        <Link
+          href="/ipd/dashboard"
+          className="bg-linear-to-r from-teal-50 to-white border border-teal-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-md"
+        >
+          <span className="bg-[#006b5f] text-white p-3 rounded-xl text-xl shrink-0">
+            <PiChartBarBold />
+          </span>
+          <div className="flex-1">
+            <p className="font-bold text-[#006b5f] m-0 text-sm">ดูภาพรวมภาระงานของหอผู้ป่วย</p>
+            <p className="text-gray-500 text-xs m-0 mt-0.5">
+              สถิติผู้ป่วยรายวัน อัตราครองเตียง ชั่วโมงการทำงาน และระดับความรุนแรงแยกตามเวร
+            </p>
+          </div>
+          <PiArrowRightBold className="text-[#006b5f] text-lg shrink-0" />
+        </Link>
       </div>
     </div>
   );

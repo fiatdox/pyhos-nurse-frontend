@@ -42,15 +42,9 @@ interface InfectionPatient {
   mdr_labno: string | null;
 }
 
-interface Ward {
-  ward: string;
-  name: string;
-}
-
 const InfectionControlPage = () => {
   const [patients, setPatients] = useState<InfectionPatient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [wards, setWards] = useState<Ward[]>([]);
   const [selectedWard, setSelectedWard] = useState<string | undefined>();
   const router = useRouter();
 
@@ -68,10 +62,7 @@ const InfectionControlPage = () => {
 
         const headers = { Authorization: `Bearer ${token}` };
 
-        const [patientResponse, wardResponse] = await Promise.all([
-          axios.get('/api/v1/ic/ipd-patient-history-daily', { headers }),
-          axios.get('/api/v1/system/wardsV1', { headers }).catch(() => ({ data: { data: [] } }))
-        ]);
+        const patientResponse = await axios.get('/api/v1/ic/ipd-patient-history-daily', { headers });
 
         if (patientResponse.data.success && Array.isArray(patientResponse.data.data)) {
           setPatients(patientResponse.data.data);
@@ -79,9 +70,6 @@ const InfectionControlPage = () => {
           message.error('รูปแบบข้อมูลผู้ป่วยไม่ถูกต้อง หรือดึงข้อมูลล้มเหลว');
           setPatients([]);
         }
-
-        const wardList = Array.isArray(wardResponse.data) ? wardResponse.data : wardResponse.data.data || [];
-        setWards(wardList);
 
       } catch (error: any) {
         console.error("Error fetching infection data:", error);
@@ -99,11 +87,17 @@ const InfectionControlPage = () => {
     fetchData();
   }, []);
 
+  /**
+   * สร้างรายการหอผู้ป่วยจากข้อมูลที่โหลดมาเอง ไม่ดึงจาก wardsV1
+   * เพราะชื่อหอฝั่ง HIS กับฝั่ง PG สะกดไม่ตรงกัน (เช่น "หอผู้ป่วยหนัก 2(MICU2)" กับ "ผู้ป่วยหนัก 2")
+   * ใช้ชื่อจากตารางเดียวกับที่แสดงผล ตัวกรองจึงตรงเสมอ
+   */
+  const wardOptions = [...new Set(patients.map(p => p.wname).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, 'th')
+  );
+
   const filteredPatients = selectedWard
-    ? patients.filter(p => {
-        const selectedWardName = wards.find(w => w.ward === selectedWard)?.name;
-        return p.wname === selectedWardName;
-      })
+    ? patients.filter(p => p.wname === selectedWard)
     : patients;
 
   const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null, labNo: string | null) => {
@@ -190,7 +184,7 @@ const InfectionControlPage = () => {
                 style={{ width: 200 }}
                 value={selectedWard}
               >
-                {wards.map(ward => <Option key={ward.ward} value={ward.ward}>{ward.name}</Option>)}
+                {wardOptions.map(name => <Option key={name} value={name}>{name}</Option>)}
               </Select>
             </div>
           </div>

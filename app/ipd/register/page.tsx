@@ -309,7 +309,7 @@ export default function RegisterPage() {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      await axios.post('/api/v1/register-patient', payload, { headers });
+      await axios.post('/api/v1/patients/register', payload, { headers });
 
       onCloseDrawer();
       Swal.fire({

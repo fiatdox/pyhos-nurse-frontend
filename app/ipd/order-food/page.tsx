@@ -15,6 +15,7 @@ import {
   Timeline,
   Modal,
   Input,
+  Spin,
 } from 'antd';
 import Swal from 'sweetalert2';
 import type { ColumnsType } from 'antd/es/table';
@@ -46,6 +47,9 @@ interface PatientFood {
   breakfast: string | null;
   lunch: string | null;
   dinner: string | null;
+  breakfastAddon?: string | null; // addon ที่บันทึกไว้ของแต่ละมื้อในวันที่เลือก
+  lunchAddon?: string | null;
+  dinnerAddon?: string | null;
   addonText?: string; // เพิ่มฟิลด์สำหรับเก็บข้อความ Addon
 }
 
@@ -71,6 +75,42 @@ interface FoodOrderAddon {
   food_name: string;
 }
 
+interface FoodOrderHistory {
+  foodOrderId: number;
+  orderDate: string;   // YYYY-MM-DD
+  meal: number;        // 1 = เช้า, 2 = กลางวัน, 3 = เย็น
+  mealName: string | null;
+  foodName: string | null;
+  addon: string | null;
+  ward: string;
+}
+
+// ป้ายมื้ออาหารและสีประจำมื้อ — ยึดตาม meal id ไม่ใช้ meal.name จากฐานข้อมูลซึ่งสะกด "เข้า"
+const MEAL_LABEL: Record<number, { label: string; color: string }> = {
+  1: { label: 'มื้อเช้า', color: 'blue' },
+  2: { label: 'มื้อกลางวัน', color: 'orange' },
+  3: { label: 'มื้อเย็น', color: 'purple' },
+};
+
+const HISTORY_DAYS = 7;
+
+// ช่องประวัติรายมื้อ: ชื่อเมนูย่อ พร้อม addon ที่บันทึกไว้ของมื้อนั้น (ถ้ามี)
+const renderMealCell = (menu: string | null, addon: string | null | undefined, color: string) => {
+  if (!menu) return <span className="text-gray-300">-</span>;
+  return (
+    <div className="flex flex-col items-stretch gap-0.5">
+      <Tag color={color} className="w-full truncate m-0" title={menu}>
+        {menu.split(' ')[0]}
+      </Tag>
+      {addon && (
+        <span className="w-full text-left text-[11px] text-gray-500 italic leading-tight break-words" title={addon}>
+          {addon}
+        </span>
+      )}
+    </div>
+  );
+};
+
 interface FoodOrderRecord {
   admission_list_id: number;
   hn: string;
@@ -80,6 +120,9 @@ interface FoodOrderRecord {
   breakfast: string | null;
   lunch: string | null;
   dinner: string | null;
+  breakfast_addon: string | null;
+  lunch_addon: string | null;
+  dinner_addon: string | null;
 }
 
 export default function OrderFoodPage() {
@@ -101,6 +144,8 @@ export default function OrderFoodPage() {
   // History Drawer State
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<PatientFood | null>(null);
+  const [historyData, setHistoryData] = useState<FoodOrderHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Copy Last Meal Confirmation State
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -187,6 +232,9 @@ export default function OrderFoodPage() {
           breakfast: p.breakfast,
           lunch: p.lunch,
           dinner: p.dinner,
+          breakfastAddon: p.breakfast_addon ?? null,
+          lunchAddon: p.lunch_addon ?? null,
+          dinnerAddon: p.dinner_addon ?? null,
         }));
         setPatients(mapped);
       } else {
@@ -427,14 +475,33 @@ export default function OrderFoodPage() {
     }
   };
 
-  const openHistoryDrawer = (patient: PatientFood) => {
+  const openHistoryDrawer = async (patient: PatientFood) => {
     setSelectedHistoryPatient(patient);
     setIsHistoryDrawerOpen(true);
+    setHistoryData([]);
+    setLoadingHistory(true);
+
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post(
+        '/api/v1/nutrition/food-order-history',
+        { an: patient.an, days: HISTORY_DAYS },
+        { headers }
+      );
+      setHistoryData(response.data?.data ?? []);
+    } catch (error) {
+      console.error('Error fetching food order history:', error);
+      setHistoryData([]);
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   const closeHistoryDrawer = () => {
     setIsHistoryDrawerOpen(false);
     setSelectedHistoryPatient(null);
+    setHistoryData([]);
   };
 
   // --- Table Columns ---
@@ -478,7 +545,7 @@ export default function OrderFoodPage() {
       key: 'breakfast',
       width: 130,
       align: 'center',
-      render: (text) => text ? <Tag color="blue" className="w-full truncate">{text.split(' ')[0]}</Tag> : <span className="text-gray-300">-</span>
+      render: (text, record) => renderMealCell(text, record.breakfastAddon, 'blue')
     },
     {
       title: 'ประวัติมื้อกลางวัน',
@@ -486,7 +553,7 @@ export default function OrderFoodPage() {
       key: 'lunch',
       width: 130,
       align: 'center',
-      render: (text) => text ? <Tag color="orange" className="w-full truncate">{text.split(' ')[0]}</Tag> : <span className="text-gray-300">-</span>
+      render: (text, record) => renderMealCell(text, record.lunchAddon, 'orange')
     },
     {
       title: 'ประวัติมื้อเย็น',
@@ -494,7 +561,7 @@ export default function OrderFoodPage() {
       key: 'dinner',
       width: 130,
       align: 'center',
-      render: (text) => text ? <Tag color="purple" className="w-full truncate">{text.split(' ')[0]}</Tag> : <span className="text-gray-300">-</span>
+      render: (text, record) => renderMealCell(text, record.dinnerAddon, 'purple')
     },
     {
       title: 'มื้อล่าสุด',
@@ -856,35 +923,46 @@ export default function OrderFoodPage() {
               </div>
 
               <div className="px-4">
-                <h4 className="text-sm font-bold text-gray-500 mb-4 uppercase tracking-wider">ประวัติย้อนหลัง 7 วัน</h4>
-                <Timeline
-                  items={Array.from({ length: 7 }).flatMap((_, dayIdx) => {
-                    const dateTime = dayjs().subtract(6 - dayIdx, 'day');
-                    const meals = [
-                      { time: 'มื้อเช้า', color: 'blue', menu: 'โจก', addon: selectedHistoryPatient?.addonText && dayIdx === 0 ? selectedHistoryPatient.addonText : '' },
-                      { time: 'มื้อกลางวัน', color: 'orange', menu: 'ข้าวผัดมี่กลอง', addon: selectedHistoryPatient?.addonText && dayIdx === 0 ? selectedHistoryPatient.addonText : '' },
-                      { time: 'มื้อเย็น', color: 'purple', menu: 'ข้าวต้มไก่', addon: selectedHistoryPatient?.addonText && dayIdx === 0 ? selectedHistoryPatient.addonText : '' },
-                    ];
-                    return meals.map(meal => ({
-                      color: meal.color,
-                      content: (
-                        <div className="mb-3">
-                          <span className="font-bold text-gray-700 text-sm">{dateTime.format('DD/MM/YYYY')} - {meal.time}</span>
-                          <br/>
-                          <span className="text-[#006b5f] text-sm font-semibold">{meal.menu}</span>
-                          {meal.addon && (
-                            <>
-                              <br/>
-                              <span className="text-gray-500 text-xs italic">
-                                {meal.addon}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      )
-                    }));
-                  })}
-                />
+                <h4 className="text-sm font-bold text-gray-500 mb-4 uppercase tracking-wider">
+                  ประวัติย้อนหลัง {HISTORY_DAYS} วัน
+                </h4>
+
+                {loadingHistory ? (
+                  <div className="flex justify-center py-10">
+                    <Spin />
+                  </div>
+                ) : historyData.length === 0 ? (
+                  <div className="text-center py-10">
+                    <p className="text-gray-500 text-sm mb-1">ไม่พบประวัติการสั่งอาหาร</p>
+                    <p className="text-gray-400 text-xs">ผู้ป่วยรายนี้ยังไม่มีรายการสั่งอาหารใน {HISTORY_DAYS} วันที่ผ่านมา</p>
+                  </div>
+                ) : (
+                  <Timeline
+                    items={historyData.map(record => {
+                      const meal = MEAL_LABEL[record.meal] ?? { label: record.mealName ?? '-', color: 'gray' };
+                      return {
+                        color: meal.color,
+                        content: (
+                          <div className="mb-3">
+                            <span className="font-bold text-gray-700 text-sm">
+                              {dayjs(record.orderDate).format('DD/MM/YYYY')} - {meal.label}
+                            </span>
+                            <br />
+                            <span className="text-[#006b5f] text-sm font-semibold">
+                              {record.foodName ?? 'ไม่ระบุเมนู'}
+                            </span>
+                            {record.addon && (
+                              <>
+                                <br />
+                                <span className="text-gray-500 text-xs italic">{record.addon}</span>
+                              </>
+                            )}
+                          </div>
+                        ),
+                      };
+                    })}
+                  />
+                )}
               </div>
             </div>
           )}

@@ -34,11 +34,12 @@ interface Ward {
 }
 
 interface DailyStat {
-  date: string;        // DD/MM
+  date: string;        // YYYY-MM-DD จาก API
   newAdmit: number;    // รับใหม่
   transferIn: number;  // รับย้าย
-  continued: number;   // ดูแลต่อเนื่อง
+  continued: number;   // ดูแลต่อเนื่อง (ยกมาจากวันก่อน)
   discharge: number;   // จำหน่าย
+  census: number;      // ยอดผู้ป่วยคงพยาบาลในวันนั้น
 }
 
 interface MonthlySummary {
@@ -49,10 +50,15 @@ interface MonthlySummary {
   totalContinued: number;
   totalDischarge: number;
   nurseCount: number;
-  standardRatio: number; // มาตรฐาน พยาบาล:ผู้ป่วย
+  standardRatio: number;        // มาตรฐาน พยาบาล:ผู้ป่วย (คำนวณจาก NHPPD ของหอผู้ป่วย)
+  nursingHourStandard: number;  // ชม.การพยาบาล/ผู้ป่วย/วัน (ward.general)
+  crisisHourStandard: number;   // ชม.การพยาบาลผู้ป่วยวิกฤติ (ward.crisis)
+  totalBeds: number | null;
+  days: number;
 }
 
 interface NurseWorkload {
+  staffId: number;
   name: string;
   position: string;
   morningShifts: number;   // จำนวนเวรเช้า
@@ -63,96 +69,94 @@ interface NurseWorkload {
   patientLoad: number;     // จำนวนผู้ป่วยที่ดูแลเฉลี่ย
 }
 
-// --- Mock Data Generator ---
-function generateMockData(wardCode: string, startDate: dayjs.Dayjs, endDate: dayjs.Dayjs): { daily: DailyStat[]; summary: MonthlySummary } {
-  const seed = wardCode.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const rng = (min: number, max: number, offset: number) => {
-    const val = ((seed * 13 + offset * 7) % (max - min + 1)) + min;
-    return Math.max(min, Math.min(max, val));
-  };
+interface SeverityLevelRef {
+  severityLevelId: number;
+  severityLevelName: string;
+  acuityLevelName: string;
+}
 
-  const days = endDate.diff(startDate, 'day') + 1;
-  const daily: DailyStat[] = [];
+interface ShiftSeverity {
+  shiftTypeId: number;
+  shiftName: string;
+  totalPatients: number;
+  levels: { severityLevelId: number; patientCount: number; recordCount: number }[];
+}
 
-  let totalNew = 0, totalTransfer = 0, totalCont = 0, totalDc = 0;
+interface ShiftSeverityDay {
+  date: string;              // YYYY-MM-DD
+  shifts: ShiftSeverity[];   // ดึก / เช้า / บ่าย
+}
 
-  for (let i = 0; i < days; i++) {
-    const d = startDate.add(i, 'day');
-    const newAdmit = rng(0, 5, i * 3 + 1);
-    const transferIn = rng(0, 3, i * 5 + 2);
-    const continued = rng(8, 25, i * 2 + seed);
-    const discharge = rng(0, 4, i * 7 + 3);
+interface ShiftSeverityData {
+  severityLevels: SeverityLevelRef[];
+  shiftTypes: { shiftTypeId: number; shiftName: string }[];
+  days: ShiftSeverityDay[];
+}
 
-    daily.push({
-      date: d.format('DD/MM'),
-      newAdmit,
-      transferIn,
-      continued,
-      discharge,
-    });
+interface CareLevelFlowNode {
+  name: string;
+  shiftTypeId: number;
+  shiftName: string;
+  careLevelId: number;
+  careLevelName: string;
+}
 
-    totalNew += newAdmit;
-    totalTransfer += transferIn;
-    totalCont += continued;
-    totalDc += discharge;
+interface CareLevelFlow {
+  nodes: CareLevelFlowNode[];
+  links: { source: string; target: string; value: number; changed: boolean }[];
+  totalTransitions: number;
+  changedTransitions: number;
+}
+
+interface BedOccupancy {
+  totalBeds: number | null;
+  occupied: number;
+  peakOccupied: number;
+  occupancyRate: number | null;
+  peakOccupancyRate: number | null;
+}
+
+const SEVERITY_COLORS = ['#22c55e', '#22d3ee', '#f59e0b', '#f97316', '#ef4444'];
+
+// สีตามระดับการดูแล เรียงจากเบาไปหนัก (ปกติ / O2 / HFNC / Vent-CS)
+const CARE_LEVEL_COLORS: Record<number, string> = {
+  1: '#22c55e',
+  2: '#22d3ee',
+  3: '#f59e0b',
+  4: '#ef4444',
+};
+
+/**
+ * ผูก ECharts instance เข้ากับ DOM node ปัจจุบันเสมอ
+ * container จะถูก unmount/remount ทุกครั้งที่สลับ loading ทำให้ node เดิมหลุดไป
+ * ถ้า reuse instance เก่าจะวาดลง node ที่ไม่อยู่ในหน้าแล้ว กราฟจึงว่างเปล่า
+ */
+function ensureChart(
+  el: HTMLDivElement,
+  ref: { current: echarts.ECharts | null }
+): echarts.ECharts {
+  const bound = echarts.getInstanceByDom(el);
+  if (bound) {
+    ref.current = bound;
+    return bound;
   }
+  ref.current?.dispose();
+  const chart = echarts.init(el);
+  ref.current = chart;
+  return chart;
+}
 
-  const nurseCount = rng(8, 18, seed);
-  const avgCensus = days > 0 ? Math.round(totalCont / days) : 0;
-
-  return {
-    daily,
-    summary: {
-      totalPatientDays: totalCont,
-      avgCensus,
-      totalNewAdmit: totalNew,
-      totalTransferIn: totalTransfer,
-      totalContinued: totalCont,
-      totalDischarge: totalDc,
-      nurseCount,
-      standardRatio: 5, // มาตรฐาน 1:5
+// สถานะว่างของกราฟ ใช้แทนการปล่อยพื้นที่โล่งเมื่อหอผู้ป่วยนั้นไม่มีข้อมูลในช่วงที่เลือก
+const emptyOption = (text = 'ไม่มีข้อมูลในช่วงเวลาที่เลือก'): echarts.EChartsOption => ({
+  graphic: [
+    {
+      type: 'text',
+      left: 'center',
+      top: 'middle',
+      style: { text, fontSize: 13, fill: '#9ca3af', align: 'center' },
     },
-  };
-}
-
-// --- Mock Nurse Workload Generator ---
-const NURSE_NAMES = [
-  'สมศรี จันทร์แก้ว', 'วิภา สุขสม', 'พรทิพย์ แก้วมณี', 'อรุณี ศรีสวัสดิ์',
-  'นิตยา บุญมา', 'สุดา พงษ์สวัสดิ์', 'จันทนา วงศ์ดี', 'ปราณี สมบูรณ์',
-  'กัลยา ทองดี', 'ศิริพร แสงทอง', 'มาลี ใจดี', 'รัตนา เพชรดี',
-  'อนงค์ รุ่งเรือง', 'สายใจ พิทักษ์', 'ดวงใจ ศรีสุข', 'พิมพ์ ชัยวัฒน์',
-  'วรรณา สิริโชค', 'นภา แก้วสว่าง',
-];
-
-const POSITIONS = ['RN', 'RN', 'RN', 'PN', 'RN', 'PN', 'RN', 'RN', 'PN', 'RN', 'RN', 'PN', 'RN', 'RN', 'PN', 'RN', 'RN', 'PN'];
-
-function generateNurseWorkload(wardCode: string, nurseCount: number): NurseWorkload[] {
-  const seed = wardCode.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const result: NurseWorkload[] = [];
-
-  for (let i = 0; i < nurseCount; i++) {
-    const s = seed + i * 17;
-    const morning = ((s * 3 + 5) % 12) + 4;     // 4-15 เวร
-    const afternoon = ((s * 7 + 3) % 10) + 3;    // 3-12 เวร
-    const night = ((s * 11 + 1) % 8) + 2;        // 2-9 เวร
-    const ot = ((s * 5 + 9) % 24);               // 0-23 ชม. OT
-
-    const totalHours = morning * 8 + afternoon * 8 + night * 8 + ot;
-
-    result.push({
-      name: NURSE_NAMES[i % NURSE_NAMES.length],
-      position: POSITIONS[i % POSITIONS.length],
-      morningShifts: morning,
-      afternoonShifts: afternoon,
-      nightShifts: night,
-      otHours: ot,
-      totalHours,
-      patientLoad: ((s * 3 + 2) % 6) + 3, // 3-8 คน
-    });
-  }
-
-  return result.sort((a, b) => b.totalHours - a.totalHours);
-}
+  ],
+});
 
 export default function DashboardPage() {
   const [wards, setWards] = useState<Ward[]>([]);
@@ -165,6 +169,9 @@ export default function DashboardPage() {
   const [dailyData, setDailyData] = useState<DailyStat[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [nurseWorkload, setNurseWorkload] = useState<NurseWorkload[]>([]);
+  const [shiftSeverity, setShiftSeverity] = useState<ShiftSeverityData | null>(null);
+  const [bedOccupancy, setBedOccupancy] = useState<BedOccupancy | null>(null);
+  const [careLevelFlow, setCareLevelFlow] = useState<CareLevelFlow | null>(null);
 
   const mainChartRef = useRef<HTMLDivElement>(null);
   const pieChartRef = useRef<HTMLDivElement>(null);
@@ -173,6 +180,7 @@ export default function DashboardPage() {
   const bedChartRef = useRef<HTMLDivElement>(null);
   const radarChartRef = useRef<HTMLDivElement>(null);
   const severityChartRef = useRef<HTMLDivElement>(null);
+  const sankeyChartRef = useRef<HTMLDivElement>(null);
   const mainChartInstance = useRef<echarts.ECharts | null>(null);
   const pieChartInstance = useRef<echarts.ECharts | null>(null);
   const nurseChartInstance = useRef<echarts.ECharts | null>(null);
@@ -180,6 +188,7 @@ export default function DashboardPage() {
   const bedChartInstance = useRef<echarts.ECharts | null>(null);
   const radarChartInstance = useRef<echarts.ECharts | null>(null);
   const severityChartInstance = useRef<echarts.ECharts | null>(null);
+  const sankeyChartInstance = useRef<echarts.ECharts | null>(null);
 
   // --- Fetch Wards ---
   useEffect(() => {
@@ -202,17 +211,46 @@ export default function DashboardPage() {
   }, []);
 
   // --- Load Data ---
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     if (!selectedWard) return;
     setLoading(true);
-    // Simulate API call with mock data
-    setTimeout(() => {
-      const { daily, summary: s } = generateMockData(selectedWard, dateRange[0], dateRange[1]);
-      setDailyData(daily);
-      setSummary(s);
-      setNurseWorkload(generateNurseWorkload(selectedWard, s.nurseCount));
+
+    const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const payload = {
+      ward: selectedWard,
+      date_from: dateRange[0].format('YYYY-MM-DD'),
+      date_to: dateRange[1].format('YYYY-MM-DD'),
+    };
+
+    try {
+      const [stats, workload, severityRes, bed, flow] = await Promise.all([
+        axios.post('/api/v1/dashboard/ipd-daily-stats', payload, { headers }),
+        axios.post('/api/v1/dashboard/nurse-workload', payload, { headers }),
+        axios.post('/api/v1/dashboard/shift-severity-distribution', payload, { headers }),
+        axios.post('/api/v1/dashboard/bed-occupancy', payload, { headers }),
+        axios.post('/api/v1/dashboard/care-level-flow', payload, { headers }),
+      ]);
+
+      setDailyData(stats.data?.data?.daily ?? []);
+      setSummary(stats.data?.data?.summary ?? null);
+      setNurseWorkload(
+        [...(workload.data?.data ?? [])].sort((a: NurseWorkload, b: NurseWorkload) => b.totalHours - a.totalHours)
+      );
+      setShiftSeverity(severityRes.data?.data ?? null);
+      setBedOccupancy(bed.data?.data ?? null);
+      setCareLevelFlow(flow.data?.data ?? null);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      setDailyData([]);
+      setSummary(null);
+      setNurseWorkload([]);
+      setShiftSeverity(null);
+      setBedOccupancy(null);
+      setCareLevelFlow(null);
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   }, [selectedWard, dateRange]);
 
   useEffect(() => {
@@ -221,14 +259,15 @@ export default function DashboardPage() {
 
   // --- Main Chart (Stacked Bar + Line) ---
   useEffect(() => {
-    if (!mainChartRef.current || dailyData.length === 0) return;
+    if (!mainChartRef.current) return;
+    const chart = ensureChart(mainChartRef.current, mainChartInstance);
 
-    if (!mainChartInstance.current) {
-      mainChartInstance.current = echarts.init(mainChartRef.current);
+    if (dailyData.length === 0) {
+      chart.setOption(emptyOption(), true);
+      return;
     }
-    const chart = mainChartInstance.current;
 
-    const dates = dailyData.map(d => d.date);
+    const dates = dailyData.map(d => dayjs(d.date).format('DD/MM'));
 
     const option: echarts.EChartsOption = {
       tooltip: {
@@ -315,12 +354,13 @@ export default function DashboardPage() {
 
   // --- Pie Chart (สัดส่วนประเภทผู้ป่วย) ---
   useEffect(() => {
-    if (!pieChartRef.current || !summary) return;
+    if (!pieChartRef.current) return;
+    const chart = ensureChart(pieChartRef.current, pieChartInstance);
 
-    if (!pieChartInstance.current) {
-      pieChartInstance.current = echarts.init(pieChartRef.current);
+    if (!summary) {
+      chart.setOption(emptyOption(), true);
+      return;
     }
-    const chart = pieChartInstance.current;
 
     const option: echarts.EChartsOption = {
       tooltip: {
@@ -368,12 +408,13 @@ export default function DashboardPage() {
 
   // --- Nurse Workload Chart (Horizontal Bar) ---
   useEffect(() => {
-    if (!nurseChartRef.current || nurseWorkload.length === 0) return;
+    if (!nurseChartRef.current) return;
+    const chart = ensureChart(nurseChartRef.current, nurseChartInstance);
 
-    if (!nurseChartInstance.current) {
-      nurseChartInstance.current = echarts.init(nurseChartRef.current);
+    if (nurseWorkload.length === 0) {
+      chart.setOption(emptyOption('ยังไม่มีการจัดเวรในช่วงเวลาที่เลือก'), true);
+      return;
     }
-    const chart = nurseChartInstance.current;
 
     const names = nurseWorkload.map(n => `${n.name} (${n.position})`);
     const standardHours = 176; // มาตรฐาน ~22 วัน x 8 ชม.
@@ -488,19 +529,21 @@ export default function DashboardPage() {
 
   // --- Gauge Chart (สัดส่วนภาระงาน) ---
   useEffect(() => {
-    if (!gaugeChartRef.current || !summary) return;
+    if (!gaugeChartRef.current) return;
+    const chart = ensureChart(gaugeChartRef.current, gaugeChartInstance);
 
-    if (!gaugeChartInstance.current) {
-      gaugeChartInstance.current = echarts.init(gaugeChartRef.current);
+    if (!summary) {
+      chart.setOption(emptyOption(), true);
+      return;
     }
-    const chart = gaugeChartInstance.current;
 
     // คำนวณค่า gauge: 0 = ไม่มีภาระ, 1 = เกินมาตรฐาน 2 เท่า
-    const ratio = summary.avgCensus / summary.nurseCount;
-    const maxScale = summary.standardRatio * 2;
+    const ratio = summary.nurseCount > 0 ? summary.avgCensus / summary.nurseCount : 0;
+    const maxScale = summary.standardRatio > 0 ? summary.standardRatio * 2 : 1;
     const gaugeValue = Math.min(ratio / maxScale, 1);
 
     const gradeLabel = (v: number) => {
+      if (summary.nurseCount === 0) return 'ยังไม่มีการจัดเวร';
       if (v >= 0.75) return 'เกินมาตรฐานมาก';
       if (v >= 0.5) return 'เกินมาตรฐาน';
       if (v >= 0.25) return 'อยู่ในเกณฑ์';
@@ -566,7 +609,7 @@ export default function DashboardPage() {
             fontSize: 22,
             offsetCenter: [0, '-35%'],
             valueAnimation: true,
-            formatter: () => `1 : ${ratio.toFixed(1)}`,
+            formatter: () => (summary.nurseCount > 0 ? `1 : ${ratio.toFixed(1)}` : '-'),
             color: 'inherit',
           },
           data: [
@@ -590,19 +633,21 @@ export default function DashboardPage() {
 
   // --- Bed Occupancy Ring Chart ---
   useEffect(() => {
-    if (!bedChartRef.current || !summary) return;
+    if (!bedChartRef.current) return;
+    const chart = ensureChart(bedChartRef.current, bedChartInstance);
 
-    if (!bedChartInstance.current) {
-      bedChartInstance.current = echarts.init(bedChartRef.current);
+    if (!bedOccupancy) {
+      chart.setOption(emptyOption(), true);
+      return;
     }
-    const chart = bedChartInstance.current;
 
-    const seed = (selectedWard || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const totalBeds = ((seed * 3 + 7) % 20) + 20; // 20-39 เตียง
-    const occupied = Math.min(summary.avgCensus, totalBeds);
-    const rate = Math.round((occupied / totalBeds) * 100);
+    const { totalBeds, occupied, occupancyRate } = bedOccupancy;
+    // หอผู้ป่วยที่ยังไม่ได้บันทึกจำนวนเตียงจะไม่มีอัตราครองเตียง แสดงเฉพาะยอดผู้ป่วยเฉลี่ย
+    const hasBeds = totalBeds != null && totalBeds > 0;
+    const rate = occupancyRate ?? 0;
+    const remaining = hasBeds ? Math.max(0, totalBeds - occupied) : 1;
 
-    const rateColor = rate >= 90 ? '#ef4444' : rate >= 75 ? '#f97316' : '#006b5f';
+    const rateColor = !hasBeds ? '#94a3b8' : rate >= 90 ? '#ef4444' : rate >= 75 ? '#f97316' : '#006b5f';
 
     const option: echarts.EChartsOption = {
       series: [
@@ -616,7 +661,7 @@ export default function DashboardPage() {
           label: { show: false },
           data: [
             { value: occupied, itemStyle: { color: rateColor } },
-            { value: totalBeds - occupied, itemStyle: { color: '#f1f5f9' } },
+            { value: remaining, itemStyle: { color: '#f1f5f9' } },
           ],
         },
       ],
@@ -625,13 +670,24 @@ export default function DashboardPage() {
           type: 'text',
           left: 'center',
           top: '35%',
-          style: { text: `${rate}%`, fontSize: 28, fontWeight: 'bold', fill: rateColor, align: 'center' },
+          style: {
+            text: hasBeds ? `${rate}%` : `${occupied}`,
+            fontSize: 28,
+            fontWeight: 'bold',
+            fill: rateColor,
+            align: 'center',
+          },
         },
         {
           type: 'text',
           left: 'center',
           top: '52%',
-          style: { text: `${occupied} / ${totalBeds} เตียง`, fontSize: 13, fill: '#6b7280', align: 'center' },
+          style: {
+            text: hasBeds ? `${occupied} / ${totalBeds} เตียง` : 'ยังไม่ระบุจำนวนเตียง',
+            fontSize: 13,
+            fill: '#6b7280',
+            align: 'center',
+          },
         },
       ],
     };
@@ -641,16 +697,17 @@ export default function DashboardPage() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [summary, selectedWard]);
+  }, [bedOccupancy]);
 
   // --- Radar Chart (Shift Distribution) ---
   useEffect(() => {
-    if (!radarChartRef.current || nurseWorkload.length === 0 || !summary) return;
+    if (!radarChartRef.current) return;
+    const chart = ensureChart(radarChartRef.current, radarChartInstance);
 
-    if (!radarChartInstance.current) {
-      radarChartInstance.current = echarts.init(radarChartRef.current);
+    if (nurseWorkload.length === 0 || !summary) {
+      chart.setOption(emptyOption('ยังไม่มีการจัดเวรในช่วงเวลาที่เลือก'), true);
+      return;
     }
-    const chart = radarChartInstance.current;
 
     const totalMorning = nurseWorkload.reduce((s, n) => s + n.morningShifts, 0);
     const totalAfternoon = nurseWorkload.reduce((s, n) => s + n.afternoonShifts, 0);
@@ -704,70 +761,197 @@ export default function DashboardPage() {
 
   // --- Severity Level Chart ---
   useEffect(() => {
-    if (!severityChartRef.current || !summary) return;
+    if (!severityChartRef.current) return;
+    const chart = ensureChart(severityChartRef.current, severityChartInstance);
 
-    if (!severityChartInstance.current) {
-      severityChartInstance.current = echarts.init(severityChartRef.current);
+    const days = shiftSeverity?.days ?? [];
+    const levelRefs = shiftSeverity?.severityLevels ?? [];
+    const shiftTypes = shiftSeverity?.shiftTypes ?? [];
+
+    const hasData = days.some(d => d.shifts.some(s => s.totalPatients > 0));
+    if (days.length === 0 || levelRefs.length === 0 || !hasData) {
+      chart.setOption(emptyOption('ยังไม่มีการประเมินระดับความรุนแรงในช่วงเวลาที่เลือก'), true);
+      return;
     }
-    const chart = severityChartInstance.current;
 
-    const seed = (selectedWard || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const rng = (min: number, max: number, offset: number) => ((seed * 13 + offset * 7) % (max - min + 1)) + min;
+    const dates = days.map(d => dayjs(d.date).format('DD/MM'));
+    const compact = days.length > 7;
 
-    const levels = [
-      { name: 'ระดับ 1 - Minimal Care', value: rng(5, 15, 1), color: '#22c55e' },
-      { name: 'ระดับ 2 - Moderate Care', value: rng(8, 20, 2), color: '#22d3ee' },
-      { name: 'ระดับ 3 - High Care', value: rng(4, 12, 3), color: '#f59e0b' },
-      { name: 'ระดับ 4 - Intensive Care', value: rng(2, 8, 4), color: '#f97316' },
-      { name: 'ระดับ 5 - Critical Care', value: rng(0, 5, 5), color: '#ef4444' },
-    ];
+    /**
+     * แต่ละวันมี 3 แท่ง (ดึก/เช้า/บ่าย) แยกกันด้วย stack คนละชื่อ
+     * ในแท่งเดียวกันซ้อนด้วยระดับความรุนแรง 1-5
+     * ตั้งชื่อ series ตามระดับซ้ำกันทั้ง 3 เวร เพื่อให้ legend มีแค่ 5 รายการและ toggle พร้อมกัน
+     */
+    const series: echarts.BarSeriesOption[] = [];
+    const seriesShift: string[] = []; // seriesIndex -> ชื่อเวร ใช้จัดกลุ่มใน tooltip
+
+    shiftTypes.forEach(st => {
+      levelRefs.forEach((lv, li) => {
+        series.push({
+          name: `ระดับ ${lv.severityLevelId} - ${lv.acuityLevelName}`,
+          type: 'bar',
+          stack: st.shiftName,
+          barMaxWidth: 34,
+          barGap: '15%',
+          barCategoryGap: '35%',
+          itemStyle: {
+            color: SEVERITY_COLORS[li % SEVERITY_COLORS.length],
+            borderRadius: li === levelRefs.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0],
+          },
+          emphasis: { focus: 'series' },
+          label: {
+            show: !compact,
+            fontSize: 10,
+            fontWeight: 'bold',
+            color: '#fff',
+            // ซ่อนตัวเลขของระดับที่ไม่มีผู้ป่วย ไม่ให้เลข 0 เกลื่อนแท่ง
+            formatter: p => (Number(p.value) > 0 ? String(p.value) : ''),
+          },
+          data: days.map(d =>
+            d.shifts.find(s => s.shiftTypeId === st.shiftTypeId)
+              ?.levels.find(l => l.severityLevelId === lv.severityLevelId)?.patientCount ?? 0
+          ),
+        });
+        seriesShift.push(st.shiftName);
+      });
+    });
 
     const option: echarts.EChartsOption = {
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
+        backgroundColor: 'rgba(255,255,255,0.96)',
+        borderColor: '#e5e7eb',
+        textStyle: { color: '#374151', fontSize: 12 },
         formatter: (params: unknown) => {
-          const p = params as { name: string; marker: string; value: number }[];
+          const p = params as { name: string; marker: string; seriesName: string; seriesIndex: number; value: number }[];
           if (!Array.isArray(p) || p.length === 0) return '';
-          return `${p[0].marker} ${p[0].name}<br/><b>${p[0].value}</b> คน`;
+
+          // จัดกลุ่มตามเวร เพราะ tooltip แบบ axis จะรวม series ของทั้ง 3 เวรมาไว้ด้วยกัน
+          let tip = `<b>${p[0].name}</b>`;
+          shiftTypes.forEach(st => {
+            const items = p.filter(item => seriesShift[item.seriesIndex] === st.shiftName && item.value > 0);
+            const total = items.reduce((a, item) => a + item.value, 0);
+            if (total === 0) return;
+            tip += `<br/><span style="color:#006b5f;font-weight:bold">เวร${st.shiftName} — รวม ${total} คน</span><br/>`;
+            items.forEach(item => {
+              tip += `${item.marker} ${item.seriesName}: <b>${item.value}</b><br/>`;
+            });
+          });
+          return tip;
         },
       },
-      grid: {
-        left: '3%',
-        right: '8%',
-        top: '8%',
-        bottom: '5%',
-        containLabel: true,
+      legend: {
+        bottom: 0,
+        itemGap: 10,
+        textStyle: { fontSize: 11 },
+        type: 'scroll',
+        data: levelRefs.map(lv => `ระดับ ${lv.severityLevelId} - ${lv.acuityLevelName}`),
       },
+      grid: { left: '3%', right: '4%', top: '8%', bottom: compact ? '26%' : '22%', containLabel: true },
       xAxis: {
-        type: 'value',
-        splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
-        axisLabel: { fontSize: 11 },
+        type: 'category',
+        data: dates,
+        axisLabel: { fontSize: 11, rotate: dates.length > 12 ? 45 : 0 },
+        axisTick: { alignWithLabel: true },
       },
       yAxis: {
-        type: 'category',
-        data: levels.map(l => l.name),
-        inverse: true,
-        axisLabel: { fontSize: 11, width: 160, overflow: 'truncate' },
+        type: 'value',
+        name: 'จำนวน (คน)',
+        nameTextStyle: { fontSize: 12, color: '#6b7280' },
+        minInterval: 1,
+        splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+      },
+      // แสดงทั้งช่วงที่เลือกเสมอ ให้ slider ไว้ซูมเข้าดูเฉพาะช่วงเมื่อผู้ใช้ต้องการ
+      dataZoom: days.length > 10
+        ? [
+            { type: 'slider', height: 16, bottom: '13%', start: 0, end: 100 },
+            { type: 'inside', start: 0, end: 100 },
+          ]
+        : undefined,
+      series,
+    };
+
+    chart.setOption(option, true);
+
+    const handleResize = () => chart.resize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [shiftSeverity]);
+
+  // --- Sankey: การเปลี่ยนระดับการดูแลข้ามเวร ---
+  useEffect(() => {
+    if (!sankeyChartRef.current) return;
+    const chart = ensureChart(sankeyChartRef.current, sankeyChartInstance);
+
+    const nodes = careLevelFlow?.nodes ?? [];
+    const links = careLevelFlow?.links ?? [];
+
+    if (nodes.length === 0 || links.length === 0) {
+      chart.setOption(
+        emptyOption('ต้องมีการบันทึกระดับการดูแลอย่างน้อย 2 เวรติดกันในวันเดียวกัน\nจึงจะแสดงการเปลี่ยนระดับได้'),
+        true
+      );
+      return;
+    }
+
+    const colorOf = (careLevelId: number) => CARE_LEVEL_COLORS[careLevelId] ?? '#94a3b8';
+    const nodeById = new Map(nodes.map(n => [n.name, n]));
+
+    const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: 'rgba(255,255,255,0.96)',
+        borderColor: '#e5e7eb',
+        textStyle: { color: '#374151', fontSize: 12 },
+        formatter: (params: unknown) => {
+          const p = params as { dataType: string; name: string; value: number; data: { source?: string; target?: string; changed?: boolean } };
+          if (p.dataType === 'edge') {
+            const from = nodeById.get(p.data.source ?? '');
+            const to = nodeById.get(p.data.target ?? '');
+            const tag = p.data.changed
+              ? '<span style="color:#f97316;font-weight:bold">เปลี่ยนระดับการดูแล</span>'
+              : '<span style="color:#22c55e">คงระดับเดิม</span>';
+            return `เวร${from?.shiftName} <b>${from?.careLevelName}</b> → เวร${to?.shiftName} <b>${to?.careLevelName}</b><br/><b>${p.value}</b> ราย<br/>${tag}`;
+          }
+          const n = nodeById.get(p.name);
+          return `เวร${n?.shiftName} · <b>${n?.careLevelName}</b><br/><b>${p.value}</b> ราย`;
+        },
       },
       series: [
         {
-          type: 'bar',
-          barMaxWidth: 20,
-          data: levels.map(l => ({
-            value: l.value,
-            itemStyle: {
-              color: l.color,
-              borderRadius: [0, 6, 6, 0],
+          type: 'sankey',
+          left: '3%',
+          right: '12%',
+          top: '6%',
+          bottom: '6%',
+          nodeWidth: 16,
+          nodeGap: 12,
+          // ล็อกลำดับคอลัมน์ตามเวร ไม่ให้ ECharts จัดใหม่จนอ่านลำดับเวลาไม่ออก
+          nodeAlign: 'left',
+          draggable: false,
+          emphasis: { focus: 'adjacency' },
+          data: nodes.map(n => ({
+            name: n.name,
+            itemStyle: { color: colorOf(n.careLevelId), borderColor: colorOf(n.careLevelId) },
+            label: {
+              fontSize: 11,
+              formatter: () => `${n.shiftName} · ${n.careLevelName}`,
             },
           })),
-          label: {
-            show: true,
-            position: 'right',
-            fontSize: 12,
-            fontWeight: 'bold',
-            formatter: '{c} คน',
-          },
+          links: links.map(l => ({
+            source: l.source,
+            target: l.target,
+            value: l.value,
+            changed: l.changed,
+            lineStyle: {
+              // เส้นที่เปลี่ยนระดับเน้นให้ชัดกว่าเส้นที่คงระดับเดิม
+              color: l.changed ? 'source' : 'gradient',
+              opacity: l.changed ? 0.55 : 0.25,
+              curveness: 0.5,
+            },
+          })),
+          label: { color: '#374151' },
         },
       ],
     };
@@ -777,7 +961,7 @@ export default function DashboardPage() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [summary, selectedWard]);
+  }, [careLevelFlow]);
 
   // --- Cleanup Charts ---
   useEffect(() => {
@@ -789,12 +973,14 @@ export default function DashboardPage() {
       bedChartInstance.current?.dispose();
       radarChartInstance.current?.dispose();
       severityChartInstance.current?.dispose();
+      sankeyChartInstance.current?.dispose();
     };
   }, []);
 
   const wardName = wards.find(w => w.his_code === selectedWard)?.ward_name || '-';
-  const workloadPerNurse = summary ? (summary.avgCensus / summary.nurseCount).toFixed(1) : '-';
-  const isOverStandard = summary ? (summary.avgCensus / summary.nurseCount) > summary.standardRatio : false;
+  const ratio = summary && summary.nurseCount > 0 ? summary.avgCensus / summary.nurseCount : null;
+  const workloadPerNurse = ratio != null ? ratio.toFixed(1) : '-';
+  const isOverStandard = ratio != null && summary != null ? ratio > summary.standardRatio : false;
 
   return (
     <div className="bg-slate-100 min-h-screen font-sans">
@@ -857,7 +1043,13 @@ export default function DashboardPage() {
           <div className="flex justify-center items-center py-24">
             <Spin size="large" />
           </div>
-        ) : summary && (
+        ) : !summary ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <PiWarningBold className="text-4xl text-gray-300 mb-3" />
+            <p className="text-gray-500 font-medium mb-1">ไม่สามารถโหลดข้อมูลของหอผู้ป่วยนี้ได้</p>
+            <p className="text-gray-400 text-xs">ลองเลือกหอผู้ป่วยหรือช่วงเวลาอื่น</p>
+          </div>
+        ) : (
           <div className="flex flex-col gap-5">
 
             {/* ── Stat Cards ── */}
@@ -903,9 +1095,35 @@ export default function DashboardPage() {
               <ChartCard icon={<PiChartBarBold />} title="สถิติรายวัน — รับใหม่ / รับย้าย / ดูแลต่อเนื่อง / จำหน่าย">
                 <div ref={mainChartRef} style={{ width: '100%', height: 340 }} />
               </ChartCard>
-              <ChartCard icon={<PiWarningBold />} title="สถิติระดับความรุนแรงผู้ป่วย">
+              <ChartCard icon={<PiWarningBold />} title="ระดับความรุนแรงผู้ป่วยรายวัน แยกตามเวร (ดึก / เช้า / บ่าย)">
                 <div ref={severityChartRef} style={{ width: '100%', height: 340 }} />
               </ChartCard>
+            </div>
+
+            {/* ── Sankey: การเปลี่ยนระดับการดูแลข้ามเวร ── */}
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white">
+                <PiArrowsLeftRightBold className="text-[#006b5f] text-base shrink-0" />
+                <span className="font-bold text-[#006b5f] text-sm leading-tight">
+                  การเปลี่ยนระดับการดูแลข้ามเวร (ดึก → เช้า → บ่าย)
+                </span>
+                {careLevelFlow && careLevelFlow.totalTransitions > 0 && (
+                  <div className="ml-auto flex items-center gap-2">
+                    <Tag color="default" className="m-0 text-xs">
+                      ทั้งหมด {careLevelFlow.totalTransitions} ครั้ง
+                    </Tag>
+                    <Tag color={careLevelFlow.changedTransitions > 0 ? 'orange' : 'green'} className="m-0 text-xs font-semibold">
+                      เปลี่ยนระดับ {careLevelFlow.changedTransitions} ครั้ง
+                    </Tag>
+                  </div>
+                )}
+              </div>
+              <div className="p-3">
+                <p className="text-[11px] text-gray-400 mb-2 px-1">
+                  แต่ละเส้นคือผู้ป่วยที่ถูกประเมินต่อเนื่องสองเวรในวันเดียวกัน — เส้นทึบคือกลุ่มที่ระดับการดูแลเปลี่ยนไป
+                </p>
+                <div ref={sankeyChartRef} style={{ width: '100%', height: 360 }} />
+              </div>
             </div>
 
             {/* ── Nurse Workload + Pie ── */}
@@ -994,14 +1212,14 @@ export default function DashboardPage() {
                     {[
                       { label: 'รับใหม่', total: summary.totalNewAdmit, tag: <Tag color="cyan" className="text-xs">New Admission</Tag> },
                       { label: 'รับย้าย', total: summary.totalTransferIn, tag: <Tag color="purple" className="text-xs">Transfer In</Tag> },
-                      { label: 'ดูแลต่อเนื่อง (Patient Day)', total: summary.totalContinued, avg: summary.avgCensus, tag: <Tag color="green" className="text-xs">Continued Care</Tag>, bold: true },
+                      { label: 'ดูแลต่อเนื่อง (Patient Day)', total: summary.totalPatientDays, avg: summary.avgCensus, tag: <Tag color="green" className="text-xs">Continued Care</Tag>, bold: true },
                       { label: 'จำหน่าย', total: summary.totalDischarge, tag: <Tag color="orange" className="text-xs">Discharge</Tag> },
                     ].map((row, i) => (
                       <tr key={i} className="border-b border-gray-100 hover:bg-teal-50/30 transition-colors">
                         <td className={`px-4 py-3 ${row.bold ? 'font-bold text-[#006b5f]' : 'font-medium text-gray-700'}`}>{row.label}</td>
                         <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[#006b5f]' : ''}`}>{row.total}</td>
                         <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[#006b5f]' : ''}`}>
-                          {row.avg ?? (row.total / dailyData.length).toFixed(1)}
+                          {row.avg ?? (row.total / (summary.days || 1)).toFixed(1)}
                         </td>
                         <td className="px-4 py-3 text-center">{row.tag}</td>
                       </tr>

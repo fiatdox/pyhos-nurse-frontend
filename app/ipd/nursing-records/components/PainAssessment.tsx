@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Form, Select, DatePicker, Button, Row, Col, Spin, Tag, Table, Popconfirm, Tabs, Radio, Checkbox } from 'antd';
+import { Card, Form, Select, DatePicker, Button, Row, Col, Spin, Tag, Table, Popconfirm, Tabs, Segmented } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import Input from 'antd/es/input';
 import axios from 'axios';
@@ -74,6 +74,28 @@ const painLevelLabel: Record<string, string> = {
   worst: 'ปวดมากที่สุด (10)',
 };
 
+/**
+ * ตัวเลือกคะแนน 0–10 ของ Segmented
+ * ตัวเลขที่เลือกอยู่จะเปลี่ยนเป็นสีตามระดับความปวด ให้เห็นความรุนแรงทันทีโดยไม่ต้องอ่านป้าย
+ */
+const painScoreOptions = (selected: number) =>
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(score => {
+    const cfg = painScaleColors[getPainLevel(score)];
+    const active = selected === score;
+    return {
+      value: score,
+      label: (
+        <span
+          className="font-bold"
+          // ตัวที่ยังไม่เลือกใช้สีจางของระดับตัวเอง ทำให้เห็นการไล่เขียว→แดงตลอดแถบ
+          style={{ color: active ? '#fff' : cfg.border, fontSize: active ? 16 : 13 }}
+        >
+          {score}
+        </span>
+      ),
+    };
+  });
+
 const painCharacters = [
   'ปวดแหลม (Sharp)', 'ปวดตุบๆ (Throbbing)', 'ปวดแสบร้อน (Burning)',
   'ปวดบีบรัด (Cramping)', 'ปวดตื้อ (Dull/Aching)', 'ปวดเสียดแทง (Stabbing)',
@@ -85,45 +107,32 @@ const painLocations = [
   'ขาซ้าย', 'ขาขวา', 'ข้อเข่า', 'สะโพก', 'แผลผ่าตัด', 'อื่นๆ',
 ];
 
-const mockRecords: PainRecord[] = [
-  {
-    id: 1, an: '', record_datetime: dayjs().subtract(2, 'day').hour(10).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'เช้า', assessment_tool: 'NRS', pain_score: 7, pain_level: 'severe',
-    location: 'แผลผ่าตัด', character: 'ปวดแหลม (Sharp)', onset: 'หลังผ่าตัด',
-    duration: 'ตลอดเวลา', intervention: 'ให้ยา Morphine 3 mg IV ตามแผนการรักษา',
-    reassess_score: 3, reassess_time: '30 นาที', nurse_name: 'พย.สมหญิง',
-  },
-  {
-    id: 2, an: '', record_datetime: dayjs().subtract(1, 'day').hour(14).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'บ่าย', assessment_tool: 'NRS', pain_score: 5, pain_level: 'moderate',
-    location: 'แผลผ่าตัด', character: 'ปวดตื้อ (Dull/Aching)', onset: 'เมื่อเคลื่อนไหว',
-    duration: 'ไม่ต่อเนื่อง', intervention: 'ให้ยา Paracetamol 500 mg oral + ประคบเย็น',
-    reassess_score: 2, reassess_time: '1 ชม.', nurse_name: 'พย.วิภา',
-  },
-  {
-    id: 3, an: '', record_datetime: dayjs().subtract(1, 'day').hour(22).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'ดึก', assessment_tool: 'NRS', pain_score: 3, pain_level: 'mild',
-    location: 'แผลผ่าตัด', character: 'ปวดตื้อ (Dull/Aching)',
-    intervention: 'จัดท่าให้สุขสบาย ทำสมาธิ relaxation', reassess_score: 1,
-    nurse_name: 'พย.กนก',
-  },
-  {
-    id: 4, an: '', record_datetime: dayjs().hour(8).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'เช้า', assessment_tool: 'NRS', pain_score: 2, pain_level: 'mild',
-    location: 'แผลผ่าตัด', character: 'ปวดตื้อ (Dull/Aching)',
-    intervention: 'ให้ยา Paracetamol 500 mg oral ก่อนทำแผล', reassess_score: 0,
-    nurse_name: 'พย.สมหญิง',
-  },
-];
-
 const shiftColor: Record<string, string> = { 'ดึก': 'purple', 'เช้า': 'blue', 'บ่าย': 'orange' };
+
+/** ค่าที่ Form ส่งกลับมาตอน submit */
+interface PainFormValues {
+  record_datetime?: dayjs.Dayjs;
+  shift?: string;
+  assessment_tool?: string;
+  pain_score?: number;
+  location?: string;
+  character?: string;
+  onset?: string;
+  duration?: string;
+  aggravating?: string;
+  alleviating?: string;
+  intervention?: string;
+  reassess_score?: number;
+  reassess_time?: string;
+  nurse_name?: string;
+}
 
 export default function PainAssessment({ an }: { an: string }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [patient, setPatient] = useState<PatientInfo | null>(null);
-  const [records, setRecords] = useState<PainRecord[]>(mockRecords);
+  const [records, setRecords] = useState<PainRecord[]>([]);
   const [rightTab, setRightTab] = useState('trend');
   const [liveScore, setLiveScore] = useState(0);
 
@@ -137,8 +146,10 @@ export default function PainAssessment({ an }: { an: string }) {
       const headers = getHeaders();
       const res = await axios.get(`/api/v1/nursing-records/pain/${an}`, { headers });
       if (res.data?.success) setRecords(res.data.data || []);
-    } catch {
-      setRecords(mockRecords.map(r => ({ ...r, an })));
+    } catch (error) {
+      // ไม่ใส่ข้อมูลตัวอย่างแทน เพราะบันทึกทางการพยาบาลต้องแยกออกว่าอันไหนของจริง
+      console.error('Error fetching pain records:', error);
+      setRecords([]);
     }
   }, [an, getHeaders]);
 
@@ -147,7 +158,7 @@ export default function PainAssessment({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.post('/api/v1/patients/by-an', { an }, { headers });
+        const patientRes = await axios.post('/api/v1/patients/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -162,9 +173,10 @@ export default function PainAssessment({ an }: { an: string }) {
     fetchData();
   }, [an, getHeaders, fetchRecords]);
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (raw: unknown) => {
     setSaving(true);
-    const painLevel = getPainLevel(values.pain_score || 0);
+    const values = raw as PainFormValues;
+    const painLevel = getPainLevel(values.pain_score ?? 0);
 
     try {
       const headers = getHeaders();
@@ -172,7 +184,7 @@ export default function PainAssessment({ an }: { an: string }) {
         an, admission_list_id: patient?.admission_list_id,
         ward_code: patient?.ward || getUserProfile()?.ward_code || '',
         ward_name: patient?.wardName || getUserProfile()?.ward_name || '',
-        staff_id: getUserProfile()?.staff_id || '',
+        staff_id: String(getUserProfile()?.staff_id || ''),
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         shift: values.shift || null,
         assessment_tool: values.assessment_tool || 'NRS',
@@ -187,7 +199,8 @@ export default function PainAssessment({ an }: { an: string }) {
         intervention: values.intervention || null,
         reassess_score: values.reassess_score ?? null,
         reassess_time: values.reassess_time || null,
-        nurse_name: values.nurse_name || null,
+        // คอลัมน์นี้เป็น NOT NULL — ถ้าผู้ใช้ลบชื่อออก ให้ย้อนกลับไปใช้ชื่อผู้ที่ล็อกอินอยู่
+        nurse_name: values.nurse_name || getUserProfile()?.fullname || '',
       };
       await axios.post('/api/v1/nursing-records/pain', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
@@ -195,9 +208,13 @@ export default function PainAssessment({ an }: { an: string }) {
       form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: getUserProfile()?.fullname || '' });
       setLiveScore(0);
       await fetchRecords();
-    } catch (error: any) {
-      const status = error?.response?.status;
-      Swal.fire({ icon: 'error', title: `ผิดพลาด (${status ?? 'Network Error'})`, text: 'เกิดข้อผิดพลาด', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      // แสดงเหตุผลจริงจาก server เพื่อให้แก้ที่ต้นเหตุได้ ไม่ใช่บอกแค่ว่าผิดพลาด
+      const detail = axios.isAxiosError(error)
+        ? (error.response?.data as { message?: string })?.message
+        : undefined;
+      Swal.fire({ icon: 'error', title: `ผิดพลาด (${status ?? 'Network Error'})`, text: detail ?? 'เกิดข้อผิดพลาด', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
     } finally {
       setSaving(false);
     }
@@ -255,6 +272,19 @@ export default function PainAssessment({ an }: { an: string }) {
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
+      {/*
+        antd ไม่มี token สำหรับสีของแถบที่เลือกใน Segmented แบบรายตัวเลือก
+        จึงกำหนดด้วย CSS โดยรับสีจากตัวแปร --pain-color ที่ตั้งไว้ที่ตัว Segmented
+        จำกัดขอบเขตด้วย .pain-seg ไม่ให้กระทบ Segmented ตัวอื่นในระบบ
+      */}
+      <style>{`
+        .pain-seg .ant-segmented-item-selected,
+        .pain-seg .ant-segmented-thumb {
+          background: var(--pain-color);
+        }
+        .pain-seg .ant-segmented-item { padding: 0; }
+        .pain-seg .ant-segmented-item-label { padding-inline: 0; }
+      `}</style>
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
@@ -327,19 +357,15 @@ export default function PainAssessment({ an }: { an: string }) {
                 <div className="bg-rose-50 rounded-lg px-3 pt-2 pb-2 mb-2 border border-rose-100">
                   <div className="text-xs text-rose-600 font-bold mb-2">ระดับความปวด (Pain Score)</div>
                   <Form.Item name="pain_score" className="mb-0!">
-                    <Radio.Group className="flex flex-wrap gap-1 justify-center" onChange={(e) => setLiveScore(e.target.value)}>
-                      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(score => {
-                        const level = getPainLevel(score);
-                        const cfg = painScaleColors[level];
-                        return (
-                          <Radio.Button key={score} value={score}
-                            className="w-10 h-10 flex items-center justify-center font-bold text-sm"
-                            style={{ borderColor: liveScore === score ? cfg.border : undefined, color: liveScore === score ? cfg.border : undefined }}>
-                            {score}
-                          </Radio.Button>
-                        );
-                      })}
-                    </Radio.Group>
+                    <Segmented
+                      block
+                      size="large"
+                      className="pain-seg"
+                      options={painScoreOptions(liveScore)}
+                      onChange={(v) => setLiveScore(Number(v))}
+                      // ตัวเลื่อนที่เลือกอยู่เปลี่ยนสีตามระดับความปวด ผ่านตัวแปร CSS ด้านล่าง
+                      style={{ '--pain-color': livePainCfg.border } as React.CSSProperties}
+                    />
                   </Form.Item>
                   <div className={`text-center mt-2 font-bold text-sm ${livePainCfg.text}`}>
                     {painLevelLabel[livePainLevel]}
