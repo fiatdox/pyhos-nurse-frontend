@@ -994,7 +994,7 @@ function AdmitRecordInner({ an }: { an: string }) {
                       type="warning"
                       showIcon
                       style={{ marginTop: 12 }}
-                      message={
+                      title={
                         <Space size={[4, 4]} wrap>
                           {vitalWarnings.map(w => (
                             <Tag key={w} color="orange" style={{ margin: 0 }}>

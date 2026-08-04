@@ -79,7 +79,7 @@ const Navbar = () => {
                         </div>
                         <div className="hidden sm:block sm:ml-6">
                             <div className="flex space-x-4">
-                                <Link href="/main" className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium">Home</Link>
+                                <Link href="/main" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">Home</span></Link>
                                 {/* Products Dropdown Trigger */}
                                 <div className="group">
                                     <button className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium flex items-center">
@@ -95,21 +95,21 @@ const Navbar = () => {
                                                 <div>
                                                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Software</h3>
                                                     <ul className="space-y-3">
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">IC : Infection Controls</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Mobile Apps</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Desktop Software</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Enterprise Solutions</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">API Services</Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">IC : Infection Controls</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Mobile Apps</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Desktop Software</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Enterprise Solutions</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">API Services</span></Link></li>
                                                     </ul>
                                                 </div>
                                                 <div>
                                                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Hardware</h3>
                                                     <ul className="space-y-3">
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Laptops</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Desktops</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Tablets</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Accessories</Link></li>
-                                                        <li><Link href="#" className="text-gray-600 hover:text-indigo-600">Networking</Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Laptops</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Desktops</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Tablets</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Accessories</span></Link></li>
+                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Networking</span></Link></li>
                                                     </ul>
                                                 </div>
                                                 <div>
@@ -119,16 +119,16 @@ const Navbar = () => {
                                                         <h4 className="font-medium text-gray-900">New Release</h4>
                                                         <p className="text-sm text-gray-600 mb-2">Check out our latest product offering with advanced
                                                             features.</p>
-                                                        <Link href="#" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Learn more →</Link>
+                                                        <Link href="#" className="text-sm font-medium"><span className="text-indigo-600 hover:text-indigo-800">Learn more →</span></Link>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <Link href="#" className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium">FTE</Link>
-                                <Link href="#" className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium">Dashboard</Link>
-                                <Link href="#" className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium">Contact</Link>
+                                <Link href="#" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">FTE</span></Link>
+                                <Link href="#" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">Dashboard</span></Link>
+                                <Link href="#" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">Contact</span></Link>
                             </div>
                         </div>
                     </div>
@@ -190,42 +190,42 @@ const Navbar = () => {
                                             {
                                                 key: 'register',
                                                 icon: <GrUserAdd className="w-5 h-5" />,
-                                                label: <Link href="/ipd/register" onClick={onCloseLeft} className="text-white block w-full text-left">รับผู้ป่วย / รับย้าย</Link>,
+                                                label: <Link href="/ipd/register" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รับผู้ป่วย / รับย้าย</span></Link>,
                                             },
                                             {
                                                 key: 'patients',
                                                 icon: <SiWikibooks className="w-5 h-5" />,
-                                                label: <Link href="/ipd/patients" onClick={onCloseLeft} className="text-white block w-full text-left">ทะเบียนผู้ป่วย</Link>,
+                                                label: <Link href="/ipd/patients" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ทะเบียนผู้ป่วย</span></Link>,
                                             },
                                             {
                                                 key: 'food_order',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
-                                                label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="text-white block w-full text-left">สั่งอาหาร</Link>,
+                                                label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">สั่งอาหาร</span></Link>,
                                             },
                                             {
                                                 key: 'daily_routine',
                                                 icon: <VscChecklist className="w-5 h-5" />,
-                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="text-white block w-full text-left">รายงานประจำวัน </Link>,
+                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รายงานประจำวัน </span></Link>,
                                             },
                                             // {
                                             //     key: 'fte',
                                             //     icon: <CgPerformance  className="w-5 h-5" />,
-                                            //     label: <Link href="/ipd/fte" onClick={onCloseLeft} className="text-white block w-full text-left">Full-Time Equivalent (FTE)</Link>,
+                                            //     label: <Link href="/ipd/fte" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">Full-Time Equivalent (FTE)</span></Link>,
                                             // },
                                             // {
                                             //     key: 'employee_shift_schedule',
                                             //     icon: <GrSchedulePlay className="w-5 h-5" />,
-                                            //     label: <Link href="/ipd/shift-configs" onClick={onCloseLeft} className="text-white block w-full text-left">ตารางการปฏิบัติงาน</Link>,
+                                            //     label: <Link href="/ipd/shift-configs" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ตารางการปฏิบัติงาน</span></Link>,
                                             // },
                                             {
                                                 key: 'ipd_report',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="#" onClick={onCloseLeft} className="text-white block w-full text-left">รายงาน</Link>,
+                                                label: <Link href="#" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รายงาน</span></Link>,
                                             },
                                             {
                                                 key: 'dashboard',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ipd/dashboard" onClick={onCloseLeft} className="text-white block w-full text-left">Dashboard</Link>,
+                                                label: <Link href="/ipd/dashboard" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">Dashboard</span></Link>,
                                             },
                                         ]
                                     },
@@ -237,22 +237,22 @@ const Navbar = () => {
                                             {
                                                 key: '/ic/opd',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/opd" onClick={onCloseLeft} className="text-white block w-full text-left">OPD Daily</Link>,
+                                                label: <Link href="/ic/opd" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">OPD Daily</span></Link>,
                                             },
                                             {
                                                 key: '/ic/ipd',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/ipd" onClick={onCloseLeft} className="text-white block w-full text-left">IPD Daily</Link>,
+                                                label: <Link href="/ic/ipd" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">IPD Daily</span></Link>,
                                             },
                                             {
                                                 key: '/ic/follow-up',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/follow-up" onClick={onCloseLeft} className="text-white block w-full text-left">ติดตามผู้ป่วยผ่าตัด(T814,A499)</Link>,
+                                                label: <Link href="/ic/follow-up" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ติดตามผู้ป่วยผ่าตัด(T814,A499)</span></Link>,
                                             },
                                             {
                                                 key: '/ic/dashboard',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/dashboard" onClick={onCloseLeft} className="text-white block w-full text-left">IC Dashboard</Link>,
+                                                label: <Link href="/ic/dashboard" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">IC Dashboard</span></Link>,
                                             },
                                         ]
                                     },
@@ -264,7 +264,7 @@ const Navbar = () => {
                                             {
                                                 key: '/er/statistics',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="text-white block w-full text-left">บันทึกข้อมูลสถิติการรักษา</Link>,
+                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">บันทึกข้อมูลสถิติการรักษา</span></Link>,
                                             },
                                         ]
                                     },
@@ -276,7 +276,7 @@ const Navbar = () => {
                                             {
                                                 key: '/or/statistics',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="text-white block w-full text-left">บันทึกข้อมูลสถิติการรักษา</Link>,
+                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">บันทึกข้อมูลสถิติการรักษา</span></Link>,
                                             },
                                         ]
                                     },
@@ -288,7 +288,7 @@ const Navbar = () => {
                                             {
                                                 key: '/chemo/statistics',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/chemo/statistics" onClick={onCloseLeft} className="text-white block w-full text-left">บันทึกข้อมูลสถิติการรักษา</Link>,
+                                                label: <Link href="/chemo/statistics" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">บันทึกข้อมูลสถิติการรักษา</span></Link>,
                                             },
                                         ]
                                     },
