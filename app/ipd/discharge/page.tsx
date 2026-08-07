@@ -135,7 +135,7 @@ export default function DischargePage() {
     { title: 'AN', dataIndex: 'an', key: 'an', width: 100 },
     {
       title: 'ชื่อ-สกุล', dataIndex: 'patient_name', key: 'patient_name',
-      render: t => <span className="font-semibold text-[#006b5f]">{t}</span>,
+      render: t => <span className="font-semibold text-[var(--brand-text)]">{t}</span>,
     },
     { title: 'เตียง', dataIndex: 'bedno', key: 'bedno', width: 80, align: 'center' },
     // {
@@ -152,7 +152,7 @@ export default function DischargePage() {
     },
     {
       title: 'วันนอน (LOS)', dataIndex: 'los', key: 'los', width: 110, align: 'center',
-      render: v => <span className="font-bold text-[#006b5f]">{v} วัน</span>,
+      render: v => <span className="font-bold text-[var(--brand-text)]">{v} วัน</span>,
     },
 
     // { title: 'สถานะ', dataIndex: 'status_name', key: 'status_name', width: 150, render: t => t || '-' },
@@ -177,7 +177,7 @@ export default function DischargePage() {
       <div className="p-6">
         <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <h2 className="text-xl font-bold text-[#006b5f] m-0 whitespace-nowrap">รายชื่อผู้ป่วยที่จำหน่าย</h2>
+            <h2 className="text-xl font-bold text-[var(--brand-text)] m-0 whitespace-nowrap">รายชื่อผู้ป่วยที่จำหน่าย</h2>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
               <Select

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { Button, Spin } from 'antd';
 import dynamic from 'next/dynamic';
 import dayjs from 'dayjs';
@@ -44,7 +44,7 @@ const MEAL_NUMBER: Record<string, number> = {
   dinner: 3,
 };
 
-export default function SummaryOrderPage() {
+function SummaryOrderContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -104,7 +104,7 @@ export default function SummaryOrderPage() {
             ย้อนกลับ
           </Button>
           <div>
-            <span className="font-bold text-[#006b5f]">ใบสรุปรายการอาหารผู้ป่วย</span>
+            <span className="font-bold text-[var(--brand-text)]">ใบสรุปรายการอาหารผู้ป่วย</span>
             <span className="text-gray-400 mx-2">|</span>
             <span className="text-sm text-gray-600">{wardName}</span>
             <span className="text-gray-400 mx-2">·</span>
@@ -128,5 +128,23 @@ export default function SummaryOrderPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * useSearchParams อ่านค่าได้เฉพาะฝั่งเบราว์เซอร์
+ * Next จึงบังคับให้มี Suspense คั่น ไม่งั้นตอน build จะ prerender หน้านี้ไม่ผ่านและหยุดทั้ง build
+ */
+export default function SummaryOrderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <Spin size="large" />
+        </div>
+      }
+    >
+      <SummaryOrderContent />
+    </Suspense>
   );
 }

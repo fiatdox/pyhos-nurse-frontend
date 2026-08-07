@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Drawer, Menu, ConfigProvider } from 'antd';
+import { Drawer, Menu, ConfigProvider, Checkbox, Alert, Spin, Typography, Segmented } from 'antd';
+import { PiSparkleBold, PiListChecksBold, PiMoonBold } from 'react-icons/pi';
+import { useThemeMode, type ThemeMode } from '../lib/theme';
 import {
     VscSignOut,
     VscAccount,
@@ -21,9 +23,18 @@ import { FaShippingFast } from 'react-icons/fa';
 import { RiShareForwardFill, RiSurgicalMaskLine } from 'react-icons/ri';
 import { GiChemicalBolt } from 'react-icons/gi';
 
+interface AiSetting {
+    enabled: boolean;
+    updated_at: string | null;
+    updated_by: string | null;
+    /** ผู้ใช้คนนี้เป็นผู้ดูแลระบบหรือไม่ — เซิร์ฟเวอร์เป็นคนบอก */
+    can_manage: boolean;
+}
+
 const Navbar = () => {
     const [openLeft, setOpenLeft] = useState(false);
     const [openRight, setOpenRight] = useState(false);
+    const { mode, resolved, setMode } = useThemeMode();
     const router = useRouter();
     const pathname = usePathname();
 
@@ -34,6 +45,53 @@ const Navbar = () => {
 
     const showRightDrawer = () => setOpenRight(true);
     const onCloseRight = () => setOpenRight(false);
+
+    /**
+     * ค่าตั้งผู้ช่วย AI ระดับระบบ
+     *
+     * can_manage มาจากเซิร์ฟเวอร์ (ตารางบทบาทใน core_kon) ไม่ได้เดาจากตำแหน่งฝั่งหน้าจอ
+     * และการซ่อนเมนูเป็นแค่ความสะดวก การกันจริงอยู่ที่เซิร์ฟเวอร์ซึ่งตรวจสิทธิ์ทุกครั้งที่บันทึก
+     */
+    const [aiSetting, setAiSetting] = useState<AiSetting | null>(null);
+    const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+    const [aiSaving, setAiSaving] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+
+    const authHeaders = useCallback((): Record<string, string> => {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    }, []);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch('/api/v1/system/ai-setting', { headers: authHeaders() });
+                const json = await res.json();
+                if (json?.success) setAiSetting(json.data);
+            } catch {
+                // อ่านค่าไม่ได้ก็แค่ไม่แสดงเมนู ไม่ต้องรบกวนผู้ใช้
+            }
+        })();
+    }, [authHeaders]);
+
+    const toggleAi = async (enabled: boolean) => {
+        setAiSaving(true);
+        setAiError(null);
+        try {
+            const res = await fetch('/api/v1/system/ai-setting', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                body: JSON.stringify({ enabled }),
+            });
+            const json = await res.json();
+            if (json?.success) setAiSetting(json.data);
+            else setAiError(json?.message || 'บันทึกไม่สำเร็จ');
+        } catch {
+            setAiError('บันทึกไม่สำเร็จ กรุณาลองใหม่');
+        } finally {
+            setAiSaving(false);
+        }
+    };
 
     const handleLogout = async () => {
         const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
@@ -347,12 +405,115 @@ const Navbar = () => {
                            </div>
                         </Link>
 
+                        {/* โหมดสว่าง/มืด — ทุกคนตั้งได้ เป็นความชอบส่วนตัวรายเครื่อง
+                            ไม่ใช่นโยบายระดับระบบแบบสวิตช์ผู้ช่วย AI */}
+                        <div className="p-2 text-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <PiMoonBold className="w-5 h-5 text-white" />
+                                <span>โหมดการแสดงผล</span>
+                            </div>
+                            <Segmented
+                                block
+                                size="small"
+                                value={mode}
+                                onChange={v => setMode(v as ThemeMode)}
+                                options={[
+                                    { value: 'light', label: 'สว่าง' },
+                                    { value: 'dark', label: 'มืด' },
+                                    { value: 'system', label: 'ตามเครื่อง' },
+                                ]}
+                            />
+                            {mode === 'system' && (
+                                <div className="text-xs text-white/60 mt-1">
+                                    ตอนนี้เครื่องตั้งเป็นโหมด{resolved === 'dark' ? 'มืด' : 'สว่าง'}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* เห็นเฉพาะผู้ดูแลระบบ ตามบทบาท ADMIN ใน core_kon */}
+                        {aiSetting?.can_manage && (
+                            <button
+                                onClick={() => setAiDrawerOpen(true)}
+                                className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white w-full text-left"
+                            >
+                                <PiSparkleBold className="w-5 h-5 text-white" />
+                                <span className="flex-1">ผู้ช่วย AI</span>
+                                <span className={`text-xs px-2 py-0.5 rounded ${aiSetting.enabled ? 'bg-emerald-400/30 text-emerald-50' : 'bg-white/10 text-white/60'}`}>
+                                    {aiSetting.enabled ? 'เปิด' : 'ปิด'}
+                                </span>
+                            </button>
+                        )}
+
+                        {aiSetting?.can_manage && (
+                            <Link href="/ipd/care-plan-templates" onClick={onCloseRight}>
+                                <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                    <PiListChecksBold className="w-5 h-5 text-white" />
+                                    <span>แม่แบบแผนการพยาบาล</span>
+                                </div>
+                            </Link>
+                        )}
+
                     </div>
                     <button onClick={handleLogout} className="flex items-center gap-3 p-2 hover:bg-white/10 rounded text-red-100 hover:text-white transition-colors w-full text-left mt-auto">
                         <VscSignOut className="w-5 h-5" />
                         <span>ออกจากระบบ</span>
                     </button>
                 </div>
+            </Drawer>
+
+            {/* ตั้งค่าผู้ช่วย AI — เฉพาะผู้ดูแลระบบ */}
+            <Drawer
+                title="ผู้ช่วย AI"
+                placement="right"
+                size={420}
+                onClose={() => setAiDrawerOpen(false)}
+                open={aiDrawerOpen}
+            >
+                {!aiSetting ? (
+                    <Spin />
+                ) : (
+                    <div className="flex flex-col gap-4">
+                        <Checkbox
+                            checked={aiSetting.enabled}
+                            disabled={aiSaving}
+                            onChange={e => toggleAi(e.target.checked)}
+                        >
+                            <span className="font-semibold">เปิดโหมดผู้ช่วย AI</span>
+                        </Checkbox>
+
+                        <Typography.Text type="secondary" className="text-xs">
+                            เปลี่ยนแล้วมีผลกับทุกคนทันที เพราะเซิร์ฟเวอร์ตรวจค่านี้ทุกครั้งที่มีการเรียกใช้ผู้ช่วย
+                            ไม่ได้จำไว้ตอนเปิดโปรแกรม ปิดแล้วคำขอที่ยิงเข้ามาจะถูกปฏิเสธทันทีแม้หน้าจอจะเปิดค้างอยู่
+                        </Typography.Text>
+
+                        {aiSaving && <Spin size="small" />}
+
+                        {aiError && <Alert type="error" showIcon title={aiError} />}
+
+                        <Alert
+                            type={aiSetting.enabled ? 'success' : 'info'}
+                            showIcon
+                            title={aiSetting.enabled ? 'กำลังเปิดใช้งาน' : 'ปิดใช้งานอยู่'}
+                            description={
+                                aiSetting.enabled
+                                    ? 'ปุ่มช่วยร่างในหน้าแผนการพยาบาลใช้งานได้ ผลที่ได้เป็นร่างที่พยาบาลต้องตรวจแก้ก่อนบันทึกเสมอ'
+                                    : 'ปุ่มช่วยร่างจะไม่แสดงในหน้าแผนการพยาบาล'
+                            }
+                        />
+
+                        {aiSetting.updated_at && (
+                            <Typography.Text type="secondary" className="text-xs">
+                                แก้ไขล่าสุด {new Date(aiSetting.updated_at).toLocaleString('th-TH')}
+                                {aiSetting.updated_by ? ` โดย ${aiSetting.updated_by}` : ''}
+                            </Typography.Text>
+                        )}
+
+                        <Typography.Text type="secondary" className="text-xs">
+                            โมเดลรันในเครือข่ายโรงพยาบาล ข้อมูลที่ส่งมีเฉพาะข้อความทางคลินิก อายุ เพศ และสัญญาณชีพ
+                            ไม่มี HN AN ชื่อ หรือเตียง
+                        </Typography.Text>
+                    </div>
+                )}
             </Drawer>
         </nav>
     )

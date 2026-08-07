@@ -2,14 +2,19 @@
 
 import React, { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
+import { useThemeMode } from '../lib/theme';
+import { registerNurseDark, chartThemeName } from '../lib/echartsTheme';
 
 const ActivityChart = () => {
   const chartRef = useRef<HTMLDivElement>(null);
+  // ธีมของ echarts ตั้งได้แค่ตอน init กราฟจึงต้องสร้างใหม่ทุกครั้งที่สลับโหมด
+  const { resolved } = useThemeMode();
 
   useEffect(() => {
     let chartInstance: echarts.ECharts | null = null;
     if (chartRef.current) {
-      chartInstance = echarts.init(chartRef.current);
+      registerNurseDark(echarts);
+      chartInstance = echarts.init(chartRef.current, chartThemeName(resolved === 'dark'));
       const option: echarts.EChartsOption = {
         tooltip: {
           trigger: 'axis',
@@ -70,7 +75,7 @@ const ActivityChart = () => {
       chartInstance?.dispose();
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [resolved]);
 
   return (
     <div className="w-full mt-6 p-6 bg-white rounded-2xl shadow-sm border border-slate-100">

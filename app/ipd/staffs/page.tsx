@@ -228,7 +228,7 @@ export default function StaffsPage() {
             <div className="p-6 max-w-5xl mx-auto">
                 <Card className="shadow-xl rounded-2xl border-none">
                     <div className="flex items-center justify-between mb-6">
-                        <Title level={4} className="text-[#006b5f]! mb-0! flex items-center gap-2">
+                        <Title level={4} className="text-[var(--brand-text)]! mb-0! flex items-center gap-2">
                             <VscOrganization className="w-6 h-6" />
                             จัดการเจ้าหน้าที่
                         </Title>
@@ -261,7 +261,7 @@ export default function StaffsPage() {
 
             <Modal
                 title={
-                    <span className="text-[#006b5f] font-semibold flex items-center gap-2">
+                    <span className="text-[var(--brand-text)] font-semibold flex items-center gap-2">
                         <VscOrganization />
                         {editingStaff ? 'แก้ไขข้อมูลเจ้าหน้าที่' : 'เพิ่มเจ้าหน้าที่ใหม่'}
                     </span>

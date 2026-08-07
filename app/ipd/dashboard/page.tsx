@@ -7,6 +7,8 @@ import 'dayjs/locale/th';
 import axios from 'axios';
 import * as echarts from 'echarts';
 import Navbar from '../../components/Navbar';
+import { useThemeMode } from '../../lib/theme';
+import { registerNurseDark, chartThemeName } from '../../lib/echartsTheme';
 import {
   PiUsersThreeBold,
   PiUserPlusBold,
@@ -133,15 +135,21 @@ const CARE_LEVEL_COLORS: Record<number, string> = {
  */
 function ensureChart(
   el: HTMLDivElement,
-  ref: { current: echarts.ECharts | null }
+  ref: { current: echarts.ECharts | null },
+  themeName?: string
 ): echarts.ECharts {
+  registerNurseDark(echarts);
   const bound = echarts.getInstanceByDom(el);
-  if (bound) {
+  // ธีมของ echarts ตั้งได้แค่ตอน init เปลี่ยนทีหลังไม่ได้
+  // พอผู้ใช้สลับโหมด จึงต้องทิ้ง instance เดิมแล้วสร้างใหม่ ไม่งั้นกราฟจะค้างธีมเก่า
+  if (bound && el.dataset.chartTheme === (themeName ?? 'light')) {
     ref.current = bound;
     return bound;
   }
+  bound?.dispose();
   ref.current?.dispose();
-  const chart = echarts.init(el);
+  const chart = echarts.init(el, themeName);
+  el.dataset.chartTheme = themeName ?? 'light';
   ref.current = chart;
   return chart;
 }
@@ -172,6 +180,10 @@ export default function DashboardPage() {
   const [shiftSeverity, setShiftSeverity] = useState<ShiftSeverityData | null>(null);
   const [bedOccupancy, setBedOccupancy] = useState<BedOccupancy | null>(null);
   const [careLevelFlow, setCareLevelFlow] = useState<CareLevelFlow | null>(null);
+
+  // กราฟวาดลง canvas จึงไม่รับสีจาก CSS ต้อง init ใหม่พร้อมธีมทุกครั้งที่สลับโหมด
+  const { resolved } = useThemeMode();
+  const chartTheme = chartThemeName(resolved === 'dark');
 
   const mainChartRef = useRef<HTMLDivElement>(null);
   const pieChartRef = useRef<HTMLDivElement>(null);
@@ -260,7 +272,7 @@ export default function DashboardPage() {
   // --- Main Chart (Stacked Bar + Line) ---
   useEffect(() => {
     if (!mainChartRef.current) return;
-    const chart = ensureChart(mainChartRef.current, mainChartInstance);
+    const chart = ensureChart(mainChartRef.current, mainChartInstance, chartTheme);
 
     if (dailyData.length === 0) {
       chart.setOption(emptyOption(), true);
@@ -350,12 +362,12 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [dailyData]);
+  }, [dailyData, chartTheme]);
 
   // --- Pie Chart (สัดส่วนประเภทผู้ป่วย) ---
   useEffect(() => {
     if (!pieChartRef.current) return;
-    const chart = ensureChart(pieChartRef.current, pieChartInstance);
+    const chart = ensureChart(pieChartRef.current, pieChartInstance, chartTheme);
 
     if (!summary) {
       chart.setOption(emptyOption(), true);
@@ -404,12 +416,12 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [summary]);
+  }, [summary, chartTheme]);
 
   // --- Nurse Workload Chart (Horizontal Bar) ---
   useEffect(() => {
     if (!nurseChartRef.current) return;
-    const chart = ensureChart(nurseChartRef.current, nurseChartInstance);
+    const chart = ensureChart(nurseChartRef.current, nurseChartInstance, chartTheme);
 
     if (nurseWorkload.length === 0) {
       chart.setOption(emptyOption('ยังไม่มีการจัดเวรในช่วงเวลาที่เลือก'), true);
@@ -525,12 +537,12 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [nurseWorkload]);
+  }, [nurseWorkload, chartTheme]);
 
   // --- Gauge Chart (สัดส่วนภาระงาน) ---
   useEffect(() => {
     if (!gaugeChartRef.current) return;
-    const chart = ensureChart(gaugeChartRef.current, gaugeChartInstance);
+    const chart = ensureChart(gaugeChartRef.current, gaugeChartInstance, chartTheme);
 
     if (!summary) {
       chart.setOption(emptyOption(), true);
@@ -629,12 +641,12 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [summary]);
+  }, [summary, chartTheme]);
 
   // --- Bed Occupancy Ring Chart ---
   useEffect(() => {
     if (!bedChartRef.current) return;
-    const chart = ensureChart(bedChartRef.current, bedChartInstance);
+    const chart = ensureChart(bedChartRef.current, bedChartInstance, chartTheme);
 
     if (!bedOccupancy) {
       chart.setOption(emptyOption(), true);
@@ -697,12 +709,12 @@ export default function DashboardPage() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [bedOccupancy]);
+  }, [bedOccupancy, chartTheme]);
 
   // --- Radar Chart (Shift Distribution) ---
   useEffect(() => {
     if (!radarChartRef.current) return;
-    const chart = ensureChart(radarChartRef.current, radarChartInstance);
+    const chart = ensureChart(radarChartRef.current, radarChartInstance, chartTheme);
 
     if (nurseWorkload.length === 0 || !summary) {
       chart.setOption(emptyOption('ยังไม่มีการจัดเวรในช่วงเวลาที่เลือก'), true);
@@ -757,12 +769,12 @@ export default function DashboardPage() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [nurseWorkload, summary]);
+  }, [nurseWorkload, summary, chartTheme]);
 
   // --- Severity Level Chart ---
   useEffect(() => {
     if (!severityChartRef.current) return;
-    const chart = ensureChart(severityChartRef.current, severityChartInstance);
+    const chart = ensureChart(severityChartRef.current, severityChartInstance, chartTheme);
 
     const days = shiftSeverity?.days ?? [];
     const levelRefs = shiftSeverity?.severityLevels ?? [];
@@ -877,12 +889,12 @@ export default function DashboardPage() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [shiftSeverity]);
+  }, [shiftSeverity, chartTheme]);
 
   // --- Sankey: การเปลี่ยนระดับการดูแลข้ามเวร ---
   useEffect(() => {
     if (!sankeyChartRef.current) return;
-    const chart = ensureChart(sankeyChartRef.current, sankeyChartInstance);
+    const chart = ensureChart(sankeyChartRef.current, sankeyChartInstance, chartTheme);
 
     const nodes = careLevelFlow?.nodes ?? [];
     const links = careLevelFlow?.links ?? [];
@@ -961,7 +973,7 @@ export default function DashboardPage() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [careLevelFlow]);
+  }, [careLevelFlow, chartTheme]);
 
   // --- Cleanup Charts ---
   useEffect(() => {
@@ -983,7 +995,7 @@ export default function DashboardPage() {
   const isOverStandard = ratio != null && summary != null ? ratio > summary.standardRatio : false;
 
   return (
-    <div className="bg-slate-100 min-h-screen font-sans">
+    <div className="bg-slate-100 dark:bg-[#141414] min-h-screen font-sans">
       <Navbar />
 
       {/* ── Hero Header ── */}
@@ -1102,9 +1114,9 @@ export default function DashboardPage() {
 
             {/* ── Sankey: การเปลี่ยนระดับการดูแลข้ามเวร ── */}
             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white">
-                <PiArrowsLeftRightBold className="text-[#006b5f] text-base shrink-0" />
-                <span className="font-bold text-[#006b5f] text-sm leading-tight">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f]">
+                <PiArrowsLeftRightBold className="text-[var(--brand-text)] text-base shrink-0" />
+                <span className="font-bold text-[var(--brand-text)] text-sm leading-tight">
                   การเปลี่ยนระดับการดูแลข้ามเวร (ดึก → เช้า → บ่าย)
                 </span>
                 {careLevelFlow && careLevelFlow.totalTransitions > 0 && (
@@ -1130,9 +1142,9 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Workload */}
               <div className="lg:col-span-2 bg-white rounded-2xl shadow-md overflow-hidden">
-                <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white">
-                  <PiClockBold className="text-[#006b5f] text-lg shrink-0" />
-                  <span className="font-bold text-[#006b5f] text-sm">สรุปชั่วโมงการทำงานรายบุคคล — {wardName}</span>
+                <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f]">
+                  <PiClockBold className="text-[var(--brand-text)] text-lg shrink-0" />
+                  <span className="font-bold text-[var(--brand-text)] text-sm">สรุปชั่วโมงการทำงานรายบุคคล — {wardName}</span>
                 </div>
                 <div className="p-4">
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-gray-400">
@@ -1172,7 +1184,7 @@ export default function DashboardPage() {
                               <td className="px-2 py-2 text-center">
                                 {n.otHours > 0 ? <span className="text-orange-500 font-bold">{n.otHours}</span> : <span className="text-gray-300">-</span>}
                               </td>
-                              <td className={`px-2 py-2 text-center font-bold ${over ? 'text-red-500' : 'text-[#006b5f]'}`}>{n.totalHours}</td>
+                              <td className={`px-2 py-2 text-center font-bold ${over ? 'text-red-500' : 'text-[var(--brand-text)]'}`}>{n.totalHours}</td>
                               <td className="px-2 py-2 text-center text-gray-600">{n.patientLoad}</td>
                               <td className="px-2 py-2 text-center">
                                 <Tag color={over ? 'red' : 'green'} className="m-0 font-semibold text-xs">{over ? 'เกิน' : 'ปกติ'}</Tag>
@@ -1216,9 +1228,9 @@ export default function DashboardPage() {
                       { label: 'จำหน่าย', total: summary.totalDischarge, tag: <Tag color="orange" className="text-xs">Discharge</Tag> },
                     ].map((row, i) => (
                       <tr key={i} className="border-b border-gray-100 hover:bg-teal-50/30 transition-colors">
-                        <td className={`px-4 py-3 ${row.bold ? 'font-bold text-[#006b5f]' : 'font-medium text-gray-700'}`}>{row.label}</td>
-                        <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[#006b5f]' : ''}`}>{row.total}</td>
-                        <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[#006b5f]' : ''}`}>
+                        <td className={`px-4 py-3 ${row.bold ? 'font-bold text-[var(--brand-text)]' : 'font-medium text-gray-700'}`}>{row.label}</td>
+                        <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[var(--brand-text)]' : ''}`}>{row.total}</td>
+                        <td className={`px-4 py-3 text-center ${row.bold ? 'font-bold text-[var(--brand-text)]' : ''}`}>
                           {row.avg ?? (row.total / (summary.days || 1)).toFixed(1)}
                         </td>
                         <td className="px-4 py-3 text-center">{row.tag}</td>
@@ -1232,7 +1244,7 @@ export default function DashboardPage() {
                     <tr className="bg-teal-50/50">
                       <td className="px-4 py-3.5 font-bold text-gray-800">ภาระงาน / พยาบาล 1 คน</td>
                       <td className="px-4 py-3.5 text-center font-bold text-lg" colSpan={2}>
-                        <span className={isOverStandard ? 'text-red-500' : 'text-[#006b5f]'}>1 : {workloadPerNurse}</span>
+                        <span className={isOverStandard ? 'text-red-500' : 'text-[var(--brand-text)]'}>1 : {workloadPerNurse}</span>
                         <span className="text-gray-400 text-xs ml-2">(มาตรฐาน 1:{summary.standardRatio})</span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
@@ -1271,7 +1283,7 @@ function StatCard({
 }) {
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl p-4 text-white shadow-md transition-all hover:shadow-xl hover:-translate-y-0.5 ${highlight ? 'ring-2 ring-red-400 ring-offset-2' : ''}`}
+      className={`relative overflow-hidden rounded-2xl p-4 text-white shadow-md transition-all hover:shadow-xl hover:-translate-y-0.5 ${highlight ? 'ring-2 ring-red-400 ring-offset-2 dark:ring-offset-[#141414]' : ''}`}
       style={{ background: `linear-gradient(135deg, ${color}ee, ${color}99)` }}
     >
       <div className="absolute -right-3 -bottom-3 text-7xl opacity-15">{icon}</div>
@@ -1296,9 +1308,9 @@ function ChartCard({
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white">
-        <span className="text-[#006b5f] text-base shrink-0">{icon}</span>
-        <span className="font-bold text-[#006b5f] text-sm leading-tight">{title}</span>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f]">
+        <span className="text-[var(--brand-text)] text-base shrink-0">{icon}</span>
+        <span className="font-bold text-[var(--brand-text)] text-sm leading-tight">{title}</span>
       </div>
       <div className="p-3">{children}</div>
     </div>

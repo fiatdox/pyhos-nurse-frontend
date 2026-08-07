@@ -381,7 +381,7 @@ export default function PatientList() {
             <Avatar style={{ backgroundColor: '#006b5f', flexShrink: 0 }} size="small">
               {displayName?.charAt(0) || '?'}
             </Avatar>
-            <span className="font-semibold text-[#006b5f]">{displayName}</span>
+            <span className="font-semibold text-[var(--brand-text)]">{displayName}</span>
           </div>
         );
       }
@@ -416,7 +416,7 @@ export default function PatientList() {
           <Dropdown
             menu={{
               items: [
-                { key: 'admit', icon: <PiClipboardTextBold className="text-[#006b5f] text-base" />, label: 'การบันทึกการรับผู้ป่วย' },
+                { key: 'admit', icon: <PiClipboardTextBold className="text-[var(--brand-text)] text-base" />, label: 'การบันทึกการรับผู้ป่วย' },
                 { key: 'vital', icon: <PiHeartbeatBold className="text-red-500 text-base" />, label: 'สัญญาณชีพ (Vital Signs)' },
                 { key: 'nursing', icon: <PiNotePencilBold className="text-blue-600 text-base" />, label: 'บันทึกทางการพยาบาล (Progress Notes)' },
                 { key: 'careplan', icon: <PiListChecksBold className="text-green-600 text-base" />, label: 'แผนการพยาบาล (Care Plan)' },
@@ -595,7 +595,7 @@ export default function PatientList() {
         <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div className="flex items-center gap-2 w-full md:w-auto">
-               <h2 className="text-xl font-bold text-[#006b5f] m-0 whitespace-nowrap">รายชื่อผู้ป่วย</h2>
+               <h2 className="text-xl font-bold text-[var(--brand-text)] m-0 whitespace-nowrap">รายชื่อผู้ป่วย</h2>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
@@ -691,7 +691,7 @@ export default function PatientList() {
         >
           {selectedPatient && (
             <div className="space-y-6">
-              <div className="bg-linear-to-r from-teal-50 to-white p-4 rounded-xl border border-teal-100">
+              <div className="bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f] p-4 rounded-xl border border-teal-100">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-[#006b5f] flex items-center justify-center shrink-0">
                     <PiUserBold className="w-7 h-7 text-white" />
@@ -825,7 +825,7 @@ export default function PatientList() {
                       value={`${los} วัน`}
                       readOnly
                       size="medium"
-                      className="bg-teal-50 text-center font-bold text-[#006b5f] border-teal-200"
+                      className="bg-teal-50 text-center font-bold text-[var(--brand-text)] border-teal-200"
                     />
                   </div>
                   <div>
@@ -878,7 +878,7 @@ export default function PatientList() {
         >
           {editPatient && (
             <div className="mb-4 p-4 bg-teal-50 rounded-lg border border-teal-100">
-              <span className="text-lg font-bold text-[#006b5f] block">{editPatient.name || editPatient.patient_name}</span>
+              <span className="text-lg font-bold text-[var(--brand-text)] block">{editPatient.name || editPatient.patient_name}</span>
               <div className="flex gap-4 text-gray-600 mt-1">
                 <span>HN: <strong className="text-gray-800">{editPatient.hn}</strong></span>
                 <span>AN: <strong className="text-gray-800">{editPatient.an}</strong></span>

@@ -126,11 +126,25 @@ export const calcNews2 = (input: News2Input): News2Result => {
 };
 
 export const RISK_STYLE: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  low: { label: 'ความเสี่ยงต่ำ', color: '#15803d', bg: '#f0fdf4', border: '#86efac' },
-  low_medium: { label: 'ต่ำ–ปานกลาง', color: '#a16207', bg: '#fefce8', border: '#fde047' },
-  medium: { label: 'ความเสี่ยงปานกลาง', color: '#c2410c', bg: '#fff7ed', border: '#fdba74' },
-  high: { label: 'ความเสี่ยงสูง', color: '#b91c1c', bg: '#fef2f2', border: '#fca5a5' },
+  // ใช้ var() ของชุดสี Tailwind เพื่อให้พลิกตามโหมดมืดที่นิยามไว้ใน globals.css
+  low: { label: 'ความเสี่ยงต่ำ', color: 'var(--color-green-700)', bg: 'var(--color-green-50)', border: 'var(--color-green-300)' },
+  low_medium: { label: 'ต่ำ–ปานกลาง', color: 'var(--color-yellow-700)', bg: 'var(--color-yellow-50)', border: 'var(--color-yellow-300)' },
+  medium: { label: 'ความเสี่ยงปานกลาง', color: 'var(--color-orange-700)', bg: 'var(--color-orange-50)', border: 'var(--color-orange-300)' },
+  high: { label: 'ความเสี่ยงสูง', color: 'var(--color-red-700)', bg: 'var(--color-red-50)', border: 'var(--color-red-300)' },
 };
+
+/*
+  สีสำหรับกราฟโดยเฉพาะ ต้องเป็น hex จริง ใช้ var() ไม่ได้
+  เพราะ echarts วาดลงบน canvas ซึ่งไม่ผ่านเครื่องมือคำนวณ CSS ของเบราว์เซอร์
+  เลือกโทนที่สว่างพอจะเห็นชัดได้ทั้งพื้นขาวและพื้นดำ จะได้ไม่ต้องแยกสองชุด
+*/
+export const RISK_CHART_COLOR: Record<string, string> = {
+  low: '#52c41a',
+  low_medium: '#fadb14',
+  medium: '#fa8c16',
+  high: '#ff4d4f',
+};
+export const RISK_CHART_FALLBACK = '#8c8c8c';
 
 // ---------- ช่วงค่าปกติตามอายุ ----------
 

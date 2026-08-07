@@ -45,7 +45,7 @@ const moduleNames: Record<string, string> = {
   admit: 'การบันทึกการรับผู้ป่วย',
   vital: 'แบบบันทึกสัญญาณชีพ (Vital Signs Record)',
   nursing: 'บันทึกทางการพยาบาล (Nursing Progress Notes)',
-  careplan: 'แผนการพยาบาล (Nursing Care Plan)',
+  careplan: 'แผนการพยาบาล (Focus list / CNPG)',
   io: 'บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)',
   mar: 'บันทึกการให้ยา (MAR)',
   special: 'บันทึกการดูแลพิเศษ (Special Care Records)',
@@ -71,7 +71,7 @@ export default function NursingRecordPage({ params }: { params: Promise<{ module
       <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
         <div className="text-center p-10 bg-white rounded-2xl shadow-lg border border-gray-100">
           <div className="text-6xl mb-4">🚧</div>
-          <h2 className="text-2xl font-bold text-[#006b5f] mb-2">{name}</h2>
+          <h2 className="text-2xl font-bold text-[var(--brand-text)] mb-2">{name}</h2>
           <p className="text-gray-500 text-lg">AN: <strong>{an}</strong></p>
           <p className="text-gray-400 mt-4">อยู่ระหว่างพัฒนา...</p>
         </div>

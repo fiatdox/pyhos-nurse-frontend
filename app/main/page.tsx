@@ -133,7 +133,7 @@ const Main = () => {
                 >
                   {link.icon}
                 </span>
-                <span className="text-xs font-semibold text-gray-600 leading-tight group-hover:text-[#006b5f]">
+                <span className="text-xs font-semibold text-gray-600 leading-tight group-hover:text-[var(--brand-text)]">
                   {link.label}
                 </span>
               </Link>
@@ -163,7 +163,7 @@ const Main = () => {
                 >
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     {item.pinned && (
-                      <span className="flex items-center gap-1 text-[#006b5f] text-xs font-bold">
+                      <span className="flex items-center gap-1 text-[var(--brand-text)] text-xs font-bold">
                         <PiPushPinFill /> ปักหมุด
                       </span>
                     )}
@@ -188,18 +188,18 @@ const Main = () => {
         {/* ── ลิงก์ไป Dashboard ── */}
         <Link
           href="/ipd/dashboard"
-          className="bg-linear-to-r from-teal-50 to-white border border-teal-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-md"
+          className="bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f] border border-teal-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-md"
         >
           <span className="bg-[#006b5f] text-white p-3 rounded-xl text-xl shrink-0">
             <PiChartBarBold />
           </span>
           <div className="flex-1">
-            <p className="font-bold text-[#006b5f] m-0 text-sm">ดูภาพรวมภาระงานของหอผู้ป่วย</p>
+            <p className="font-bold text-[var(--brand-text)] m-0 text-sm">ดูภาพรวมภาระงานของหอผู้ป่วย</p>
             <p className="text-gray-500 text-xs m-0 mt-0.5">
               สถิติผู้ป่วยรายวัน อัตราครองเตียง ชั่วโมงการทำงาน และระดับความรุนแรงแยกตามเวร
             </p>
           </div>
-          <PiArrowRightBold className="text-[#006b5f] text-lg shrink-0" />
+          <PiArrowRightBold className="text-[var(--brand-text)] text-lg shrink-0" />
         </Link>
       </div>
     </div>

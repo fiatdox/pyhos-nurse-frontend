@@ -15,9 +15,11 @@ import { getUserProfile } from '../../../lib/auth';
 import { newRequestId } from '../../../lib/requestId';
 import {
   calcNews2, checkRange, NEWS2_MIN_AGE, REFERENCE_RANGE, TEMP_RANGE,
-  AGE_GROUP_LABEL, RISK_STYLE,
+  AGE_GROUP_LABEL, RISK_STYLE, RISK_CHART_COLOR, RISK_CHART_FALLBACK,
   type AgeGroup, type Avpu, type RangeVerdict,
 } from '../../../lib/news2';
+import { useThemeMode } from '../../../lib/theme';
+import { registerNurseDark, chartThemeName } from '../../../lib/echartsTheme';
 import { VscSave, VscTrash, VscWarning, VscCheck } from 'react-icons/vsc';
 import { PiHeartbeatBold, PiChartLineBold, PiTableBold, PiGaugeBold, PiClockClockwiseBold, PiUserBold } from 'react-icons/pi';
 
@@ -209,7 +211,7 @@ function News2Panel({ result, applicable, ageKnown, ageYears }: {
 
   const incomplete = result.score === null;
   const style = incomplete
-    ? { label: 'ข้อมูลยังไม่ครบ', color: '#64748b', bg: '#f8fafc', border: '#cbd5e1' }
+    ? { label: 'ข้อมูลยังไม่ครบ', color: 'var(--color-slate-500)', bg: 'var(--color-slate-50)', border: 'var(--color-slate-300)' }
     : RISK_STYLE[result.risk as string];
 
   return (
@@ -217,7 +219,7 @@ function News2Panel({ result, applicable, ageKnown, ageYears }: {
       <div className="flex items-center gap-4">
         <div
           className="shrink-0 w-20 h-20 rounded-xl flex flex-col items-center justify-center border-2"
-          style={{ borderColor: style.border, background: '#fff' }}
+          style={{ borderColor: style.border, background: 'var(--surface)' }}
         >
           <span className="text-[10px] font-semibold text-gray-400 leading-none">NEWS2</span>
           <span className="text-3xl font-black leading-none mt-1" style={{ color: style.color }}>
@@ -254,12 +256,12 @@ function News2Panel({ result, applicable, ageKnown, ageYears }: {
               className="px-2 py-0.5 rounded-md text-[11px] font-semibold border"
               style={
                 p.score === null
-                  ? { background: '#fff', borderColor: '#e5e7eb', color: '#9ca3af' }
+                  ? { background: 'var(--surface)', borderColor: 'var(--color-gray-200)', color: 'var(--color-gray-400)' }
                   : p.score === 0
-                    ? { background: '#fff', borderColor: '#bbf7d0', color: '#16a34a' }
+                    ? { background: 'var(--surface)', borderColor: 'var(--color-green-200)', color: 'var(--color-green-600)' }
                     : p.score >= 3
-                      ? { background: '#fee2e2', borderColor: '#fca5a5', color: '#b91c1c' }
-                      : { background: '#fef9c3', borderColor: '#fde047', color: '#a16207' }
+                      ? { background: 'var(--color-red-100)', borderColor: 'var(--color-red-300)', color: 'var(--color-red-700)' }
+                      : { background: 'var(--color-yellow-100)', borderColor: 'var(--color-yellow-300)', color: 'var(--color-yellow-700)' }
               }
             >
               {p.label} {p.score === null ? '–' : `+${p.score}`}
@@ -279,6 +281,12 @@ function VitalChart({ records, refRange }: {
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<ECharts | null>(null);
+  // echarts วาดลง canvas ไม่ได้รับสีจาก CSS ต้องส่งสีตัวหนังสือ/เส้นแกนเข้าไปเอง
+  // ไม่งั้นพอสลับโหมดมืด ป้ายแกนจะเป็นสีเข้มบนพื้นเข้ม มองไม่เห็นเลย
+  const { resolved } = useThemeMode();
+  const isDark = resolved === 'dark';
+  const axisText = isDark ? '#a6a6a6' : '#666666';
+  const axisLine = isDark ? '#434343' : '#d9d9d9';
 
   const sorted = useMemo(
     () => [...records].sort((a, b) => dayjs(a.record_datetime).unix() - dayjs(b.record_datetime).unix()),
@@ -293,7 +301,17 @@ function VitalChart({ records, refRange }: {
 
     import('echarts').then((echarts) => {
       if (cancelled || !chartRef.current) return;
-      if (!chartInstance.current) chartInstance.current = echarts.init(chartRef.current);
+      registerNurseDark(echarts);
+      const themeName = chartThemeName(isDark);
+      // ธีมตั้งได้แค่ตอน init พอสลับโหมดจึงต้องทิ้งกราฟเดิมแล้วสร้างใหม่
+      if (chartInstance.current && chartRef.current.dataset.chartTheme !== (themeName ?? 'light')) {
+        chartInstance.current.dispose();
+        chartInstance.current = null;
+      }
+      if (!chartInstance.current) {
+        chartInstance.current = echarts.init(chartRef.current, themeName);
+        chartRef.current.dataset.chartTheme = themeName ?? 'light';
+      }
       const chart = chartInstance.current;
 
       const x = sorted.map(r => dayjs(r.record_datetime).format('DD/MM HH:mm'));
@@ -308,12 +326,26 @@ function VitalChart({ records, refRange }: {
 
       chart.setOption({
         tooltip: { trigger: 'axis' },
-        legend: { bottom: 0, textStyle: { fontSize: 11 }, itemWidth: 14 },
+        legend: { bottom: 0, textStyle: { fontSize: 11, color: axisText }, itemWidth: 14 },
         grid: { top: 34, right: 46, bottom: 46, left: 46 },
-        xAxis: { type: 'category', data: x, axisLabel: { fontSize: 10, rotate: 30 } },
+        xAxis: {
+          type: 'category', data: x,
+          axisLabel: { fontSize: 10, rotate: 30, color: axisText },
+          axisLine: { lineStyle: { color: axisLine } },
+        },
         yAxis: [
-          { type: 'value', name: 'T / P / R / BP', min: 0, nameTextStyle: { fontSize: 10 } },
-          { type: 'value', name: 'SpO₂ / NEWS2', position: 'right', min: 0, max: 100, nameTextStyle: { fontSize: 10 } },
+          {
+            type: 'value', name: 'T / P / R / BP', min: 0,
+            nameTextStyle: { fontSize: 10, color: axisText },
+            axisLabel: { color: axisText },
+            splitLine: { lineStyle: { color: axisLine } },
+          },
+          {
+            type: 'value', name: 'SpO₂ / NEWS2', position: 'right', min: 0, max: 100,
+            nameTextStyle: { fontSize: 10, color: axisText },
+            axisLabel: { color: axisText },
+            splitLine: { show: false },
+          },
         ],
         series: [
           {
@@ -358,7 +390,7 @@ function VitalChart({ records, refRange }: {
             itemStyle: {
               color: (p: { dataIndex: number }) => {
                 const risk = sorted[p.dataIndex]?.news2_risk;
-                return risk ? RISK_STYLE[risk]?.border ?? '#cbd5e1' : '#cbd5e1';
+                return (risk ? RISK_CHART_COLOR[risk] : null) ?? RISK_CHART_FALLBACK;
               },
             },
           },
@@ -373,7 +405,7 @@ function VitalChart({ records, refRange }: {
       cancelled = true;
       if (resizeHandler) window.removeEventListener('resize', resizeHandler);
     };
-  }, [sorted, refRange]);
+  }, [sorted, refRange, isDark, axisText, axisLine]);
 
   useEffect(() => () => { chartInstance.current?.dispose(); }, []);
 
@@ -568,7 +600,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
           title: 'บันทึกสัญญาณชีพสำเร็จ',
           html: saved?.score !== null && saved?.score !== undefined
             ? `<div style="font-size:14px">NEWS2 = <b style="color:${risk?.color}">${saved.score}</b> (${risk?.label})<br/>
-               <span style="color:#64748b">วัดซ้ำ ${saved.monitorFreq}</span></div>`
+               <span style="color:var(--color-slate-500)">วัดซ้ำ ${saved.monitorFreq}</span></div>`
             : undefined,
           confirmButtonColor: '#006b5f',
           confirmButtonText: 'ตกลง',

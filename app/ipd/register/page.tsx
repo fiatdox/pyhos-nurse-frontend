@@ -377,7 +377,7 @@ export default function RegisterPage() {
       <Navbar />
       <div className="p-6 max-w-7xl mx-auto">
         <Card className="shadow-xl rounded-2xl border-none mb-6">
-          <Title level={4} className="text-[#006b5f]! mb-6! flex items-center gap-2">
+          <Title level={4} className="text-[var(--brand-text)]! mb-6! flex items-center gap-2">
             ลงทะเบียนรับผู้ป่วย (IPD Register)
           </Title>
 
@@ -428,7 +428,7 @@ export default function RegisterPage() {
         >
           {selectedPatient && (
             <div className="mb-4 p-4 bg-teal-50 rounded-lg border border-teal-100">
-              <Text className="text-lg font-bold text-[#006b5f] block">{selectedPatient.ptname}</Text>
+              <Text className="text-lg font-bold text-[var(--brand-text)] block">{selectedPatient.ptname}</Text>
               <div className="flex gap-4 text-gray-600 mt-1">
                 <span>HN: <strong className="text-gray-800">{selectedPatient.hn}</strong></span>
                 <span>AN: <strong className="text-gray-800">{selectedPatient.an}</strong></span>

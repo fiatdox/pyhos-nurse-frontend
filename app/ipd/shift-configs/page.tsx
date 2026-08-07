@@ -530,12 +530,12 @@ export default function ShiftMatrix() {
 
         <Table.Summary.Row className="bg-teal-50/50 font-bold text-xs shadow-[0_-1px_2px_rgba(0,0,0,0.05)] border-t-2 border-white">
           <Table.Summary.Cell index={0} align="right">
-            <span className="text-[#006b5f] mr-2">รวมคนขึ้นเวร</span>
+            <span className="text-[var(--brand-text)] mr-2">รวมคนขึ้นเวร</span>
           </Table.Summary.Cell>
           {daysArray.map((day, index) => (
             <Table.Summary.Cell key={day} index={index + 1} align="center">
               {dayTotals['total'][day] > 0 ? (
-                <span className="text-[#006b5f]">{dayTotals['total'][day]}</span>
+                <span className="text-[var(--brand-text)]">{dayTotals['total'][day]}</span>
               ) : (
                 <span className="text-gray-400">-</span>
               )}
@@ -547,7 +547,7 @@ export default function ShiftMatrix() {
           <Table.Summary.Cell index={daysInMonth + 4} align="center" className="bg-gray-50 text-gray-500">{grandTotalOFF || '-'}</Table.Summary.Cell>
           <Table.Summary.Cell index={daysInMonth + 5} align="center" className="bg-red-50/50 text-red-600">{grandTotalOT8 || '-'}</Table.Summary.Cell>
           <Table.Summary.Cell index={daysInMonth + 6} align="center" className="bg-red-50/30 text-red-400">{grandTotalOT4 || '-'}</Table.Summary.Cell>
-          <Table.Summary.Cell index={daysInMonth + 7} align="center" className="bg-gray-200 text-[#006b5f] text-[13px]">{grandTotalOverall || '-'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={daysInMonth + 7} align="center" className="bg-gray-200 text-[var(--brand-text)] text-[13px]">{grandTotalOverall || '-'}</Table.Summary.Cell>
         </Table.Summary.Row>
       </Table.Summary>
     );
@@ -584,7 +584,7 @@ export default function ShiftMatrix() {
         <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-4">
-              <Title level={4} className="mb-0! text-[#006b5f]!">
+              <Title level={4} className="mb-0! text-[var(--brand-text)]!">
                 ตารางเวร {currentDate.format('MMMM')} {currentDate.year() + 543}
               </Title>
               <Select
@@ -667,7 +667,7 @@ export default function ShiftMatrix() {
                     : 'กรุณาเลือกวันที่'}
                 </p>
               </div>
-              <div className="bg-teal-50 p-2 rounded-full text-[#006b5f]">
+              <div className="bg-teal-50 p-2 rounded-full text-[var(--brand-text)]">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                   <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
                 </svg>
@@ -729,7 +729,7 @@ export default function ShiftMatrix() {
                               {getShiftIcon(shiftType.code)}
                               {shiftType.name}
                             </span>
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap font-mono ${isChecked ? 'bg-white/60 text-gray-600' : 'bg-gray-100 text-gray-400'}`}>
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap font-mono ${isChecked ? 'bg-white/60 text-gray-600 dark:bg-black/30 dark:text-white' : 'bg-gray-100 text-gray-400'}`}>
                               {shiftType.code}
                             </span>
                           </div>

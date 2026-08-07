@@ -614,7 +614,7 @@ export default function ShiftPatientPage() {
     { title: 'HN',  dataIndex: 'hn',  key: 'hn',  width: 100 },
     { title: 'AN',  dataIndex: 'an',  key: 'an',  width: 100 },
     { title: 'ชื่อ-สกุล', dataIndex: 'name', key: 'name',
-      render: (text) => <span className="font-semibold text-[#006b5f]">{text}</span> },
+      render: (text) => <span className="font-semibold text-[var(--brand-text)]">{text}</span> },
     { title: 'อายุ',         dataIndex: 'age',       key: 'age',       width: 70,  align: 'center' },
     { title: 'หอผู้ป่วย',    dataIndex: 'wardName',  key: 'wardName',  width: 200 },
     { title: 'เตียง',        dataIndex: 'bed',       key: 'bed',       width: 80,  align: 'center' },
@@ -789,7 +789,7 @@ export default function ShiftPatientPage() {
             }}>
             บันทึกเวร
           </Button>
-          <Button size="small" className="text-[#006b5f] border-[#006b5f] flex items-center justify-center gap-1 mx-auto w-full hover:bg-teal-50"
+          <Button size="small" className="text-[var(--brand-text)] border-[#006b5f] flex items-center justify-center gap-1 mx-auto w-full hover:bg-teal-50"
             onClick={() => {
               setSelectedPatient(record);
               setIsHistoryDrawerOpen(true);
@@ -814,7 +814,7 @@ export default function ShiftPatientPage() {
                 <MdOutlineSummarize className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[#006b5f] m-0">สรุปยอดผู้ป่วยรายเวร</h2>
+                <h2 className="text-xl font-bold text-[var(--brand-text)] m-0">สรุปยอดผู้ป่วยรายเวร</h2>
                 <p className="text-sm text-gray-500 m-0">Summary Patient by Shift</p>
               </div>
             </div>
@@ -860,7 +860,7 @@ export default function ShiftPatientPage() {
           {selectedPatient && (
             <div className="space-y-6">
               {/* ── Patient Card ─────────────────────────────────────────── */}
-              <div className="bg-linear-to-r from-teal-50 to-white p-4 rounded-xl border border-teal-100">
+              <div className="bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f] p-4 rounded-xl border border-teal-100">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-[#006b5f] flex items-center justify-center shrink-0">
                     <PiUserBold className="w-7 h-7 text-white" />
@@ -903,7 +903,7 @@ export default function ShiftPatientPage() {
                         {/* Shift selector */}
                         <div className="bg-slate-100 p-4 rounded-xl border border-slate-200">
                           <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                            <PiCalendarCheckBold className="w-5 h-5 text-[#006b5f]" />
+                            <PiCalendarCheckBold className="w-5 h-5 text-[var(--brand-text)]" />
                             เลือกระบุเวรที่ต้องการบันทึก
                           </h4>
                           <div className="grid grid-cols-2 gap-4">
@@ -1146,7 +1146,7 @@ export default function ShiftPatientPage() {
                                 <span className="text-xs text-gray-500 w-36 shrink-0">{label}</span>
                                 <Select className="flex-1" size="small" value={value} onChange={setter}
                                   options={options.map(o => ({ value: o.v, label: o.l }))} />
-                                <span className="text-sm font-bold text-[#006b5f] w-4 text-center">{value}</span>
+                                <span className="text-sm font-bold text-[var(--brand-text)] w-4 text-center">{value}</span>
                               </div>
                             ))}
                           </div>
@@ -1397,7 +1397,7 @@ export default function ShiftPatientPage() {
         >
           {selectedPatient && (
             <div className="space-y-6">
-              <div className="bg-linear-to-r from-teal-50 to-white p-4 rounded-xl border border-teal-100 mb-6">
+              <div className="bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f] p-4 rounded-xl border border-teal-100 mb-6">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-[#006b5f] flex items-center justify-center shrink-0">
                     <PiUserBold className="w-7 h-7 text-white" />
@@ -1418,7 +1418,7 @@ export default function ShiftPatientPage() {
                   color: '#006b5f',
                   content: (
                     <Card size="small" className="shadow-sm border-slate-200 mb-4" title={
-                      <div className="flex justify-between items-center text-[#006b5f]">
+                      <div className="flex justify-between items-center text-[var(--brand-text)]">
                         <span className="font-bold flex items-center gap-1"><PiClockBold /> วันที่ {record.date} (เวร{record.shiftName})</span>
                         <span className="text-xs text-gray-500 font-normal">โดย {record.recorder}</span>
                       </div>

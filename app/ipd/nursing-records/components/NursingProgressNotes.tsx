@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Col,
-  ConfigProvider,
   DatePicker,
   Descriptions,
   Divider,
@@ -27,7 +26,6 @@ import {
   Timeline,
   Tooltip,
   Typography,
-  theme,
 } from 'antd';
 import type { DescriptionsProps } from 'antd';
 import axios from 'axios';
@@ -35,6 +33,7 @@ import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import { getUserProfile } from '../../../lib/auth';
 import { newRequestId } from '../../../lib/requestId';
+import { roleClassOf, roleOf } from '../../../lib/nursingRole';
 import Swal from 'sweetalert2';
 import { VscSave, VscCheck } from 'react-icons/vsc';
 import {
@@ -236,27 +235,6 @@ const SAVE_COOLDOWN_SECONDS = 3;
  * overflowWrap: anywhere กันคำยาวไม่มีเว้นวรรค เช่น รหัสยาหรือข้อความที่วางมา ทะลุกรอบการ์ด
  */
 const WRAP: React.CSSProperties = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' };
-
-/**
- * บทบาทมาจากตำแหน่งจริงใน core_kon ไม่ใช่ที่ผู้ใช้เลือก
- * ต้องให้ผลตรงกับ roleClassOf ฝั่ง backend (src/utils/nursingRecord.ts)
- */
-const AUTHOR_ROLES = [
-  { value: 'professional_nurse', label: 'พยาบาลวิชาชีพ', color: '#16a34a' },
-  { value: 'practical_nurse', label: 'พยาบาลเทคนิค', color: '#0891b2' },
-  { value: 'assistant', label: 'ผู้ช่วยพยาบาล', color: '#ca8a04' },
-  { value: 'other', label: 'ตำแหน่งอื่น', color: '#64748b' },
-];
-const roleOf = (v?: string | null) => AUTHOR_ROLES.find(r => r.value === v);
-
-const ROLE_BY_POSITION: Record<string, string> = {
-  'พยาบาลวิชาชีพ': 'professional_nurse',
-  'พยาบาลเทคนิค': 'practical_nurse',
-  'ผู้ช่วยพยาบาล': 'assistant',
-  'พนักงานช่วยการพยาบาล': 'assistant',
-  'พนักงานช่วยเหลือคนไข้': 'assistant',
-};
-const roleClassOf = (position?: string) => ROLE_BY_POSITION[String(position ?? '').trim()] ?? 'other';
 
 const SHIFTS = [
   { value: 'ดึก', label: 'ดึก 00-08', color: 'purple' },
@@ -531,7 +509,7 @@ function ProgressNotesInner({ an }: { an: string }) {
         <b>กรอบ:</b> ${noteType} · กรอกแล้ว ${filled} ช่อง<br/>
         <b>เวลาเหตุการณ์:</b> ${at}<br/>
         <b>ผู้บันทึก:</b> ${profile?.name ?? '-'}
-        ${editing ? '<br/><span style="color:#b45309">ระบบจะเก็บข้อความฉบับเดิมไว้ในประวัติการแก้ไข</span>' : ''}
+        ${editing ? '<br/><span style="color:var(--color-amber-700)">ระบบจะเก็บข้อความฉบับเดิมไว้ในประวัติการแก้ไข</span>' : ''}
       </div>`,
       showCancelButton: true,
       confirmButtonText: editing ? 'ยืนยันแก้ไข' : 'ยืนยันบันทึก',
@@ -633,7 +611,7 @@ function ProgressNotesInner({ an }: { an: string }) {
           {/* ลายเซ็นต้องเป็นของคนที่เซ็นจริง จึงใช้ชื่อจากบัญชีที่ล็อกอิน พิมพ์แทนกันไม่ได้ */}
           <Flex align="center" gap={8} style={{
             padding: '8px 12px', borderRadius: 6,
-            background: '#f8fafc', border: '1px solid #e2e8f0',
+            background: 'var(--app-bg)', border: '1px solid var(--color-slate-200)',
           }}>
             <PiSealCheckBold style={{ color: BRAND, flexShrink: 0 }} />
             <Text strong>{profile?.name ?? 'ไม่พบบัญชีผู้ใช้'}</Text>
@@ -809,7 +787,7 @@ function ProgressNotesInner({ an }: { an: string }) {
                     >
                       <Flex align="center" gap={6} style={{
                         height: 32, padding: '0 11px', borderRadius: 6,
-                        background: '#f8fafc', border: '1px solid #e2e8f0',
+                        background: 'var(--app-bg)', border: '1px solid var(--color-slate-200)',
                       }}>
                         <PiUserBold style={{ color: '#94a3b8', flexShrink: 0 }} />
                         <Text strong style={{ fontSize: 13, ...WRAP }} ellipsis={{ tooltip: profile?.name }}>
@@ -1161,21 +1139,13 @@ function ProgressNotesInner({ an }: { an: string }) {
 
 export default function NursingProgressNotes({ an }: { an: string }) {
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: theme.defaultAlgorithm,
-        token: { colorPrimary: BRAND, borderRadius: 8 },
-        components: { Card: { headerHeight: 40 } },
-      }}
-    >
-      <App>
-        <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-          <Navbar />
-          <div style={{ padding: 16, maxWidth: 1600, margin: '0 auto' }}>
+    // ธีมและ <App> มาจาก ThemeProvider ที่ layout ระดับราก
+    // ถ้าประกาศ ConfigProvider ซ้ำตรงนี้ หน้าจะถูกล็อกไว้ที่โหมดสว่างเสมอ
+    <div style={{ background: 'var(--app-bg)', minHeight: '100vh' }}>
+      <Navbar />
+      <div style={{ padding: 16, maxWidth: 1600, margin: '0 auto' }}>
             <ProgressNotesInner an={an} />
-          </div>
-        </div>
-      </App>
-    </ConfigProvider>
+      </div>
+    </div>
   );
 }

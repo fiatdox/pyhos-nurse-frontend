@@ -270,7 +270,7 @@ export default function WardStaffPage() {
             <Navbar />
             <div className="p-6 max-w-7xl mx-auto">
                 <Card className="shadow-xl rounded-2xl border-none">
-                    <Title level={4} className="text-[#006b5f]! mb-6! flex items-center gap-2">
+                    <Title level={4} className="text-[var(--brand-text)]! mb-6! flex items-center gap-2">
                         <VscOrganization className="w-6 h-6" />
                         ตั้งค่าเจ้าหน้าที่ประจำหอผู้ป่วย
                     </Title>
@@ -329,7 +329,7 @@ export default function WardStaffPage() {
                                     "
                                     titles={[
                                         <span key="all" className="font-semibold text-gray-600">รายชื่อทั้งหมด</span>,
-                                        <span key="assigned" className="font-bold text-[#006b5f]">ประจำตึกนี้</span>
+                                        <span key="assigned" className="font-bold text-[var(--brand-text)]">ประจำตึกนี้</span>
                                     ]}
                                     locale={{ searchPlaceholder: 'ค้นหาชื่อ...' }}
                                 />

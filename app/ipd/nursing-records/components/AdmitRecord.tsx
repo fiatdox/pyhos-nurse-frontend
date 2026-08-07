@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   Col,
-  ConfigProvider,
   DatePicker,
   Descriptions,
   Divider,
@@ -26,7 +25,6 @@ import {
   Switch,
   Tag,
   Typography,
-  theme,
 } from 'antd';
 import type { DescriptionsProps } from 'antd';
 import axios from 'axios';
@@ -1916,21 +1914,13 @@ function AdmitRecordInner({ an }: { an: string }) {
 
 export default function AdmitRecord({ an }: { an: string }) {
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: theme.defaultAlgorithm,
-        token: { colorPrimary: BRAND, borderRadius: 8 },
-        components: { Card: { headerHeight: 40 } },
-      }}
-    >
-      <App>
-        <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-          <Navbar />
-          <div style={{ padding: 16, maxWidth: 1400, margin: '0 auto' }}>
+    // ธีมและ <App> มาจาก ThemeProvider ที่ layout ระดับราก
+    // ถ้าประกาศ ConfigProvider ซ้ำตรงนี้ หน้าจะถูกล็อกไว้ที่โหมดสว่างเสมอ
+    <div style={{ background: 'var(--app-bg)', minHeight: '100vh' }}>
+      <Navbar />
+      <div style={{ padding: 16, maxWidth: 1400, margin: '0 auto' }}>
             <AdmitRecordInner an={an} />
-          </div>
-        </div>
-      </App>
-    </ConfigProvider>
+      </div>
+    </div>
   );
 }

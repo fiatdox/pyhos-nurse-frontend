@@ -59,33 +59,48 @@ const getCurrentShift = (): string => {
 };
 
 const shiftBg: Record<string, string> = {
-  night: '#e0e7ff',
-  morning: '#dcfce7',
-  afternoon: '#fef3c7',
+  night: 'var(--color-indigo-100)',
+  morning: 'var(--color-green-100)',
+  afternoon: 'var(--color-amber-100)',
 };
 
+/*
+  ใช้ var() ของชุดสี Tailwind แทนค่า hex ตรงๆ
+  เพราะ globals.css นิยามตัวแปรพวกนี้ใหม่ใต้ .dark สีจึงพลิกตามโหมดเอง
+  ถ้าฝัง hex ไว้ ป้ายพวกนี้จะยังขาวจ้าอยู่กลางหน้าจอมืด
+*/
 // สีแต่ละระดับ — index ตาม admission_shift_care_level_id (1-based)
 const careLevelStyles = [
-  { bg: '#dcfce7', text: '#14532d', fte: 0.25 },
-  { bg: '#e0f2fe', text: '#0c4a6e', fte: 0.5  },
-  { bg: '#ffedd5', text: '#7c2d12', fte: 1.0  },
-  { bg: '#fee2e2', text: '#7f1d1d', fte: 1.5  },
+  { bg: 'var(--color-green-100)',  text: 'var(--color-green-900)',  fte: 0.25 },
+  { bg: 'var(--color-sky-100)',    text: 'var(--color-sky-900)',    fte: 0.5  },
+  { bg: 'var(--color-orange-100)', text: 'var(--color-orange-900)', fte: 1.0  },
+  { bg: 'var(--color-red-100)',    text: 'var(--color-red-900)',    fte: 1.5  },
 ];
 
 const movementConfig = [
-  { key: 'newAdmit',    label: 'รับใหม่',  bg: '#ccfbf1', text: '#134e4a' },
-  { key: 'transferIn',  label: 'รับย้าย',  bg: '#ede9fe', text: '#4c1d95' },
-  { key: 'discharge',   label: 'จำหน่าย',  bg: '#ecfccb', text: '#365314' },
-  { key: 'death',       label: 'ตาย',       bg: '#e2e8f0', text: '#1e293b' },
-  { key: 'transferOut', label: 'ย้ายออก',  bg: '#fef3c7', text: '#78350f' },
+  { key: 'newAdmit',    label: 'รับใหม่',  bg: 'var(--color-teal-100)',   text: 'var(--color-teal-900)' },
+  { key: 'transferIn',  label: 'รับย้าย',  bg: 'var(--color-violet-100)', text: 'var(--color-violet-900)' },
+  { key: 'discharge',   label: 'จำหน่าย',  bg: 'var(--color-lime-100)',   text: 'var(--color-lime-900)' },
+  { key: 'death',       label: 'ตาย',       bg: 'var(--color-slate-200)',  text: 'var(--color-slate-900)' },
+  { key: 'transferOut', label: 'ย้ายออก',  bg: 'var(--color-amber-100)',  text: 'var(--color-amber-900)' },
 ];
 
+// สีเข้มสำหรับตัวหนังสือ/ไอคอน — คู่กับ levelBg ที่เป็นพื้นอ่อนของสีเดียวกัน
 const levelColors: Record<number, string> = {
-  1: '#16a34a',
-  2: '#ca8a04',
-  3: '#ea580c',
-  4: '#dc2626',
-  5: '#9333ea',
+  1: 'var(--color-green-600)',
+  2: 'var(--color-amber-600)',
+  3: 'var(--color-orange-600)',
+  4: 'var(--color-red-600)',
+  5: 'var(--color-purple-600)',
+};
+
+// เดิมทำพื้นอ่อนด้วยการต่อ '22' ท้าย hex ซึ่งใช้กับ var() ไม่ได้
+const levelBg: Record<number, string> = {
+  1: 'var(--color-green-100)',
+  2: 'var(--color-amber-100)',
+  3: 'var(--color-orange-100)',
+  4: 'var(--color-red-100)',
+  5: 'var(--color-purple-100)',
 };
 
 const LevelCell = ({ value, onLevelChange, disabled }: { value?: number | null; onLevelChange?: (level: number | null) => void; disabled?: boolean }) => {
@@ -664,7 +679,7 @@ function DailyRoutineContent() {
     <div className="p-4">
       <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex flex-wrap items-center gap-3 mb-4">
-            <h2 className="text-xl font-bold text-[#006b5f] m-0">Daily Routine</h2>
+            <h2 className="text-xl font-bold text-[var(--brand-text)] m-0">Daily Routine</h2>
             <div className="flex items-center gap-2 ml-auto flex-wrap">
               <span className="text-gray-600 text-sm">หอผู้ป่วย:</span>
               <Select value={selectedWard} onChange={setSelectedWard} style={{ width: 180 }}
@@ -692,7 +707,7 @@ function DailyRoutineContent() {
               return (
                 <div
                   key={shiftKey}
-                  style={{ background: isActive ? shiftBg[shiftKey] : '#f8fafc', borderColor: isActive ? '#006b5f' : '#e2e8f0' }}
+                  style={{ background: isActive ? shiftBg[shiftKey] : 'var(--app-bg)', borderColor: isActive ? '#006b5f' : 'var(--color-slate-200)' }}
                   className="flex flex-wrap gap-1 items-center px-2 py-1 rounded-xl border transition-all"
                 >
                   {careLevels.map((level, i) => {
@@ -715,14 +730,14 @@ function DailyRoutineContent() {
                       </div>
                       {key === 'transferIn' && (
                         <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
-                          style={{ background: '#e0f2fe', color: '#0c4a6e' }}>
+                          style={{ background: 'var(--color-sky-100)', color: 'var(--color-sky-900)' }}>
                           <span className="text-[10px] font-medium leading-none">คงอยู่</span>
                           <span className="text-sm font-bold leading-tight">{s ? Number(s.count_remain) : 0}</span>
                         </div>
                       )}
                       {key === 'death' && (
                         <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
-                          style={{ background: '#f1f5f9', color: '#475569' }}>
+                          style={{ background: 'var(--color-slate-100)', color: 'var(--color-slate-600)' }}>
                           <span className="text-[10px] font-medium leading-none">Refer</span>
                           <span className="text-sm font-bold leading-tight">{s ? Number(s.count_refer) : 0}</span>
                         </div>
@@ -731,19 +746,19 @@ function DailyRoutineContent() {
                   ))}
                   {([1, 2, 3, 4, 5] as const).map(n => (
                     <div key={n} className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
-                      style={{ background: levelColors[n] + '22', color: levelColors[n] }}>
+                      style={{ background: levelBg[n], color: levelColors[n] }}>
                       <span className="text-[10px] font-medium leading-none">Lv{n}</span>
                       <span className="text-sm font-bold leading-tight">{s ? Number(s[`severity_${n}`]) : 0}</span>
                     </div>
                   ))}
                   <div className="w-px h-7 bg-gray-200 shrink-0" />
                   <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
-                    style={{ background: '#d1fae5', color: '#064e3b' }}>
+                    style={{ background: 'var(--color-emerald-100)', color: 'var(--color-emerald-900)' }}>
                     <span className="text-[10px] font-medium leading-none">FTE</span>
                     <span className="text-sm font-bold leading-tight">{fte.toFixed(2)}</span>
                   </div>
                   <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
-                    style={{ background: '#fce7f3', color: '#831843' }}>
+                    style={{ background: 'var(--color-pink-100)', color: 'var(--color-pink-900)' }}>
                     <span className="text-[10px] font-medium leading-none">Product</span>
                     <span className="text-sm font-bold leading-tight">—</span>
                   </div>
@@ -752,7 +767,7 @@ function DailyRoutineContent() {
                       <span className="text-[7px] bg-[#006b5f] text-white px-1 rounded-full leading-tight">เวรนี้</span>
                     )}
                     <span className="text-base">{shiftIconMap[shiftKey]}</span>
-                    <span className={`text-sm font-bold ${isActive ? 'text-[#006b5f]' : 'text-gray-400'}`}>{shiftLabel}</span>
+                    <span className={`text-sm font-bold ${isActive ? 'text-[var(--brand-text)]' : 'text-gray-400'}`}>{shiftLabel}</span>
                   </div>
                 </div>
               );
@@ -785,18 +800,18 @@ function DailyRoutineContent() {
         okText="ยืนยัน"
         cancelText="ยกเลิก"
         okButtonProps={{ style: { backgroundColor: '#006b5f', borderColor: '#006b5f' } }}
-        title={<span className="text-[#006b5f] font-semibold">ดึงข้อมูลเวรก่อนหน้า</span>}
+        title={<span className="text-[var(--brand-text)] font-semibold">ดึงข้อมูลเวรก่อนหน้า</span>}
         width={640}
       >
         {modalTargetShift && modalPrevInfo && (
           <div className="space-y-3">
             <p className="text-gray-700">
               คุณต้องการใช้ข้อมูลเดียวกันกับ{' '}
-              <span className="font-semibold text-[#006b5f]">
+              <span className="font-semibold text-[var(--brand-text)]">
                 วันที่ {modalPrevInfo.date.format('D/M/YYYY')} เวร {modalPrevInfo.label}
               </span>{' '}
               มาใช้กับเวร{' '}
-              <span className="font-semibold text-[#006b5f]">
+              <span className="font-semibold text-[var(--brand-text)]">
                 {shiftLabelMap[modalTargetShift]} {selectedDate.format('D/M/YYYY')}
               </span>{' '}
               ใช่หรือไม่?

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import * as echarts from 'echarts';
 import axios from 'axios';
 import { message } from 'antd';
+import { useThemeMode } from '../../lib/theme';
+import { registerNurseDark, chartThemeName } from '../../lib/echartsTheme';
 
 interface DepResult {
   department: string;
@@ -15,6 +17,8 @@ const NestPie = () => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [outerData, setOuterData] = useState<{name: string, value: number}[]>([]);
   const router = useRouter();
+  // ธีมของ echarts ตั้งได้แค่ตอน init กราฟจึงต้องสร้างใหม่ทุกครั้งที่สลับโหมด
+  const { resolved } = useThemeMode();
 
   // ดึงข้อมูลแผนกสำหรับแสดงในวงนอก
   useEffect(() => {
@@ -53,7 +57,8 @@ const NestPie = () => {
     let chartInstance: echarts.ECharts | null = null;
 
     if (chartRef.current) {
-      chartInstance = echarts.init(chartRef.current);
+      registerNurseDark(echarts);
+      chartInstance = echarts.init(chartRef.current, chartThemeName(resolved === 'dark'));
       
       const option = {
         // โทนสี 30 สี
@@ -111,7 +116,7 @@ const NestPie = () => {
       chartInstance?.dispose();
       window.removeEventListener('resize', handleResize);
     };
-  }, [outerData]);
+  }, [outerData, resolved]);
 
   return (
     <div ref={chartRef} style={{ width: '100%', height: '100%', minHeight: '400px' }} />

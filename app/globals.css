@@ -10,9 +10,30 @@
   สีลิงก์ที่ Navbar ด้วยการย้ายคลาสสีไปไว้ที่ <span> ลูกแทน ซึ่งกฎ a{color} ของ antd เอื้อมไม่ถึง
 */
 
+/*
+  โหมดมืดสั่งด้วยคลาส .dark ที่ <html> ไม่ใช่ตาม prefers-color-scheme อย่างเดียว
+  เพราะผู้ใช้ต้องสั่งทับเครื่องตัวเองได้ (พยาบาลเวรดึกอยากมืดทั้งที่เครื่องตั้งสว่างไว้)
+  ThemeProvider เป็นคนใส่/ถอดคลาสนี้ ส่วนโหมด "ตามระบบ" ก็แปลงเป็นคลาสเดียวกัน
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* พื้นหลังของหน้า / การ์ด / แถบอ่อน — ใช้แทนสี hex ที่เคยฝังใน style={{}} */
+  --app-bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-muted: #fafafa;
+
+  /*
+    เขียวแบรนด์มีสองบทบาท ต้องแยกตัวแปรกัน
+      --brand      = ใช้เป็นพื้น มีตัวหนังสือขาวทับอยู่ ค่าเดิมได้ทั้งสองโหมด
+      --brand-text = ใช้เป็นตัวหนังสือ/ไอคอนบนพื้นการ์ด ในโหมดมืดต้องสว่างขึ้น
+    ถ้าใช้ #006b5f เป็นตัวหนังสือบนพื้นเข้ม อัตราส่วนความต่างเหลือ 1.6:1 อ่านไม่ออก
+  */
+  --brand: #006b5f;
+  --brand-text: #006b5f;
 }
 
 :root {
@@ -21,11 +42,315 @@
   --font-sans: var(--font-sarabun);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+  Tailwind v4 คอมไพล์ utility เป็น var() เช่น .bg-white { background-color: var(--color-white) }
+  การนิยามตัวแปรพวกนี้ใหม่ใต้ .dark จึงพลิกทุกคลาสที่ใช้อยู่แล้วทั้งโปรเจกต์ในคราวเดียว
+  ไม่ต้องไล่เติม dark: ทีละจุดกว่าเจ็ดร้อยแห่ง
+
+  ไล่โทนกลับด้าน: 50 คือเข้มสุด 900 คือสว่างสุด
+  เพราะโค้ดเดิมใช้เลขน้อย = พื้นหลังอ่อน และเลขมาก = ตัวหนังสือเข้ม
+  ค่าที่เลือกอิงชุดสีโหมดมืดของ antd จะได้กลมกลืนกับคอมโพเนนต์ที่ antd วาดเอง
+*/
+.dark {
+  /* ไม่ใช้ดำสนิท ใช้ #141414 เท่าพื้นหลังโหมดมืดของ antd
+     จะได้ไม่เห็นรอยต่อระหว่างพื้นหน้ากับคอมโพเนนต์ที่ antd วาดเอง */
+  --background: #141414;
+  --foreground: #e8e8e8;
+
+  --app-bg: #141414;
+  --surface: #1f1f1f;
+  --surface-muted: #262626;
+
+  --brand-text: #3fc9b0;
+
+  /*
+    50 = พื้นหน้า (เข้มกว่าการ์ด) · 100 = ชิป/เส้นแบ่ง (สว่างกว่าการ์ด)
+    ต้องคร่อมสีการ์ด #1f1f1f คนละทาง ไม่งั้นเส้นแบ่งกับพื้นการ์ดจะเป็นสีเดียวกัน
+    แล้วขอบเขตของแต่ละกล่องจะหายไปหมด
+  */
+  --color-gray-50: #141414;
+  --color-gray-100: #262626;
+  --color-gray-200: #363636;
+  --color-gray-300: #4a4a4a;
+  --color-gray-400: #8c8c8c;
+  --color-gray-500: #a6a6a6;
+  --color-gray-600: #bfbfbf;
+  --color-gray-700: #d9d9d9;
+  --color-gray-800: #e8e8e8;
+  --color-gray-900: #f5f5f5;
+
+  --color-slate-50: #141414;
+  --color-slate-100: #262626;
+  --color-slate-200: #363636;
+  --color-slate-300: #4a4a4a;
+  --color-slate-400: #8c8c8c;
+  --color-slate-500: #a6a6a6;
+  --color-slate-600: #bfbfbf;
+  --color-slate-700: #d9d9d9;
+  --color-slate-800: #e8e8e8;
+  --color-slate-900: #f5f5f5;
+
+  --color-zinc-50: #141414;
+  --color-zinc-100: #1f1f1f;
+  --color-zinc-200: #303030;
+  --color-zinc-300: #434343;
+  --color-zinc-400: #8c8c8c;
+  --color-zinc-500: #a6a6a6;
+  --color-zinc-600: #bfbfbf;
+  --color-zinc-700: #d9d9d9;
+  --color-zinc-800: #e8e8e8;
+  --color-zinc-900: #f5f5f5;
+
+  --color-neutral-50: #141414;
+  --color-neutral-100: #1f1f1f;
+  --color-neutral-200: #303030;
+  --color-neutral-300: #434343;
+  --color-neutral-400: #8c8c8c;
+  --color-neutral-500: #a6a6a6;
+  --color-neutral-600: #bfbfbf;
+  --color-neutral-700: #d9d9d9;
+  --color-neutral-800: #e8e8e8;
+  --color-neutral-900: #f5f5f5;
+
+  --color-stone-50: #141414;
+  --color-stone-100: #1f1f1f;
+  --color-stone-200: #303030;
+  --color-stone-300: #434343;
+  --color-stone-400: #8c8c8c;
+  --color-stone-500: #a6a6a6;
+  --color-stone-600: #bfbfbf;
+  --color-stone-700: #d9d9d9;
+  --color-stone-800: #e8e8e8;
+  --color-stone-900: #f5f5f5;
+
+  /*
+    สีที่มีความหมาย (เขียว=ปกติ แดง=อันตราย ส้ม=เฝ้าระวัง ฯลฯ) ไม่กลับด้าน
+    เพราะความหมายต้องคงเดิมทุกโหมด แต่ต้องเลื่อนความสว่างทั้งชุด:
+      50-200  = พื้นหลังแถบ/เส้นขอบ  ต้องเข้มพอที่ตัวหนังสือสว่างอ่านออก
+      400-900 = ตัวหนังสือ/ไอคอน      ต้องสว่างพอที่อ่านออกบนพื้นเข้ม
+    ถ้าแก้แค่ 50-100 อย่างเดียว แถบจะเข้มแต่ตัวหนังสือยังเข้มตาม กลายเป็นอ่านไม่ออก
+    ค่าที่ใช้มาจากชุดสีโหมดมืดของ antd จะได้เข้ากับ Tag/Alert ที่ antd วาดเอง
+  */
+
+  /* แดง — อันตราย ค่าผิดปกติ */
+  --color-red-50: #2a1215;
+  --color-red-100: #431418;
+  --color-red-200: #58181c;
+  --color-red-300: #791a1f;
+  --color-red-400: #a61d24;
+  --color-red-500: #d32029;
+  --color-red-600: #d32029;
+  --color-red-700: #e84749;
+  --color-red-800: #f37370;
+  --color-red-900: #f89f9a;
+
+  /* ชมพู/กุหลาบ */
+  --color-rose-50: #291321;
+  --color-rose-100: #40162f;
+  --color-rose-200: #551c3b;
+  --color-rose-300: #75204f;
+  --color-rose-400: #a02669;
+  --color-rose-500: #cb2b83;
+  --color-rose-600: #cb2b83;
+  --color-rose-700: #e0529c;
+  --color-rose-800: #f37fb7;
+  --color-rose-900: #f8a8cc;
+
+  --color-pink-50: #291321;
+  --color-pink-100: #40162f;
+  --color-pink-200: #551c3b;
+  --color-pink-300: #75204f;
+  --color-pink-400: #a02669;
+  --color-pink-500: #cb2b83;
+  --color-pink-600: #cb2b83;
+  --color-pink-700: #e0529c;
+  --color-pink-800: #f37fb7;
+  --color-pink-900: #f8a8cc;
+
+  --color-fuchsia-50: #291321;
+  --color-fuchsia-100: #40162f;
+  --color-fuchsia-200: #551c3b;
+  --color-fuchsia-300: #75204f;
+  --color-fuchsia-400: #a02669;
+  --color-fuchsia-500: #cb2b83;
+  --color-fuchsia-600: #cb2b83;
+  --color-fuchsia-700: #e0529c;
+  --color-fuchsia-800: #f37fb7;
+  --color-fuchsia-900: #f8a8cc;
+
+  /* ส้ม — เฝ้าระวัง */
+  --color-orange-50: #2b1611;
+  --color-orange-100: #441d12;
+  --color-orange-200: #592716;
+  --color-orange-300: #7c3118;
+  --color-orange-400: #aa3e19;
+  --color-orange-500: #d84a1b;
+  --color-orange-600: #d84a1b;
+  --color-orange-700: #e87040;
+  --color-orange-800: #f3956a;
+  --color-orange-900: #f8b692;
+
+  /* เหลืองทอง — รอดำเนินการ */
+  --color-amber-50: #2b2111;
+  --color-amber-100: #443111;
+  --color-amber-200: #594214;
+  --color-amber-300: #7c5914;
+  --color-amber-400: #aa7714;
+  --color-amber-500: #d89614;
+  --color-amber-600: #d89614;
+  --color-amber-700: #e8b339;
+  --color-amber-800: #f3cc62;
+  --color-amber-900: #f8df8b;
+
+  --color-yellow-50: #2b2611;
+  --color-yellow-100: #443b11;
+  --color-yellow-200: #595014;
+  --color-yellow-300: #7c6e14;
+  --color-yellow-400: #aa9514;
+  --color-yellow-500: #d8bd14;
+  --color-yellow-600: #d8bd14;
+  --color-yellow-700: #e8d639;
+  --color-yellow-800: #f3ea62;
+  --color-yellow-900: #f8f48b;
+
+  --color-lime-50: #1f2611;
+  --color-lime-100: #2e3c10;
+  --color-lime-200: #3e4f13;
+  --color-lime-300: #5b8c00;
+  --color-lime-400: #7cb305;
+  --color-lime-500: #8bbb11;
+  --color-lime-600: #8bbb11;
+  --color-lime-700: #a9d134;
+  --color-lime-800: #c9e75d;
+  --color-lime-900: #e4f88b;
+
+  /* เขียว — ปกติ ผ่าน */
+  --color-green-50: #162312;
+  --color-green-100: #1d3712;
+  --color-green-200: #274916;
+  --color-green-300: #306317;
+  --color-green-400: #3c8618;
+  --color-green-500: #49aa19;
+  --color-green-600: #49aa19;
+  --color-green-700: #6abe39;
+  --color-green-800: #8fd460;
+  --color-green-900: #b2e58b;
+
+  --color-emerald-50: #162312;
+  --color-emerald-100: #1d3712;
+  --color-emerald-200: #274916;
+  --color-emerald-300: #306317;
+  --color-emerald-400: #3c8618;
+  --color-emerald-500: #49aa19;
+  --color-emerald-600: #49aa19;
+  --color-emerald-700: #6abe39;
+  --color-emerald-800: #8fd460;
+  --color-emerald-900: #b2e58b;
+
+  /* เขียวน้ำทะเล — สีหลักของระบบ */
+  --color-teal-50: #112123;
+  --color-teal-100: #113536;
+  --color-teal-200: #144848;
+  --color-teal-300: #146262;
+  --color-teal-400: #138585;
+  --color-teal-500: #13a8a8;
+  --color-teal-600: #13a8a8;
+  --color-teal-700: #33bcb7;
+  --color-teal-800: #58d1c9;
+  --color-teal-900: #84e2d8;
+
+  --color-cyan-50: #112123;
+  --color-cyan-100: #113536;
+  --color-cyan-200: #144848;
+  --color-cyan-300: #146262;
+  --color-cyan-400: #138585;
+  --color-cyan-500: #13a8a8;
+  --color-cyan-600: #13a8a8;
+  --color-cyan-700: #33bcb7;
+  --color-cyan-800: #58d1c9;
+  --color-cyan-900: #84e2d8;
+
+  /* น้ำเงิน — ข้อมูล */
+  --color-blue-50: #111a2c;
+  --color-blue-100: #112545;
+  --color-blue-200: #15325b;
+  --color-blue-300: #15417e;
+  --color-blue-400: #1554ad;
+  --color-blue-500: #1668dc;
+  --color-blue-600: #1668dc;
+  --color-blue-700: #3c89e8;
+  --color-blue-800: #65a9f3;
+  --color-blue-900: #8dc5f8;
+
+  --color-sky-50: #111a2c;
+  --color-sky-100: #112545;
+  --color-sky-200: #15325b;
+  --color-sky-300: #15417e;
+  --color-sky-400: #1554ad;
+  --color-sky-500: #1668dc;
+  --color-sky-600: #1668dc;
+  --color-sky-700: #3c89e8;
+  --color-sky-800: #65a9f3;
+  --color-sky-900: #8dc5f8;
+
+  --color-indigo-50: #131629;
+  --color-indigo-100: #161d40;
+  --color-indigo-200: #1c2755;
+  --color-indigo-300: #203175;
+  --color-indigo-400: #263ea0;
+  --color-indigo-500: #2b4acb;
+  --color-indigo-600: #2b4acb;
+  --color-indigo-700: #4f6ee6;
+  --color-indigo-800: #7593f5;
+  --color-indigo-900: #a8c1f8;
+
+  /* ม่วง */
+  --color-purple-50: #1a1325;
+  --color-purple-100: #24163a;
+  --color-purple-200: #301c4d;
+  --color-purple-300: #3e2069;
+  --color-purple-400: #51258f;
+  --color-purple-500: #642ab5;
+  --color-purple-600: #642ab5;
+  --color-purple-700: #854eca;
+  --color-purple-800: #ab7ae0;
+  --color-purple-900: #cda8f0;
+
+  --color-violet-50: #1a1325;
+  --color-violet-100: #24163a;
+  --color-violet-200: #301c4d;
+  --color-violet-300: #3e2069;
+  --color-violet-400: #51258f;
+  --color-violet-500: #642ab5;
+  --color-violet-600: #642ab5;
+  --color-violet-700: #854eca;
+  --color-violet-800: #ab7ae0;
+  --color-violet-900: #cda8f0;
+}
+
+/*
+  ขาวเป็นสีเดียวที่พลิกตามโหมดไม่ได้ เพราะโค้ดใช้มันสองความหมายพร้อมกัน
+    - bg-white  = พื้นการ์ด          ต้องกลายเป็นเข้มในโหมดมืด
+    - text-white = ตัวหนังสือบนแถบสีแบรนด์ ต้องขาวจริงทั้งสองโหมด (มี 217 จุด)
+  ทั้งคู่อ่านค่าจาก --color-white ตัวเดียวกัน ถ้าไปทับตัวแปรนั้น
+  ตัวหนังสือบนแถบเขียวจะกลายเป็นเทาเข้มบนเขียว มองไม่เห็น
+  จึงต้องสั่งทับเฉพาะคลาสพื้นหลังแทน แล้วปล่อย text-white ไว้ตามเดิม
+*/
+.dark .bg-white {
+  background-color: var(--surface);
+}
+
+/*
+  เงาใช้ไม่ได้ในโหมดมืด เพราะเงาคือการทำให้พื้นหลังเข้มลง ซึ่งพื้นก็เข้มอยู่แล้ว
+  การ์ดทุกใบจึงลอยไม่ออก กลายเป็นแผ่นสีเดียวยาวๆ ทั้งหน้า
+  แทนที่ด้วยเส้นขอบบางแทน เจาะเฉพาะกล่องที่เป็นการ์ดจริง (มี bg-white คู่กับเงา)
+  จะได้ไม่ไปโดนปุ่มหรือแถบสีแบรนด์ที่ใช้เงาเหมือนกัน
+*/
+.dark .bg-white.shadow-sm,
+.dark .bg-white.shadow-md,
+.dark .bg-white.shadow-lg,
+.dark .bg-white.shadow-xl {
+  box-shadow: 0 0 0 1px var(--color-gray-200);
 }
 
 body {
@@ -36,4 +361,54 @@ body {
 
 .ant-input-number-handler-wrap {
   opacity: 1 !important;
+}
+
+/*
+  SweetAlert วาดกล่องของตัวเองไว้ท้าย <body> และฝังสีขาวมาในไลบรารี
+  ไม่ได้อ่านธีมของ antd หรือคลาสของ Tailwind เลย จึงต้องสั่งทับตรงนี้
+  ทำที่เดียวคุ้มกว่าไล่แก้ 22 ไฟล์ที่เรียก Swal.fire
+*/
+.dark .swal2-popup {
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.dark .swal2-title,
+.dark .swal2-html-container,
+.dark .swal2-label {
+  color: var(--foreground);
+}
+
+.dark .swal2-input,
+.dark .swal2-textarea,
+.dark .swal2-select,
+.dark .swal2-file {
+  background: var(--surface-muted);
+  color: var(--foreground);
+  border-color: var(--color-gray-300);
+  box-shadow: none;
+}
+
+.dark .swal2-input::placeholder,
+.dark .swal2-textarea::placeholder {
+  color: var(--color-gray-500);
+}
+
+.dark .swal2-close {
+  color: var(--color-gray-500);
+}
+
+.dark .swal2-close:hover {
+  color: var(--color-gray-700);
+}
+
+.dark .swal2-validation-message {
+  background: var(--color-red-100);
+  color: var(--color-red-800);
+}
+
+/* ปุ่ม cancel/deny ของ Swal เป็นสีเทาอ่อน จมหายไปกับพื้นเข้ม */
+.dark .swal2-cancel {
+  background-color: var(--color-gray-300) !important;
+  color: var(--foreground) !important;
 }

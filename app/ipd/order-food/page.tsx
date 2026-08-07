@@ -535,7 +535,7 @@ export default function OrderFoodPage() {
           <div className="w-6 h-6 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
             <PiUserBold />
           </div>
-          <span className="font-semibold text-[#006b5f]">{text}</span>
+          <span className="font-semibold text-[var(--brand-text)]">{text}</span>
         </div>
       )
     },
@@ -599,7 +599,7 @@ export default function OrderFoodPage() {
       width: 100,
       align: 'center',
       render: (_, record) => (
-        <Button size="small" type="link" className="text-[#006b5f] flex items-center justify-center gap-1 mx-auto hover:bg-teal-50" onClick={() => openHistoryDrawer(record)}>
+        <Button size="small" type="link" className="text-[var(--brand-text)] flex items-center justify-center gap-1 mx-auto hover:bg-teal-50" onClick={() => openHistoryDrawer(record)}>
           <PiClockBold /> ประวัติ
         </Button>
       )
@@ -658,7 +658,7 @@ export default function OrderFoodPage() {
       dataIndex: 'patient_name',
       key: 'patient_name',
       width: 200,
-      render: (text) => <span className="font-semibold text-[#006b5f]">{text}</span>
+      render: (text) => <span className="font-semibold text-[var(--brand-text)]">{text}</span>
     },
     {
       title: 'มื้อ',
@@ -742,7 +742,7 @@ export default function OrderFoodPage() {
                 <MdOutlineFastfood className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[#006b5f] m-0">ระบบสั่งอาหารผู้ป่วย (Food Order)</h2>
+                <h2 className="text-xl font-bold text-[var(--brand-text)] m-0">ระบบสั่งอาหารผู้ป่วย (Food Order)</h2>
                 <p className="text-sm text-gray-500 m-0">จัดการรายการอาหารผู้ป่วยในตามมื้อและวัน</p>
               </div>
             </div>
@@ -845,7 +845,7 @@ export default function OrderFoodPage() {
                 <Button 
                   icon={<PiCopyBold className="text-lg" />} 
                   onClick={handleCopyLastMeal}
-                  className="text-[#006b5f] border-[#006b5f] hover:bg-teal-50"
+                  className="text-[var(--brand-text)] border-[#006b5f] hover:bg-teal-50"
                 >
                   สั่งเหมือนมื้อล่าสุด
                 </Button>
@@ -948,7 +948,7 @@ export default function OrderFoodPage() {
                               {dayjs(record.orderDate).format('DD/MM/YYYY')} - {meal.label}
                             </span>
                             <br />
-                            <span className="text-[#006b5f] text-sm font-semibold">
+                            <span className="text-[var(--brand-text)] text-sm font-semibold">
                               {record.foodName ?? 'ไม่ระบุเมนู'}
                             </span>
                             {record.addon && (
@@ -970,7 +970,7 @@ export default function OrderFoodPage() {
 
         {/* Copy Last Meal Confirmation Modal */}
         <Modal
-          title={<span className="text-lg font-bold text-[#006b5f]">ยืนยันการสั่งเหมือนมื้อล่าสุด</span>}
+          title={<span className="text-lg font-bold text-[var(--brand-text)]">ยืนยันการสั่งเหมือนมื้อล่าสุด</span>}
           open={isConfirmOpen}
           onCancel={() => {
             setIsConfirmOpen(false);

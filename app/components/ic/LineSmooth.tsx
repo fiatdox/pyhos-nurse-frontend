@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import * as echarts from 'echarts';
 import axios from 'axios';
 import { message, Spin } from 'antd';
+import { useThemeMode } from '../../lib/theme';
+import { registerNurseDark, chartThemeName } from '../../lib/echartsTheme';
 
 interface InfectionResult {
   ResultValue: string;
@@ -17,6 +19,8 @@ const LineSmooth = () => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  // ธีมของ echarts ตั้งได้แค่ตอน init กราฟจึงต้องสร้างใหม่ทุกครั้งที่สลับโหมด
+  const { resolved } = useThemeMode();
 
   useEffect(() => {
     let chartInstance: echarts.ECharts | null = null;
@@ -72,7 +76,8 @@ const LineSmooth = () => {
           });
 
           if (chartRef.current) {
-            chartInstance = echarts.init(chartRef.current);
+            registerNurseDark(echarts);
+            chartInstance = echarts.init(chartRef.current, chartThemeName(resolved === 'dark'));
             const option = {
               tooltip: { trigger: 'item', formatter: '{a} <br/>{b} : <b>{c}</b> ราย' },
               legend: { type: 'scroll', bottom: 0 },
@@ -103,12 +108,12 @@ const LineSmooth = () => {
       chartInstance?.dispose();
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [resolved]);
 
   return (
     <div className="relative w-full h-full min-h-100">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 z-10">
           <Spin />
         </div>
       )}

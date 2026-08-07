@@ -137,7 +137,7 @@ const ScheduleTableAntd = () => {
       key: 'prod1',
       align: 'center',
       width: 80,
-      onCell: () => ({ style: { backgroundColor: '#f0f5ff' } }),
+      onCell: () => ({ style: { backgroundColor: 'var(--color-indigo-50)' } }),
       render: bold,
     },
     {
@@ -156,7 +156,7 @@ const ScheduleTableAntd = () => {
       key: 'total',
       align: 'center',
       width: 60,
-      onCell: () => ({ style: { backgroundColor: '#d9f7be', fontWeight: 'bold' } }),
+      onCell: () => ({ style: { backgroundColor: 'var(--color-green-100)', fontWeight: 'bold' } }),
       render: bold,
     },
     {
@@ -378,7 +378,7 @@ const ScheduleTableAntd = () => {
       <div className="p-6 max-w-full mx-auto">
         <Card className="shadow-xl rounded-2xl border-none">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <Title level={4} className="text-[#006b5f]! m-0">
+            <Title level={4} className="text-[var(--brand-text)]! m-0">
               ตารางเวรและภาระงาน (FTE)
             </Title>
             <div className="flex items-center gap-2">
