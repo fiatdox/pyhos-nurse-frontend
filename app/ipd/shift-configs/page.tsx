@@ -53,6 +53,14 @@ export default function ShiftMatrix() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCell, setEditingCell] = useState<{ empId: number; day: number } | null>(null);
   const [tempShifts, setTempShifts] = useState<string[]>([]);
+  // เจ้าหน้าที่ที่กำลังจัดเวรให้ — ต้องโชว์ชื่อบนหัว modal ไม่งั้นคลิกผิดแถวแล้วไม่รู้ตัว
+  const [editingStaff, setEditingStaff] = useState<StaffRecord | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [savingShift, setSavingShift] = useState(false);
+  // id ของเวรที่มีอยู่จริงในฐานข้อมูล ใช้ตอนล้างเวรทั้งวัน
+  const [existingIds, setExistingIds] = useState<number[]>([]);
+  // ผู้ใช้แตะตัวเลือกไปแล้วหรือยัง — กันข้อมูลที่โหลดมาทีหลังทับสิ่งที่เพิ่งเลือก
+  const [touched, setTouched] = useState(false);
   const [shiftTypes, setShiftTypes] = useState<NurseShiftType[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -154,7 +162,11 @@ export default function ShiftMatrix() {
     // 1. นำข้อมูลเก่าใน state มาแสดงทันทีก่อน เพื่อให้ UI ตอบสนองได้รวดเร็ว (ไม่มีดีเลย์)
     const currentShifts = dutyData[record.id]?.[day] || [];
     setEditingCell({ empId: record.id, day });
+    setEditingStaff(record);
     setTempShifts(currentShifts);
+    setExistingIds([]);
+    setTouched(false);
+    setLoadingDetail(true);
     setIsModalOpen(true);
 
     // 2. เรียก API ดึงข้อมูลล่าสุดจากฐานข้อมูล
@@ -177,9 +189,16 @@ export default function ShiftMatrix() {
         .map((s: any) => s.shift_code)
         .filter(Boolean); // กรองค่าว่างออก
 
+      // เก็บ id ไว้ใช้ตอนล้างเวรทั้งวัน — API ลบรับเป็น id เท่านั้น
+      setExistingIds(resData.map((s: any) => s.shift_assignment_id).filter(Boolean));
+
       // 4. อัปเดตตัวเลือกให้สถานะ Checked ตรงกับข้อมูลที่ดึงมา
-      setTempShifts(fetchedShifts);
-      
+      //    ข้ามถ้าผู้ใช้กดเลือกไปแล้วระหว่างรอ ไม่งั้นสิ่งที่เพิ่งกดจะถูกทับหายไป
+      setTouched(prevTouched => {
+        if (!prevTouched) setTempShifts(fetchedShifts);
+        return prevTouched;
+      });
+
       // 5. (ทางเลือก) อัปเดตตารางหลักไปพร้อมๆ กัน เผื่อข้อมูลในตารางยังไม่อัปเดต
       setDutyData((prev) => ({
         ...prev,
@@ -192,15 +211,54 @@ export default function ShiftMatrix() {
       if (error.response?.status === 404) {
       } else {
       }
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  /**
+   * ล้างเวรของวันนั้นออกทั้งหมด
+   *
+   * เดิมทำไม่ได้เลย เพราะปุ่มบันทึกบังคับว่าต้องเลือกอย่างน้อย 1 รายการ
+   * พอจัดเวรผิดคนหรือผิดวัน จึงได้แค่เปลี่ยนเป็นเวรอื่น เอาออกไม่ได้
+   * ต้องใช้ API ลบแยก เพราะ API บันทึกไม่รับรายการว่าง
+   */
+  const handleClearDay = async () => {
+    if (!editingCell) return;
+    if (existingIds.length === 0) {
+      // ยังไม่เคยบันทึกลงฐานข้อมูล ล้างแค่ตัวเลือกบนจอก็พอ
+      setTempShifts([]);
+      setTouched(true);
+      return;
+    }
+    setSavingShift(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await axios.delete('/api/v1/nurse/nurse-schedules-delete', { headers, data: existingIds });
+      setDutyData((prev) => ({
+        ...prev,
+        [editingCell.empId]: { ...prev[editingCell.empId], [editingCell.day]: [] },
+      }));
+      messageApi.success('ล้างเวรของวันนี้แล้ว');
+      setIsModalOpen(false);
+      setEditingCell(null);
+    } catch {
+      messageApi.error('ล้างเวรไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setSavingShift(false);
     }
   };
 
   const handleModalOk = async () => {
     if (editingCell) {
+      // ไม่เลือกอะไรเลย = ตั้งใจจะเอาเวรออก ส่งไปทางเดียวกับปุ่มล้างเวร
+      // API บันทึกไม่รับรายการว่าง เดิมจึงขึ้นเตือนแล้วตัน ทำอะไรต่อไม่ได้
       if (tempShifts.length === 0) {
-        messageApi.warning('ต้องเลือกอย่างน้อย 1 รายการ');
+        await handleClearDay();
         return;
       }
+      setSavingShift(true);
 
       // 1. จัดเตรียมข้อมูล JSON Payload
       const payload = tempShifts.map(shiftCode => {
@@ -230,6 +288,8 @@ export default function ShiftMatrix() {
           messageApi.error('เกิดข้อผิดพลาดในการบันทึกเวร');
         }
         return; // หาก API Error จะไม่อัปเดตตารางและไม่ปิด Modal
+      } finally {
+        setSavingShift(false);
       }
 
       // 3. อัปเดตข้อมูลบนหน้าจอ (UI) เมื่อบันทึกสำเร็จ
@@ -560,6 +620,41 @@ export default function ShiftMatrix() {
     return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" /></svg>;
   };
 
+  /**
+   * เลือก/ยกเลิกเวรหนึ่งตัว
+   *
+   * เดิมถ้ากดตัวที่ชนกัน (เช่น ช อยู่แล้วกด ช8) จะขึ้นเตือนแล้วไม่ทำอะไร
+   * ผู้ใช้ต้องกดยกเลิกตัวเดิมก่อนแล้วค่อยกดตัวใหม่ ซึ่งเสียเวลาโดยไม่จำเป็น
+   * เปลี่ยนเป็นสลับให้เลย เพราะในเวรเดียวกันเลือกได้แบบเดียวอยู่แล้ว
+   * ส่วน OFF คือไม่ขึ้นเวร จึงอยู่ร่วมกับเวรอื่นไม่ได้ — เดิมเลือกพร้อมกันได้ซึ่งไม่ถูก
+   */
+  const toggleShift = (code: string) => {
+    setTouched(true);
+    const target = shiftTypes.find(t => t.code === code);
+    setTempShifts(prev => {
+      if (prev.includes(code)) return prev.filter(c => c !== code);
+      if (code === 'OFF') return ['OFF'];
+      const sameShift = shiftTypes
+        .filter(t => t.admission_change_shift_type_id === target?.admission_change_shift_type_id)
+        .map(t => t.code);
+      return [...prev.filter(c => c !== 'OFF' && !sameShift.includes(c)), code];
+    });
+  };
+
+  /** จัดกลุ่มตัวเลือกตามเวร (เช้า/บ่าย/ดึก) ให้กวาดตาหาได้เร็วกว่ารายการ 10 ช่องเรียงกันรวด */
+  const shiftGroups = (() => {
+    const sorted = [...shiftTypes].sort((a, b) => a.display_order - b.display_order);
+    const groups: { id: number; label: string; items: NurseShiftType[] }[] = [];
+    const labelOf: Record<number, string> = { 1: 'เวรดึก', 2: 'เวรเช้า', 3: 'เวรบ่าย', 0: 'ไม่ขึ้นเวร' };
+    sorted.forEach(t => {
+      const id = t.admission_change_shift_type_id;
+      const found = groups.find(g => g.id === id);
+      if (found) found.items.push(t);
+      else groups.push({ id, label: labelOf[id] ?? 'อื่นๆ', items: [t] });
+    });
+    return groups;
+  })();
+
   // derive สี/สไตล์จาก code prefix
   const getShiftStyle = (code: string) => {
     if (code === 'OFF') return { colorText: 'text-gray-500', bgCard: 'bg-slate-50', borderCard: 'border-slate-200', bgIcon: 'bg-gray-500' };
@@ -655,85 +750,120 @@ export default function ShiftMatrix() {
             footer={null}
             closable={false}
             centered
-            width="40%"
+            /* เดิมกำหนด 40% ซึ่งบนจอเล็กจะแคบจนกดไม่ถูก และบนจอกว้างมากจะยืดเกินจำเป็น */
+            width={520}
+            style={{ maxWidth: 'calc(100vw - 32px)' }}
+            mask={{ closable: !savingShift }}
             className="[&_.ant-modal-content]:p-0! [&_.ant-modal-content]:rounded-2xl! [&_.ant-modal-content]:overflow-hidden! font-sans"
           >
-            <div className="px-6 py-5 border-b border-gray-100 bg-white flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-gray-800 m-0">เลือกเวรปฏิบัติงาน</h3>
-                <p className="text-sm text-gray-500 m-0 mt-1">
+            {/*
+              หัว modal ต้องบอกว่ากำลังจัดเวรให้ "ใคร"
+              เดิมบอกแต่วันที่ พอคลิกผิดแถวในตารางที่มีเจ้าหน้าที่หลายสิบคน
+              จะไม่มีทางรู้เลยจนกว่าจะบันทึกไปแล้ว
+            */}
+            <div className="px-5 py-4 border-b border-gray-100 bg-white flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-gray-800 m-0 truncate">
+                  {editingStaff?.name ?? 'เลือกเวรปฏิบัติงาน'}
+                </h3>
+                <p className="text-sm text-gray-500 m-0 mt-0.5">
+                  {editingStaff?.position && (
+                    <span className="text-gray-400">{editingStaff.position} · </span>
+                  )}
                   {editingCell
-                    ? `วันที่ ${editingCell.day} ${currentDate.format('MMMM')} ${currentDate.year() + 543}`
+                    ? `${currentDate.date(editingCell.day).format('dddd D MMMM')} ${currentDate.year() + 543}`
                     : 'กรุณาเลือกวันที่'}
                 </p>
               </div>
-              <div className="bg-teal-50 p-2 rounded-full text-[var(--brand-text)]">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                  <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
+              <button
+                onClick={() => setIsModalOpen(false)}
+                disabled={savingShift}
+                aria-label="ปิด"
+                className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-40"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
                 </svg>
-              </div>
+              </button>
             </div>
 
-            <div className="p-6 bg-slate-50/50 max-h-[60vh] overflow-y-auto">
-              <div className="w-full grid grid-cols-3 gap-3">
-                {shiftTypes.map((shiftType) => {
-                  const isChecked = tempShifts.includes(shiftType.code);
-                  const isOff = shiftType.code === 'OFF';
-                  const style = getShiftStyle(shiftType.code);
+            <div className="px-5 py-4 bg-slate-50/50 max-h-[60vh] overflow-y-auto">
+              {/* ต้องเป็น div ไม่ใช่ p เพราะ Spin ของ antd วาดออกมาเป็น div
+                  ซึ่งอยู่ใน p ไม่ได้ตามกฎ HTML แล้วจะทำให้ hydration พัง */}
+              {loadingDetail && (
+                <div className="text-xs text-gray-400 mb-3 flex items-center gap-2">
+                  <Spin size="small" /> กำลังตรวจเวรล่าสุดจากฐานข้อมูล
+                </div>
+              )}
 
+              {/*
+                จัดกลุ่มตามเวร แทนการวางเรียง 10 ช่องรวดเดียว
+                เวรหนึ่งมีทั้งแบบเต็ม OT8 และ OT4 ถ้าไม่แยกกลุ่มจะกวาดตาหาไม่เจอ
+                ว่าอันไหนเป็นพวกเดียวกัน และมองไม่ออกว่าเลือกได้แค่แบบเดียวต่อเวร
+              */}
+              <div className="flex flex-col gap-3">
+                {shiftGroups.map(group => {
+                  const picked = group.items.find(t => tempShifts.includes(t.code));
                   return (
-                    <div
-                      key={shiftType.code}
-                      style={isOff ? { gridColumn: '1 / -1' } : undefined}
-                      onClick={() => {
-                        if (!isChecked) {
-                          // conflict: ห้ามเลือกเวรเดียวกัน (base M/A/N) หลายแบบพร้อมกัน
-                          const sameGroup = shiftTypes
-                            .filter(t => t.code !== shiftType.code && t.admission_change_shift_type_id === shiftType.admission_change_shift_type_id && t.code !== 'OFF')
-                            .map(t => t.code);
-                          const found = sameGroup.find(c => tempShifts.includes(c));
-                          if (found) {
-                            const foundName = shiftTypes.find(t => t.code === found)?.name || found;
-                            messageApi.warning(`ไม่สามารถเลือก ${shiftType.name} และ ${foundName} พร้อมกันได้`);
-                            return;
-                          }
-                        }
-
-                        const newShifts = isChecked
-                          ? tempShifts.filter((s) => s !== shiftType.code)
-                          : [...tempShifts, shiftType.code];
-                        setTempShifts(newShifts);
-                      }}
-                      className={`
-                        relative transition-all duration-200 ease-in-out cursor-pointer
-                        ${isChecked
-                          ? `transform scale-[1.02] ${style.bgCard} ${style.borderCard} shadow-sm`
-                          : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}
-                        border rounded-xl
-                      `}
-                    >
-                      <div className="flex items-center w-full p-2 pl-1 select-none">
-                        <div className={`
-                          w-5 h-5 rounded-full border-2 flex items-center justify-center mr-2 shrink-0 transition-all duration-300
-                          ${isChecked ? `${style.bgIcon} border-transparent scale-110` : 'border-gray-200 bg-gray-50'}
-                        `}>
-                          {isChecked && (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={`font-bold text-base ${style.colorText} flex items-center gap-1`}>
-                              {getShiftIcon(shiftType.code)}
-                              {shiftType.name}
-                            </span>
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap font-mono ${isChecked ? 'bg-white/60 text-gray-600 dark:bg-black/30 dark:text-white' : 'bg-gray-100 text-gray-400'}`}>
-                              {shiftType.code}
-                            </span>
-                          </div>
-                        </div>
+                    <div key={group.id}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-xs font-semibold text-gray-500">{group.label}</span>
+                        {picked && (
+                          <span className="text-[10px] text-gray-400">เลือก {picked.name} แล้ว</span>
+                        )}
+                      </div>
+                      <div className={`grid gap-2 ${group.items.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                        {group.items.map(shiftType => {
+                          const isChecked = tempShifts.includes(shiftType.code);
+                          const style = getShiftStyle(shiftType.code);
+                          return (
+                            <div
+                              key={shiftType.code}
+                              role="checkbox"
+                              aria-checked={isChecked}
+                              tabIndex={0}
+                              onClick={() => toggleShift(shiftType.code)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  toggleShift(shiftType.code);
+                                }
+                              }}
+                              className={`
+                                relative transition-all duration-200 ease-in-out cursor-pointer
+                                focus:outline-none focus:ring-2 focus:ring-[#006b5f]/40
+                                ${isChecked
+                                  ? `${style.bgCard} ${style.borderCard} shadow-sm`
+                                  : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}
+                                border rounded-xl
+                              `}
+                            >
+                              <div className="flex items-center w-full p-2 pl-1 select-none">
+                                <div className={`
+                                  w-5 h-5 rounded-full border-2 flex items-center justify-center mr-2 shrink-0 transition-all duration-300
+                                  ${isChecked ? `${style.bgIcon} border-transparent scale-110` : 'border-gray-200 bg-gray-50'}
+                                `}>
+                                  {isChecked && (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className={`font-bold text-base ${style.colorText} flex items-center gap-1`}>
+                                      {getShiftIcon(shiftType.code)}
+                                      {shiftType.name}
+                                    </span>
+                                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap font-mono ${isChecked ? 'bg-white/60 text-gray-600 dark:bg-black/30 dark:text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                      {shiftType.code}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -741,18 +871,31 @@ export default function ShiftMatrix() {
               </div>
             </div>
 
-            <div className="p-4 border-t border-gray-100 bg-white flex justify-end gap-3 rounded-b-2xl">
+            <div className="p-4 border-t border-gray-100 bg-white flex items-center gap-3 rounded-b-2xl">
+              {/* ล้างเวรทั้งวัน — เดิมทำไม่ได้เลย จัดผิดคนแล้วได้แค่เปลี่ยนเป็นเวรอื่น */}
+              <button
+                onClick={handleClearDay}
+                disabled={savingShift || (tempShifts.length === 0 && existingIds.length === 0)}
+                className="px-3 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                ล้างเวรวันนี้
+              </button>
+              <span className="text-xs text-gray-400 ml-auto hidden sm:inline">
+                {tempShifts.length > 0 ? `เลือกไว้ ${tempShifts.length} รายการ` : 'ยังไม่ได้เลือก'}
+              </span>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white! bg-gray-400 hover:bg-gray-500 transition-colors"
+                disabled={savingShift}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white! bg-gray-400 hover:bg-gray-500 transition-colors disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleModalOk}
-                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white! bg-[#006b5f] hover:bg-[#00554c] shadow-lg shadow-teal-900/20 active:scale-95 transition-all flex items-center gap-2"
+                disabled={savingShift}
+                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white! bg-[#006b5f] hover:bg-[#00554c] shadow-lg shadow-teal-900/20 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60 disabled:active:scale-100"
               >
-                <span>บันทึกข้อมูล</span>
+                <span>{savingShift ? 'กำลังบันทึก' : 'บันทึกข้อมูล'}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>

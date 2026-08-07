@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Select, DatePicker, Table, Radio, InputNumber, Button, Tooltip, Modal, Tag, App, Skeleton, Spin } from 'antd';
+import { Card, Select, DatePicker, Table, Radio, InputNumber, Input, Button, Tooltip, Modal, Tag, App, Skeleton, Spin } from 'antd';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import Navbar from '../../components/Navbar';
-import { PiArrowCounterClockwiseBold } from 'react-icons/pi';
+import { PiArrowCounterClockwiseBold, PiTrashBold } from 'react-icons/pi';
 import { BsMoonStarsFill, BsSunriseFill, BsSunFill } from 'react-icons/bs';
 
 interface CareLevelOption {
@@ -144,6 +144,29 @@ interface ShiftDailyRecord {
   evening_care_level: number | null;
 }
 
+interface PositionGroup {
+  staff_position_id: number;
+  position_name: string;
+  code: string;
+}
+
+interface StaffOnDutyItem {
+  shift_type_id: number;
+  shift_name: string;
+  position_code: string;
+  position_name: string;
+  staff_count: number;
+  ot_count: number;
+}
+
+/* สีประจำตำแหน่ง ไล่จากวิชาชีพสูงสุดลงมา ให้อ่านลำดับได้จากสีโดยไม่ต้องอ่านตัวอักษร */
+const positionStyle: Record<string, { bg: string; text: string }> = {
+  RN:    { bg: 'var(--color-teal-100)',   text: 'var(--color-teal-900)' },
+  TN:    { bg: 'var(--color-sky-100)',    text: 'var(--color-sky-900)' },
+  PN:    { bg: 'var(--color-violet-100)', text: 'var(--color-violet-900)' },
+  OTHER: { bg: 'var(--color-slate-200)',  text: 'var(--color-slate-900)' },
+};
+
 interface PrevShiftRow {
   admission_list_id: number | string;
   an: string;
@@ -171,6 +194,11 @@ function DailyRoutineContent() {
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
   // summary card data keyed by shiftKey (night/morning/afternoon)
   const [shiftSummary, setShiftSummary] = useState<Record<string, ShiftSummaryItem>>({});
+  // บุคลากรที่ขึ้นเวร แยกตามตำแหน่ง — มาจากตารางเวรที่จัดไว้ในหน้า shift-configs
+  const [staffOnDuty, setStaffOnDuty] = useState<StaffOnDutyItem[]>([]);
+  // กลุ่มตำแหน่งทั้งหมด (RN/TN/PN) ดึงมาเพื่อให้แสดงครบทุกกลุ่มแม้เวรนั้นไม่มีคนกลุ่มนั้น
+  // ถ้าโชว์เฉพาะกลุ่มที่มีคน หัวหน้าเวรจะแยกไม่ออกว่า "ไม่มีผู้ช่วยพยาบาล" กับ "ยังไม่ได้จัดเวร"
+  const [positionGroups, setPositionGroups] = useState<PositionGroup[]>([]);
 
   const shiftIdToKey: Record<number, string> = { 1: 'night', 2: 'morning', 3: 'afternoon' };
 
@@ -185,6 +213,11 @@ function DailyRoutineContent() {
       transferOut: Number(s.count_transfer_out),
     };
   };
+
+  // รายการที่กำลังจะยกเลิก — เก็บไว้ระหว่างรอผู้ใช้ยืนยันในหน้าต่างถามเหตุผล
+  const [clearTarget, setClearTarget] = useState<{ record: PatientInfo; shiftKey: string } | null>(null);
+  const [clearReason, setClearReason] = useState('');
+  const [clearing, setClearing] = useState(false);
 
   // Modal state
   const [modalTargetShift, setModalTargetShift] = useState<string | null>(null);
@@ -231,6 +264,65 @@ function DailyRoutineContent() {
     }
   };
 
+  /**
+   * ดึงบุคลากรที่ขึ้นเวรของวอร์ด/วันที่ที่เลือก
+   *
+   * แยกจาก fetchShiftSummary เพราะคนละแหล่ง — ตัวนี้มาจากตารางเวรที่จัดไว้
+   * ในหน้า shift-configs ส่วน summary มาจากการติ๊กระดับการดูแลในหน้านี้
+   * ถ้ายังไม่ได้จัดเวรไว้ จะได้ลิสต์ว่างซึ่งไม่ใช่ข้อผิดพลาด
+   */
+  const fetchStaffOnDuty = async (ward?: string, date?: string) => {
+    const w = ward ?? selectedWard;
+    const d = date ?? selectedDate.format('YYYY-MM-DD');
+    if (!w) return;
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    try {
+      const res = await axios.post('/api/v1/nurse/staff-on-duty', { ward: w, date: d }, { headers });
+      setStaffOnDuty(res.data?.data ?? []);
+    } catch (e) {
+      console.error('Error fetching staff on duty:', e);
+      setStaffOnDuty([]);
+    }
+  };
+
+  /**
+   * รวมบุคลากรของเวรหนึ่ง แสดงครบทุกกลุ่มตำแหน่งเสมอ กลุ่มที่ไม่มีคนขึ้น 0
+   *
+   * แยก "ยังไม่ได้จัดเวร" (ไม่มีข้อมูลเลยทั้งเวร) ออกจาก "จัดแล้วแต่กลุ่มนี้ไม่มีคน"
+   * เพราะสองอย่างนี้ต้องทำคนละเรื่อง — อย่างแรกคือยังไม่ได้ทำงาน
+   * อย่างที่สองคือกำลังคนไม่พอ ซึ่งเป็นข้อมูลที่หัวหน้าเวรต้องเห็น
+   */
+  const dutyOf = (shiftKey: string) => {
+    const onShift = staffOnDuty.filter(r => r.shift_type_id === shiftKeyToId[shiftKey]);
+    const byCode = new Map(onShift.map(r => [r.position_code, r]));
+
+    // กลุ่มที่มีคนขึ้นเวรแต่ไม่อยู่ในทะเบียนกลุ่ม (เช่น OTHER) ต้องไม่หายไป
+    const extra = onShift
+      .filter(r => !positionGroups.some(g => g.code === r.position_code))
+      .map(r => ({ code: r.position_code, name: r.position_name }));
+
+    const rows = [
+      ...positionGroups.map(g => ({ code: g.code, name: g.position_name })),
+      ...extra,
+    ].map(g => {
+      const hit = byCode.get(g.code);
+      return {
+        position_code: g.code,
+        position_name: g.name,
+        staff_count: Number(hit?.staff_count ?? 0),
+        ot_count: Number(hit?.ot_count ?? 0),
+      };
+    });
+
+    return {
+      rows,
+      scheduled: onShift.length > 0,
+      total: rows.reduce((s, r) => s + r.staff_count, 0),
+      ot: rows.reduce((s, r) => s + r.ot_count, 0),
+    };
+  };
+
   const postRecord = async (payload: ReturnType<typeof buildPayload>) => {
     const token = getToken();
     const headers = {
@@ -258,6 +350,45 @@ function DailyRoutineContent() {
     setSavingKeys(prev => new Set([...prev, stateKey]));
     await postRecord(buildPayload(record, shiftKey, levelId, levelScores[stateKey] ?? null));
     setSavingKeys(prev => { const s = new Set(prev); s.delete(stateKey); return s; });
+  };
+
+  /**
+   * ยกเลิกรายการที่ลงผิด เช่น ติ๊กให้ผู้ป่วยที่ไม่ได้อยู่ในเวรนั้น
+   *
+   * ฝั่งเซิร์ฟเวอร์ไม่ได้ลบแถวทิ้ง แต่ทำเครื่องหมายไว้แล้วให้ทุกรายงานข้ามไป
+   * เพราะยอดคงพยาบาลกับ FTE ของเวรนั้นอาจถูกอ้างอิงในรายงานที่ส่งออกไปแล้ว
+   */
+  const clearRecord = async (record: PatientInfo, shiftKey: string, reason: string) => {
+    const stateKey = `${record.admission_list_id}_${shiftKey}`;
+    const token = getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    setSavingKeys(prev => new Set([...prev, stateKey]));
+    try {
+      await axios.delete('/api/v1/patients/admission-shift-daily-records', {
+        headers,
+        data: {
+          admission_list_id: record.admission_list_id,
+          shift_type_id: shiftKeyToId[shiftKey],
+          date: selectedDate.format('YYYY-MM-DD'),
+          reason,
+        },
+      });
+      setRadioSelections(prev => { const n = { ...prev }; delete n[stateKey]; return n; });
+      setLevelScores(prev => { const n = { ...prev }; delete n[stateKey]; return n; });
+      notification.success({ title: 'ยกเลิกรายการแล้ว', duration: 2 });
+      fetchShiftSummary();
+    } catch (e: unknown) {
+      const description = axios.isAxiosError(e)
+        ? e.response?.data?.message ?? 'กรุณาลองใหม่อีกครั้ง'
+        : 'กรุณาลองใหม่อีกครั้ง';
+      console.error('Error clearing record:', e);
+      notification.error({ title: 'ยกเลิกไม่สำเร็จ', description, duration: 3 });
+    } finally {
+      setSavingKeys(prev => { const s = new Set(prev); s.delete(stateKey); return s; });
+    }
   };
 
   const saveLevel = async (record: PatientInfo, shiftKey: string, level: number | null) => {
@@ -387,6 +518,21 @@ function DailyRoutineContent() {
     }
   };
 
+  // กลุ่มตำแหน่งเปลี่ยนไม่บ่อย ดึงครั้งเดียวตอนเปิดหน้าพอ
+  useEffect(() => {
+    const fetchGroups = async () => {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await axios.get('/api/v1/positions/', { headers: { Authorization: `Bearer ${token}` } });
+        setPositionGroups(res.data?.data ?? []);
+      } catch (e) {
+        console.error('Error fetching position groups:', e);
+      }
+    };
+    fetchGroups();
+  }, []);
+
   useEffect(() => {
     const fetchWards = async () => {
       try {
@@ -488,6 +634,7 @@ function DailyRoutineContent() {
     fetchPatients();
     fetchExistingRecords();
     fetchShiftSummary(selectedWard, selectedDate.format('YYYY-MM-DD'));
+    fetchStaffOnDuty(selectedWard, selectedDate.format('YYYY-MM-DD'));
   }, [selectedWard, selectedDate]);
 
   const currentShift = getCurrentShift();
@@ -566,6 +713,33 @@ function DailyRoutineContent() {
               onLevelChange={(level) => saveLevel(record, shiftKey, level)}
               disabled={isBeforeAdmit(record)}
             />
+          );
+        },
+      },
+      {
+        // Radio ของ antd กดซ้ำเพื่อยกเลิกไม่ได้ ถ้าติ๊กผิดเวรจะแก้ไม่ได้เลย
+        // จึงต้องมีปุ่มยกเลิกแยก แสดงเฉพาะแถวที่มีข้อมูลอยู่จริง
+        title: '',
+        key: `clear_${shiftKey}`,
+        align: 'center' as const,
+        width: 40,
+        onCell: dCell,
+        render: (_: unknown, record: PatientInfo) => {
+          const stateKey = `${record.admission_list_id}_${shiftKey}`;
+          if (loadingRecords) return null;
+          const hasData = radioSelections[stateKey] != null || levelScores[stateKey] != null;
+          if (!hasData) return null;
+          return (
+            <Tooltip title={`ยกเลิกรายการเวร${shiftLabelMap[shiftKey]}ของผู้ป่วยรายนี้`}>
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<PiTrashBold />}
+                loading={savingKeys.has(stateKey)}
+                onClick={() => { setClearReason(''); setClearTarget({ record, shiftKey }); }}
+              />
+            </Tooltip>
           );
         },
       },
@@ -704,6 +878,7 @@ function DailyRoutineContent() {
               const fte = calcFte(counts, weight);
               const isActive = shiftKey === currentShift;
               const shiftLabel = shiftLabelMap[shiftKey];
+              const duty = dutyOf(shiftKey);
               return (
                 <div
                   key={shiftKey}
@@ -751,6 +926,54 @@ function DailyRoutineContent() {
                       <span className="text-sm font-bold leading-tight">{s ? Number(s[`severity_${n}`]) : 0}</span>
                     </div>
                   ))}
+                  <div className="w-px h-7 bg-gray-200 shrink-0" />
+                  {/*
+                    บุคลากรที่ขึ้นเวรจริง วางไว้ติดกับ FTE เพราะต้องอ่านคู่กัน
+                    FTE บอกว่าภาระงานเวรนี้ต้องใช้กี่คน ตัวเลขนี้บอกว่ามีจริงกี่คน
+                  */}
+                  {!duty.scheduled ? (
+                    <Tooltip title="ยังไม่ได้จัดเวรของวันนี้ จัดได้ที่หน้าตารางเวร">
+                      <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md min-w-9"
+                        style={{ background: 'var(--color-slate-100)', color: 'var(--color-slate-400)' }}>
+                        <span className="text-[10px] font-medium leading-none whitespace-nowrap">เวร</span>
+                        <span className="text-sm font-bold leading-tight">—</span>
+                      </div>
+                    </Tooltip>
+                  ) : (
+                    <>
+                      {duty.rows.map(r => {
+                        const st = positionStyle[r.position_code] ?? positionStyle.OTHER;
+                        const none = r.staff_count === 0;
+                        return (
+                          <Tooltip
+                            key={r.position_code}
+                            title={`${r.position_name} ${r.staff_count} คน${r.ot_count > 0 ? ` (OT ${r.ot_count} คน)` : ''}`}
+                          >
+                            <div
+                              style={none
+                                ? { background: 'var(--color-slate-100)', color: 'var(--color-slate-400)' }
+                                : { background: st.bg, color: st.text }}
+                              className="flex flex-col items-center px-1.5 py-0.5 rounded-md min-w-9">
+                              <span className="text-[10px] font-medium leading-none whitespace-nowrap">
+                                {r.position_code}
+                              </span>
+                              <span className="text-sm font-bold leading-tight">
+                                {r.staff_count}
+                                {r.ot_count > 0 && <span className="text-[9px] font-medium">+OT</span>}
+                              </span>
+                            </div>
+                          </Tooltip>
+                        );
+                      })}
+                      <Tooltip title={`บุคลากรขึ้นเวร${shiftLabel}รวม ${duty.total} คน${duty.ot > 0 ? ` มี OT ${duty.ot} คน` : ''}`}>
+                        <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md min-w-9"
+                          style={{ background: 'var(--color-indigo-100)', color: 'var(--color-indigo-900)' }}>
+                          <span className="text-[10px] font-medium leading-none whitespace-nowrap">รวมคน</span>
+                          <span className="text-sm font-bold leading-tight">{duty.total}</span>
+                        </div>
+                      </Tooltip>
+                    </>
+                  )}
                   <div className="w-px h-7 bg-gray-200 shrink-0" />
                   <div className="flex flex-col items-center px-1.5 py-0.5 rounded-md w-9"
                     style={{ background: 'var(--color-emerald-100)', color: 'var(--color-emerald-900)' }}>
@@ -844,6 +1067,59 @@ function DailyRoutineContent() {
                 />
               </>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/*
+        ยืนยันก่อนยกเลิกรายการ เพราะตัวเลขนี้ไปโผล่ในรายงานภาระงานของทั้งหอผู้ป่วย
+        เหตุผลไม่บังคับกรอก เพราะกรณีที่พบบ่อยที่สุดคือติ๊กผิดช่องแล้วรีบแก้
+        ถ้าบังคับทุกครั้งจะกลายเป็นพิมพ์มั่วๆ ให้ผ่านไป ซึ่งไม่ได้ช่วยใครเลย
+      */}
+      <Modal
+        open={clearTarget !== null}
+        onCancel={() => setClearTarget(null)}
+        onOk={async () => {
+          if (!clearTarget) return;
+          setClearing(true);
+          await clearRecord(clearTarget.record, clearTarget.shiftKey, clearReason.trim());
+          setClearing(false);
+          setClearTarget(null);
+        }}
+        okText="ยกเลิกรายการ"
+        cancelText="ไม่ใช่ตอนนี้"
+        okButtonProps={{ danger: true, loading: clearing }}
+        title={<span className="font-semibold text-red-600">ยกเลิกรายการที่ลงไว้</span>}
+        width={520}
+        destroyOnHidden
+      >
+        {clearTarget && (
+          <div className="space-y-3">
+            <p className="text-gray-700 mb-0">
+              จะเอาข้อมูลของ{' '}
+              <span className="font-semibold">{clearTarget.record.name}</span>{' '}
+              (เตียง {clearTarget.record.bed || '-'}) ใน{' '}
+              <span className="font-semibold text-[var(--brand-text)]">
+                เวร{shiftLabelMap[clearTarget.shiftKey]} วันที่ {selectedDate.format('D/M/YYYY')}
+              </span>{' '}
+              ออกจากรายงาน
+            </p>
+            <p className="text-xs text-gray-500 mb-0">
+              ยอดคงพยาบาลและ FTE ของเวรนี้จะลดลงตาม หากลงใหม่อีกครั้งตัวเลขจะกลับมาเอง
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                เหตุผล <span className="text-gray-400">(ไม่บังคับ)</span>
+              </label>
+              <Input.TextArea
+                rows={2}
+                maxLength={500}
+                showCount
+                value={clearReason}
+                onChange={e => setClearReason(e.target.value)}
+                placeholder="เช่น ผู้ป่วยไม่ได้อยู่ในเวรนี้ / ติ๊กผิดคน"
+              />
+            </div>
           </div>
         )}
       </Modal>

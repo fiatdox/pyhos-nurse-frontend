@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Drawer, Menu, ConfigProvider, Checkbox, Alert, Spin, Typography, Segmented } from 'antd';
-import { PiSparkleBold, PiListChecksBold, PiMoonBold } from 'react-icons/pi';
+import { PiSparkleBold, PiListChecksBold, PiMoonBold, PiIdentificationBadgeBold } from 'react-icons/pi';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import {
     VscSignOut,
@@ -396,6 +396,12 @@ const Navbar = () => {
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <LiaHospital    className="w-5 h-5 text-white" />
                             <span>ตั้งค่าหอผู้ป่วยปฏิบัติงาน</span>
+                           </div>
+                        </Link>
+                        <Link href="/ipd/positions" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <PiIdentificationBadgeBold className="w-5 h-5 text-white" />
+                            <span>จัดการตำแหน่งบุคลากร</span>
                            </div>
                         </Link>
                         <Link href="#" onClick={onCloseLeft}>

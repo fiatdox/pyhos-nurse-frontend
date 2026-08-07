@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Select, Button, Typography, Transfer, Table } from 'antd';
+import { Card, Select, Button, Typography, Transfer, Table, Tag, Alert } from 'antd';
 import type { GetProp, TableColumnsType, TableProps, TransferProps } from 'antd';
 import axios from 'axios';
 import Navbar from '../../components/Navbar';
@@ -20,14 +20,30 @@ interface Ward {
     his_code: string;
 }
 
-interface Staff {
-    staff_id: number;
+/**
+ * บุคลากรที่เลือกได้ มาจาก core_kon.users โดยตรง ไม่ใช่ตาราง staffs ที่พิมพ์ชื่อเข้าไปเอง
+ * กรองด้วยตำแหน่งที่จับคู่ไว้ในหน้า /ipd/positions ชื่อจึงตรงกับทะเบียนบุคลากรจริงเสมอ
+ */
+interface EligibleStaff {
+    user_id: number;
     fullname: string;
+    position_name: string;
+    major_id: number | null;
+    major_name: string;
+    group_code: string | null;
+}
+
+interface Major {
+    major_id: number;
+    name: string;
+    user_count: number;
 }
 
 interface StaffTransferItem extends TransferItem {
     key: string;
     title: string;
+    groupCode: string | null;
+    majorName: string;
 }
 
 interface TableTransferProps extends TransferProps<TransferItem> {
@@ -82,6 +98,14 @@ const columns: TableColumnsType<StaffTransferItem> = [
     {
         dataIndex: 'title',
         title: 'ชื่อ-นามสกุล',
+        render: (title: string, item) => (
+            <div className="flex items-center gap-2 min-w-0">
+                <span className="truncate">{title}</span>
+                {item.groupCode && (
+                    <Tag color="cyan" className="m-0 text-[10px] shrink-0">{item.groupCode}</Tag>
+                )}
+            </div>
+        ),
     },
 ];
 
@@ -90,7 +114,12 @@ const filterOption = (input: string, item: StaffTransferItem): boolean =>
 
 export default function WardStaffPage() {
     const [wards, setWards] = useState<Ward[]>([]);
-    const [staffList, setStaffList] = useState<Staff[]>([]);
+    const [staffList, setStaffList] = useState<EligibleStaff[]>([]);
+    const [majors, setMajors] = useState<Major[]>([]);
+    // กรองด้วยกลุ่มงาน เพราะตำแหน่งพยาบาลวิชาชีพอย่างเดียวมี 429 คน
+    // ถ้าไม่กรอง รายการฝั่งซ้ายจะยาวจนหาคนไม่เจอ
+    const [selectedMajor, setSelectedMajor] = useState<number | null>(null);
+    const [noMapping, setNoMapping] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [selectedWard, setSelectedWard] = useState<string | null>(null);
@@ -103,16 +132,14 @@ export default function WardStaffPage() {
                 const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
                 const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-                const [wardRes, staffRes] = await Promise.all([
+                const [wardRes, majorRes] = await Promise.all([
                     axios.get('/api/v1/system/wardsV1', { headers }).catch(() => ({ data: { data: [] } })),
-                    axios.get('/api/v1/staffs/', { headers }).catch(() => ({ data: { data: [] } }))
+                    axios.get('/api/v1/positions/majors', { headers }).catch(() => ({ data: { data: [] } })),
                 ]);
 
                 const fetchedWards = Array.isArray(wardRes.data) ? wardRes.data : wardRes.data.data || [];
                 setWards(fetchedWards);
-
-                const fetchedStaff = Array.isArray(staffRes.data) ? staffRes.data : staffRes.data.data || [];
-                setStaffList(fetchedStaff);
+                setMajors(majorRes.data?.data ?? []);
             } catch (error) {
                 console.error("Error fetching data:", error);
             } finally {
@@ -122,6 +149,33 @@ export default function WardStaffPage() {
 
         fetchData();
     }, []);
+
+    /**
+     * รายชื่อที่เลือกได้ ดึงใหม่ทุกครั้งที่เปลี่ยนกลุ่มงาน
+     * ไม่ดึงมาทั้งหมดแล้วกรองฝั่งเบราว์เซอร์ เพราะทั้งโรงพยาบาลมีบุคลากรพันกว่าคน
+     */
+    useEffect(() => {
+        const fetchEligible = async () => {
+            setLoading(true);
+            try {
+                const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+                const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                const res = await axios.get('/api/v1/positions/eligible-staff', {
+                    headers,
+                    params: selectedMajor ? { major_id: String(selectedMajor) } : {},
+                });
+                setStaffList(res.data?.data ?? []);
+                // ยังไม่ได้จับคู่ตำแหน่งไว้เลย ต้องบอกให้ไปตั้งค่าก่อน ไม่ใช่ปล่อยหน้าว่างเฉยๆ
+                setNoMapping(Boolean(res.data?.message));
+            } catch (error) {
+                console.error('Error fetching eligible staff:', error);
+                setStaffList([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchEligible();
+    }, [selectedMajor]);
 
     const handleSave = async () => {
         if (!selectedWard) {
@@ -159,8 +213,10 @@ export default function WardStaffPage() {
             const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-            const payload = (targetKeys ?? []).map(staffId => ({
-                staff_id: Number(staffId),
+            // ส่ง user_id ของ core_kon ให้เซิร์ฟเวอร์ไปสร้าง/อัปเดตแถวใน staffs เอง
+            // ชื่อกับกลุ่มตำแหน่งจึงมาจากทะเบียนบุคลากรจริง ไม่ใช่ค่าที่หน้าจอส่งไป
+            const payload = (targetKeys ?? []).map(userId => ({
+                user_id: Number(userId),
                 ward: selectedWard
             }));
 
@@ -242,14 +298,35 @@ export default function WardStaffPage() {
 
             const response = await axios.get(`/api/v1/staffs/ward-staffs/${value}`, { headers });
             const resData = Array.isArray(response.data) ? response.data : response.data?.data || [];
-            const assignedStaffIds = resData.map((staff: any) => String(staff.staff_id));
-            setTargetKeys(assignedStaffIds);
+            // คีย์เป็น user_id เพราะรายการฝั่งซ้ายมาจาก core_kon.users
+            // แถวเก่าที่ยังไม่มี user_id (พิมพ์ชื่อเข้ามาเอง) ติ๊กกลับไม่ได้ ต้องเลือกใหม่
+            const assigned = resData.filter((s: any) => s.user_id !== null && s.user_id !== undefined);
+            setTargetKeys(assigned.map((s: any) => String(s.user_id)));
 
-            const missingStaffs = resData.filter((rs: any) =>
-                !staffList.some((s: any) => String(s.staff_id) === String(rs.staff_id))
+            const legacy = resData.length - assigned.length;
+            if (legacy > 0) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'มีรายชื่อแบบเก่า',
+                    text: `หอผู้ป่วยนี้มีเจ้าหน้าที่ ${legacy} คนที่บันทึกไว้ก่อนเปลี่ยนมาใช้ทะเบียนบุคลากร จึงยังไม่ผูกกับบัญชีจริง กรุณาเลือกใหม่จากรายการแล้วบันทึกทับ`,
+                    confirmButtonColor: '#006b5f',
+                });
+            }
+
+            // คนที่ถูกเลือกไว้แล้วแต่ไม่อยู่ในกลุ่มงานที่กรองอยู่ ต้องเติมเข้ารายการ
+            // ไม่งั้นกดบันทึกแล้วคนกลุ่มงานอื่นจะหลุดออกจากหอผู้ป่วยโดยไม่ตั้งใจ
+            const missing = assigned.filter((rs: any) =>
+                !staffList.some(s => String(s.user_id) === String(rs.user_id))
             );
-            if (missingStaffs.length > 0) {
-                setStaffList(prev => [...prev, ...missingStaffs]);
+            if (missing.length > 0) {
+                setStaffList(prev => [...prev, ...missing.map((m: any) => ({
+                    user_id: Number(m.user_id),
+                    fullname: m.fullname,
+                    position_name: m.position_name ?? '',
+                    major_id: null,
+                    major_name: '',
+                    group_code: m.group_code ?? null,
+                }))]);
             }
         } catch (error) {
             console.error("Error fetching assigned staff:", error);
@@ -261,8 +338,10 @@ export default function WardStaffPage() {
     };
 
     const transferDataSource: StaffTransferItem[] = staffList.map(staff => ({
-        key: String(staff.staff_id),
+        key: String(staff.user_id),
         title: staff.fullname,
+        groupCode: staff.group_code,
+        majorName: staff.major_name,
     }));
 
     return (
@@ -305,9 +384,45 @@ export default function WardStaffPage() {
                             </div>
                         </div>
 
+                        {noMapping && (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                className="mb-4"
+                                message="ยังไม่ได้จับคู่ตำแหน่ง"
+                                description={
+                                    <span>
+                                        รายชื่อเจ้าหน้าที่มาจากตำแหน่งที่จับคู่ไว้ในหน้า{' '}
+                                        <a href="/ipd/positions" className="font-semibold underline">จัดการตำแหน่งบุคลากร</a>{' '}
+                                        กรุณาจับคู่ตำแหน่งก่อน จึงจะมีรายชื่อให้เลือก
+                                    </span>
+                                }
+                            />
+                        )}
+
                         {selectedWard ? (
                             <div className="mb-4">
-                                <Text className="font-semibold text-gray-700 block mb-2">2. จัดการรายชื่อเจ้าหน้าที่ประจำตึก</Text>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                                    <Text className="font-semibold text-gray-700">2. จัดการรายชื่อเจ้าหน้าที่ประจำตึก</Text>
+                                    <div className="sm:ml-auto flex items-center gap-2">
+                                        <Text className="text-gray-500 text-sm whitespace-nowrap">กลุ่มงาน:</Text>
+                                        <Select
+                                            allowClear
+                                            showSearch
+                                            optionFilterProp="children"
+                                            placeholder="ทุกกลุ่มงาน"
+                                            style={{ minWidth: 260 }}
+                                            value={selectedMajor}
+                                            onChange={(v) => setSelectedMajor(v ?? null)}
+                                        >
+                                            {majors.map(m => (
+                                                <Option key={m.major_id} value={m.major_id}>
+                                                    {m.name} ({m.user_count})
+                                                </Option>
+                                            ))}
+                                        </Select>
+                                    </div>
+                                </div>
                                 <TableTransfer
                                     dataSource={transferDataSource}
                                     targetKeys={targetKeys}
@@ -333,6 +448,10 @@ export default function WardStaffPage() {
                                     ]}
                                     locale={{ searchPlaceholder: 'ค้นหาชื่อ...' }}
                                 />
+                                <p className="text-xs text-gray-400 mt-2 mb-0">
+                                    รายชื่อมาจากทะเบียนบุคลากร เฉพาะตำแหน่งที่จับคู่ไว้ในหน้าจัดการตำแหน่ง
+                                    ป้ายหลังชื่อคือกลุ่มที่ใช้อ้างอิงอัตราค่าตอบแทน
+                                </p>
                             </div>
                         ) : (
                             <div className="text-center py-12 text-gray-400 bg-white rounded-lg border border-dashed border-gray-300">
