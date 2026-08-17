@@ -84,7 +84,7 @@ const categoryColor: Record<AnnouncementCategory, string> = {
 const quickLinks = [
   { href: '/ipd/register', label: 'รับผู้ป่วย / รับย้าย', icon: <PiUserPlusBold />, color: '#0891b2' },
   { href: '/ipd/patients', label: 'ทะเบียนผู้ป่วย', icon: <PiUsersThreeBold />, color: '#006b5f' },
-  { href: '/ipd/daily-routine', label: 'รายงานประจำวัน', icon: <PiClipboardTextBold />, color: '#7c3aed' },
+  { href: '/ipd/daily-routine', label: 'ประเมินระดับการดูแลรายเวร', icon: <PiClipboardTextBold />, color: '#7c3aed' },
   { href: '/ipd/order-food', label: 'สั่งอาหาร', icon: <PiBowlFoodBold />, color: '#ea580c' },
   { href: '/ipd/dashboard', label: 'Dashboard', icon: <PiChartBarBold />, color: '#0f766e' },
   { href: '/ic/ipd', label: 'IPD Infection Control', icon: <PiVirusBold />, color: '#dc2626' },

@@ -39,7 +39,6 @@ import {
   PiUsersFourBold,
   PiNotePencilBold,
   PiShieldWarningBold,
-  PiArrowLeftBold,
   PiPersonSimpleWalkBold,
   PiWheelchairBold,
   PiBedBold,
@@ -224,6 +223,34 @@ interface AdmitRecordData {
   fhs_regularity?: string;
   fetal_station?: number;
   labour_complication?: string;
+  // ใบบันทึกการรวบรวมข้อมูลแรกรับ (SD-IM-003.019)
+  readmit_28_days?: string;
+  refer_from?: string;
+  initial_symptoms?: string;
+  allergy_status?: string;
+  surgery_status?: string;
+  surgery_detail?: string;
+  substance_status?: string;
+  substance_detail?: string;
+  chronic_status?: string;
+  chronic_diseases?: string;
+  chronic_other?: string;
+  treatment_status?: string;
+  treatment_detail?: string;
+  social_role?: string;
+  dependents_count?: number;
+  social_other?: string;
+  family_housing?: string;
+  caregiver_status?: string;
+  disability_status?: string;
+  disability_detail?: string;
+  environment_status?: string;
+  environment_detail?: string;
+  economic_status?: string;
+  economic_detail?: string;
+  spiritual_belief?: string;
+  contact_address?: string;
+  contact_phone?: string;
   updated_at?: string;
 }
 
@@ -439,6 +466,46 @@ const STATION_MARKS: Record<number, React.ReactNode> = Object.fromEntries(
 );
 
 /** สถานะดำเนินการของหัวข้อที่ต้องตรวจสอบตามมาตรฐาน */
+/**
+ * คู่ "ไม่มี / มี" ที่ฟอร์มกระดาษใช้ซ้ำหลายข้อ
+ * ต้องแยก "ไม่มี" ออกจากการปล่อยว่าง เพราะไม่มีคือประเมินแล้ว ส่วนว่างคือยังไม่ได้ถาม
+ */
+const PRESENCE_STATES: SegItem[] = [
+  { label: 'ไม่มี', value: 'none', icon: <PiCheckCircleBold />, color: '#16a34a' },
+  { label: 'มี', value: 'present', icon: <PiWarningCircleBold />, color: '#ea580c' },
+];
+
+/** ประวัติผ่าตัด — ฟอร์มใช้คำว่า ไม่เคย/เคย */
+const EVER_STATES: SegItem[] = [
+  { label: 'ไม่เคย', value: 'none', icon: <PiCheckCircleBold />, color: '#16a34a' },
+  { label: 'เคย', value: 'present', icon: <PiWarningCircleBold />, color: '#ea580c' },
+];
+
+/** ใช่/ไม่ใช่ สำหรับการกลับมานอนซ้ำภายใน 28 วัน */
+const YESNO_STATES: SegItem[] = [
+  { label: 'ไม่ใช่', value: 'no', icon: <PiCheckCircleBold />, color: '#16a34a' },
+  { label: 'ใช่', value: 'yes', icon: <PiWarningCircleBold />, color: '#dc2626' },
+];
+
+/** สถานภาพทางสังคมในครอบครัว */
+const SOCIAL_ROLES: SegItem[] = [
+  { label: 'หัวหน้าครอบครัว', value: 'head', icon: <PiUsersFourBold />, color: '#0891b2' },
+  { label: 'สมาชิกในครอบครัว', value: 'member', icon: <PiHandHeartBold />, color: '#16a34a' },
+  { label: 'อื่นๆ', value: 'other', icon: <PiWarningCircleBold />, color: '#ca8a04' },
+];
+
+/** ลักษณะครอบครัว — ที่อยู่อาศัย */
+const HOUSING_STATES: SegItem[] = [
+  { label: 'มีบ้านเป็นหลักแหล่ง', value: 'settled', icon: <PiCheckCircleBold />, color: '#16a34a' },
+  { label: 'ไม่มีบ้านเป็นหลักแหล่ง', value: 'homeless', icon: <PiWarningCircleBold />, color: '#dc2626' },
+];
+
+/** ลักษณะครอบครัว — ผู้ดูแล */
+const CAREGIVER_STATES: SegItem[] = [
+  { label: 'มีผู้ดูแล', value: 'has', icon: <PiCheckCircleBold />, color: '#16a34a' },
+  { label: 'ไม่มีผู้ดูแล', value: 'none', icon: <PiWarningCircleBold />, color: '#dc2626' },
+];
+
 const DONE_STATES: SegItem[] = [
   { label: 'ดำเนินการแล้ว', value: 'done', icon: <PiCheckCircleBold />, color: '#16a34a' },
   { label: 'ยังไม่ได้', value: 'pending', icon: <PiWarningCircleBold />, color: '#dc2626' },
@@ -615,6 +682,7 @@ function AdmitRecordInner({ an }: { an: string }) {
         isolation_precaution: toTags(existingRecord.isolation_precaution),
         discharge_plan_topics: toTags(existingRecord.discharge_plan_topics),
         risk_factors: toTags(existingRecord.risk_factors),
+        chronic_diseases: toTags(existingRecord.chronic_diseases),
         lmp: toDate(existingRecord.lmp),
         edc: toDate(existingRecord.edc),
         labour_assess_datetime: toDate(existingRecord.labour_assess_datetime),
@@ -722,6 +790,22 @@ function AdmitRecordInner({ an }: { an: string }) {
         speech_other: values.speech === 'other' ? values.speech_other ?? null : null,
         edema_site: values.edema === 'present' ? values.edema_site ?? null : null,
 
+        // ── ใบบันทึกการรวบรวมข้อมูลแรกรับ ──
+        // ช่องรายละเอียดมีความหมายเฉพาะเมื่อตอบว่า "มี" — ตอบไม่มีแล้วต้องล้างของเดิมทิ้ง
+        // ไม่งั้นจะเหลือข้อความค้างที่ขัดกับคำตอบ และคนอ่านทีหลังจะไม่รู้ว่าอันไหนจริง
+        refer_from: values.admit_from === 'REFER' ? values.refer_from ?? null : null,
+        surgery_detail: values.surgery_status === 'present' ? values.surgery_detail ?? null : null,
+        substance_detail: values.substance_status === 'present' ? values.substance_detail ?? null : null,
+        chronic_diseases: values.chronic_status === 'present' ? joinTags(values.chronic_diseases) : null,
+        chronic_other: values.chronic_status === 'present' ? values.chronic_other ?? null : null,
+        treatment_detail: values.treatment_status === 'present' ? values.treatment_detail ?? null : null,
+        disability_detail: values.disability_status === 'present' ? values.disability_detail ?? null : null,
+        environment_detail: values.environment_status === 'present' ? values.environment_detail ?? null : null,
+        economic_detail: values.economic_status === 'present' ? values.economic_detail ?? null : null,
+        social_other: values.social_role === 'other' ? values.social_other ?? null : null,
+        // จำนวนผู้ที่ต้องรับผิดชอบถามเฉพาะกรณีเป็นหัวหน้าครอบครัว
+        dependents_count: values.social_role === 'head' ? num(values.dependents_count) : null,
+
         // ── แรกรับผู้คลอด ──
         is_maternity: !!values.is_maternity,
         risk_factors: joinTags(values.risk_factors),
@@ -822,13 +906,6 @@ function AdmitRecordInner({ an }: { an: string }) {
               <Text style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{patientName}</Text>
             </div>
           </Space>
-          <Button
-            icon={<PiArrowLeftBold />}
-            onClick={() => window.history.back()}
-            ghost
-          >
-            ย้อนกลับ
-          </Button>
         </Flex>
 
         <Divider style={{ margin: '10px 0', borderColor: 'rgba(255,255,255,.25)' }} />
@@ -877,6 +954,23 @@ function AdmitRecordInner({ an }: { an: string }) {
                     </Form.Item>
                   </Col>
                 </Row>
+                {/* ช่องต้นทางเปิดเฉพาะเมื่อเลือก Refer จะได้ไม่ต้องอ่านช่องที่ไม่เกี่ยว */}
+                {watched?.admit_from === 'REFER' && (
+                  <Form.Item label="Refer จาก (สถานพยาบาลต้นทาง)" name="refer_from">
+                    <Input placeholder="ระบุชื่อโรงพยาบาล/สถานพยาบาล" />
+                  </Form.Item>
+                )}
+                <Form.Item
+                  label="รับเข้าภายหลังจำหน่าย 28 วันด้วยโรคเดิม"
+                  name="readmit_28_days"
+                  tooltip="ใช้เฝ้าระวังการกลับมานอนซ้ำด้วยโรคเดิม"
+                >
+                  <Segmented
+                    block
+                    options={segOptions(YESNO_STATES, watched?.readmit_28_days as string)}
+                    style={segStyle(YESNO_STATES, watched?.readmit_28_days as string)}
+                  />
+                </Form.Item>
                 <Form.Item label="สาเหตุการรับเข้า" name="admit_reason">
                   <Input placeholder="ระบุสาเหตุ" />
                 </Form.Item>
@@ -885,6 +979,13 @@ function AdmitRecordInner({ an }: { an: string }) {
                 </Form.Item>
                 <Form.Item label="Present Illness" name="present_illness">
                   <TextArea rows={2} placeholder="ประวัติเจ็บป่วยปัจจุบัน" autoSize={{ minRows: 2, maxRows: 6 }} />
+                </Form.Item>
+                <Form.Item
+                  label="อาการแรกรับ"
+                  name="initial_symptoms"
+                  tooltip="อาการที่พบเมื่อผู้ป่วยมาถึงหอผู้ป่วย คนละช่องกับอาการสำคัญที่พามาโรงพยาบาล"
+                >
+                  <TextArea rows={2} placeholder="อาการที่ประเมินได้เมื่อแรกรับ" autoSize={{ minRows: 2, maxRows: 6 }} />
                 </Form.Item>
                 <Form.Item label="Past Illness" name="past_illness">
                   <TextArea rows={1} placeholder="โรคประจำตัว / ประวัติผ่าตัด" autoSize={{ minRows: 1, maxRows: 4 }} />
@@ -1094,6 +1195,218 @@ function AdmitRecordInner({ an }: { an: string }) {
                 </Card>
               </SectionCard>
             </Flex>
+          </Col>
+
+          {/* ── ประวัติการเจ็บป่วยในอดีต ตามใบบันทึกการรวบรวมข้อมูลแรกรับ ──
+              ทุกข้อเป็นคู่ "ไม่มี/มี" ช่องระบุจึงโผล่เฉพาะเมื่อตอบว่ามี */}
+          <Col span={24}>
+            <SectionCard icon={<PiClipboardTextBold />} title="ประวัติการเจ็บป่วยในอดีต" accentColor="#b45309">
+              <Row gutter={12}>
+                <Col xs={24} xl={8}>
+                  <Form.Item label="ประวัติการแพ้ยา / อาหาร" name="allergy_status">
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.allergy_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.allergy_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.allergy_status === 'present' && (
+                    <p className="text-xs text-gray-400 -mt-2 mb-3">
+                      ระบุยา/อาหารที่แพ้ในช่อง &quot;แพ้ยา / อาหาร&quot; ของการ์ดข้อมูลการรับเข้า
+                    </p>
+                  )}
+                </Col>
+                <Col xs={24} xl={8}>
+                  <Form.Item label="ประวัติการผ่าตัด" name="surgery_status">
+                    <Segmented
+                      block
+                      options={segOptions(EVER_STATES, watched?.surgery_status as string)}
+                      style={segStyle(EVER_STATES, watched?.surgery_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.surgery_status === 'present' && (
+                    <Form.Item label="ระบุการผ่าตัด" name="surgery_detail">
+                      <Input placeholder="ชนิดการผ่าตัด / ปีที่ผ่าตัด" />
+                    </Form.Item>
+                  )}
+                </Col>
+                <Col xs={24} xl={8}>
+                  <Form.Item label="ประวัติการติดยา / สารเสพติด" name="substance_status">
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.substance_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.substance_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.substance_status === 'present' && (
+                    <Form.Item label="ระบุสารเสพติด" name="substance_detail">
+                      <Input placeholder="ชนิด / ระยะเวลาที่ใช้" />
+                    </Form.Item>
+                  )}
+                </Col>
+                <Col xs={24} xl={12}>
+                  <Form.Item label="โรคประจำตัว" name="chronic_status">
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.chronic_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.chronic_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.chronic_status === 'present' && (
+                    <Row gutter={12}>
+                      <Col xs={24} sm={14}>
+                        <Form.Item label="เลือกโรคประจำตัว" name="chronic_diseases">
+                          <Select
+                            mode="multiple"
+                            allowClear
+                            placeholder="เลือกได้มากกว่าหนึ่งข้อ"
+                            options={[
+                              { value: 'DM', label: 'DM (เบาหวาน)' },
+                              { value: 'HT', label: 'HT (ความดันโลหิตสูง)' },
+                              { value: 'COPD', label: 'COPD' },
+                              { value: 'CVA', label: 'CVA (หลอดเลือดสมอง)' },
+                              { value: 'Heart', label: 'Heart (โรคหัวใจ)' },
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={10}>
+                        <Form.Item label="อื่นๆ (ระบุ)" name="chronic_other">
+                          <Input placeholder="โรคที่ไม่อยู่ในรายการ" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  )}
+                </Col>
+                <Col xs={24} xl={12}>
+                  <Form.Item label="ประวัติการรักษา" name="treatment_status">
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.treatment_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.treatment_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.treatment_status === 'present' && (
+                    <Form.Item label="ระบุการรักษาที่ได้รับ" name="treatment_detail">
+                      <Input placeholder="สถานที่รักษา / การรักษาที่ได้รับมาก่อน" />
+                    </Form.Item>
+                  )}
+                </Col>
+              </Row>
+            </SectionCard>
+          </Col>
+
+          {/* ── ข้อมูลทั่วไป / สถานภาพทางสังคม ตามใบบันทึกการรวบรวมข้อมูลแรกรับ ── */}
+          <Col span={24}>
+            <SectionCard icon={<PiUsersFourBold />} title="ข้อมูลทั่วไป / สถานภาพทางสังคม" accentColor="#0e7490">
+              {/* สถานภาพสมรส ศาสนา อาชีพ สิทธิการรักษา ไม่ได้อยู่ที่นี่
+                  เพราะทะเบียนผู้ป่วยใน HIS เก็บไว้อยู่แล้ว การให้พิมพ์ซ้ำเสี่ยงได้ค่าที่ขัดกันเอง */}
+              <Row gutter={12}>
+                <Col xs={24} xl={12}>
+                  <Form.Item label="สถานภาพทางสังคม" name="social_role">
+                    <Segmented
+                      block
+                      options={segOptions(SOCIAL_ROLES, watched?.social_role as string)}
+                      style={segStyle(SOCIAL_ROLES, watched?.social_role as string)}
+                    />
+                  </Form.Item>
+                  {/* จำนวนคนที่ต้องรับผิดชอบถามเฉพาะหัวหน้าครอบครัว ตามที่ฟอร์มกระดาษวางช่องไว้ */}
+                  {watched?.social_role === 'head' && (
+                    <Form.Item label="จำนวนสมาชิกที่ต้องรับผิดชอบ (คน)" name="dependents_count">
+                      <InputNumber min={0} max={50} style={{ width: '100%' }} placeholder="จำนวนคน" />
+                    </Form.Item>
+                  )}
+                  {watched?.social_role === 'other' && (
+                    <Form.Item label="ระบุ (นักเรียน / สงฆ์ / อื่นๆ)" name="social_other">
+                      <Input placeholder="ระบุสถานภาพ" />
+                    </Form.Item>
+                  )}
+                </Col>
+                <Col xs={24} sm={12} xl={6}>
+                  <Form.Item label="ลักษณะครอบครัว — ที่อยู่อาศัย" name="family_housing">
+                    <Segmented
+                      block
+                      options={segOptions(HOUSING_STATES, watched?.family_housing as string)}
+                      style={segStyle(HOUSING_STATES, watched?.family_housing as string)}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12} xl={6}>
+                  <Form.Item label="ลักษณะครอบครัว — ผู้ดูแล" name="caregiver_status">
+                    <Segmented
+                      block
+                      options={segOptions(CAREGIVER_STATES, watched?.caregiver_status as string)}
+                      style={segStyle(CAREGIVER_STATES, watched?.caregiver_status as string)}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} xl={8}>
+                  <Form.Item label="ความพิการที่พบ" name="disability_status">
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.disability_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.disability_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.disability_status === 'present' && (
+                    <Form.Item label="ระบุความพิการ" name="disability_detail">
+                      <Input placeholder="ลักษณะความพิการ" />
+                    </Form.Item>
+                  )}
+                </Col>
+                <Col xs={24} xl={8}>
+                  <Form.Item
+                    label="สภาพแวดล้อมที่มีผลต่อการเจ็บป่วยครั้งนี้"
+                    name="environment_status"
+                  >
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.environment_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.environment_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.environment_status === 'present' && (
+                    <Form.Item label="ระบุสภาพแวดล้อม" name="environment_detail">
+                      <Input placeholder="เช่น ที่ทำงาน ฝุ่น สารเคมี" />
+                    </Form.Item>
+                  )}
+                </Col>
+                <Col xs={24} xl={8}>
+                  <Form.Item label="ปัญหาทางด้านเศรษฐกิจ" name="economic_status">
+                    <Segmented
+                      block
+                      options={segOptions(PRESENCE_STATES, watched?.economic_status as string)}
+                      style={segStyle(PRESENCE_STATES, watched?.economic_status as string)}
+                    />
+                  </Form.Item>
+                  {watched?.economic_status === 'present' && (
+                    <Form.Item label="ระบุปัญหา" name="economic_detail">
+                      <Input placeholder="ลักษณะปัญหาทางเศรษฐกิจ" />
+                    </Form.Item>
+                  )}
+                </Col>
+
+                <Col xs={24} xl={8}>
+                  <Form.Item
+                    label="จิตวิญญาณ / ความเชื่อ / สิ่งยึดเหนี่ยวจิตใจ"
+                    name="spiritual_belief"
+                  >
+                    <Input placeholder="สิ่งยึดเหนี่ยวจิตใจของผู้ป่วยและครอบครัว" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} xl={10}>
+                  <Form.Item label="ที่อยู่ที่สามารถติดต่อได้" name="contact_address">
+                    <Input placeholder="ที่อยู่สำหรับติดต่อกลับ" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} xl={6}>
+                  <Form.Item label="โทรศัพท์" name="contact_phone">
+                    <Input placeholder="เบอร์ติดต่อ" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </SectionCard>
           </Col>
 
           {/* ── เต็มความกว้าง: ช่องตัวเลือกเยอะ ต้องการพื้นที่แนวนอน ── */}

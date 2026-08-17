@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Sarabun } from "next/font/google";
 import "./globals.css";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { ThemeProvider, themeInitScript } from "./lib/theme";
 
 const sarabun = Sarabun({
@@ -32,7 +33,12 @@ export default function RootLayout({
       <body
         className={`${sarabun.variable} antialiased`}
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        {/* antd สร้าง CSS ตอนรันด้วย CSS-in-JS ถ้าไม่เก็บสไตล์ที่สร้างฝั่งเซิร์ฟเวอร์
+            ใส่ลงใน HTML ที่ส่งไป เบราว์เซอร์จะคำนวณคลาสได้ไม่ตรงกับที่เซิร์ฟเวอร์วาด
+            แล้วขึ้น hydration mismatch — AntdRegistry ทำหน้าที่เก็บและแทรกให้ */}
+        <AntdRegistry>
+          <ThemeProvider>{children}</ThemeProvider>
+        </AntdRegistry>
       </body>
     </html>
   );

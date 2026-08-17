@@ -239,6 +239,13 @@ const LABELS: Record<string, Record<string, string>> = {
   membrane_status: { intact: 'ยังไม่แตก (Intact)', srom: 'แตกเอง (SROM)', arom: 'เจาะถุงน้ำ (AROM)' },
   amniotic_fluid: { clear: 'ใส', meconium: 'มีขี้เทาปน (Meconium)', bloody: 'มีเลือดปน', foul: 'มีกลิ่นเหม็น' },
   fhs_regularity: { regular: 'สม่ำเสมอ', irregular: 'ไม่สม่ำเสมอ' },
+  // ใบบันทึกการรวบรวมข้อมูลแรกรับ (SD-IM-003.019)
+  presence: { none: 'ไม่มี', present: 'มี' },
+  ever: { none: 'ไม่เคย', present: 'เคย' },
+  yesno: { yes: 'ใช่', no: 'ไม่ใช่' },
+  social_role: { head: 'หัวหน้าครอบครัว', member: 'เป็นสมาชิกในครอบครัว', other: 'อื่นๆ' },
+  family_housing: { settled: 'มีบ้านอยู่เป็นหลักแหล่ง', homeless: 'ไม่มีบ้านอยู่เป็นหลักแหล่ง' },
+  caregiver_status: { has: 'มีผู้ดูแล', none: 'ไม่มีผู้ดูแล' },
 };
 
 const BLANK = '-';
@@ -317,7 +324,8 @@ const PatientHeader = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 1 =====================
 const AdmissionPage = ({ patientData, admit }: { patientData: PatientData; admit: AdmitRecord | null }) => (
   <Page size="A4" style={styles.page} wrap>
-    <Text style={styles.header}>1. แบบบันทึกการรับผู้ป่วย (Admission Record)</Text>
+    {/* ชื่อตรงกับฟอร์มกระดาษ SD-IM-003.019 เพื่อให้เทียบกับแฟ้มเวชระเบียนได้ */}
+    <Text style={styles.header}>1. ใบบันทึกการรวบรวมข้อมูลแรกรับ (Admission Record)</Text>
     <PatientHeader patientData={patientData} />
 
     {!admit ? (
@@ -332,15 +340,23 @@ const AdmissionPage = ({ patientData, admit }: { patientData: PatientData; admit
           <Field label="วิธีการมา" value={label(admit, 'admit_method')} width="33%" />
           <Field label="วันเวลาที่บันทึก" value={date(admit, 'record_datetime', 'D MMM BBBB HH:mm น.')} width="34%" />
         </View>
+        <View style={styles.row}>
+          <Field
+            label="รับเข้าภายหลังจำหน่าย 28 วันด้วยโรคเดิม"
+            value={label(admit, 'readmit_28_days', 'yesno')}
+            width="50%"
+          />
+          {/* ต้นทางที่ส่งตัวมาแสดงเฉพาะเคสที่ Refer มา ไม่งั้นจะเป็นบรรทัดขีดเปล่าๆ ทุกใบ */}
+          {admit.admit_from === 'REFER' && (
+            <Field label="Refer จาก" value={val(admit, 'refer_from')} width="50%" />
+          )}
+        </View>
         <Line label="สาเหตุการรับเข้า" value={val(admit, 'admit_reason')} />
         {/* CC และ PI เป็นข้อความบรรยายยาว จึงคงเต็มความกว้างไว้ */}
-        <Line label="อาการสำคัญ (CC)" value={val(admit, 'chief_complaint')} />
-        <Line label="ประวัติเจ็บป่วยปัจจุบัน (PI)" value={val(admit, 'present_illness')} />
-        <Line label="โรคประจำตัว / ประวัติผ่าตัด" value={val(admit, 'past_illness')} />
-        <View style={styles.row}>
-          <Field label="ประวัติแพ้ยา/อาหาร" value={val(admit, 'allergies')} width="50%" />
-          <Field label="ยาที่ใช้ปัจจุบัน" value={val(admit, 'current_medications')} width="50%" />
-        </View>
+        <Line label="อาการสำคัญที่มาโรงพยาบาล (CC)" value={val(admit, 'chief_complaint')} />
+        <Line label="ประวัติการเจ็บป่วย (PI)" value={val(admit, 'present_illness')} />
+        <Line label="อาการแรกรับ" value={val(admit, 'initial_symptoms')} />
+        <Line label="ยาที่ใช้ปัจจุบัน" value={val(admit, 'current_medications')} />
 
         <Text style={styles.subHeader}>การประเมินแรกรับ (Initial Assessment)</Text>
         <View style={styles.row}>
@@ -359,6 +375,93 @@ const AdmissionPage = ({ patientData, admit }: { patientData: PatientData; admit
         <View style={styles.row}>
           <Field label="ระดับความรู้สึกตัว" value={label(admit, 'consciousness')} width="50%" />
           <Field label="ภาวะโภชนาการ" value={label(admit, 'nutrition_screening')} width="50%" />
+        </View>
+
+        {/* เรียงตามใบบันทึกการรวบรวมข้อมูลแรกรับ — ประวัติในอดีตอยู่ถัดจากสัญญาณชีพ
+            ทุกข้อพิมพ์คำตอบ "ไม่มี" ออกมาด้วย เพราะไม่มีกับยังไม่ได้ถามต้องแยกกันให้ออก */}
+        <Text style={styles.subHeader}>ประวัติการเจ็บป่วยในอดีต</Text>
+        <Line
+          label="ประวัติการแพ้ยา / อาหาร"
+          value={join([
+            label(admit, 'allergy_status', 'presence'),
+            admit.allergy_status === 'present' ? val(admit, 'allergies') : null,
+          ], ' — ')}
+        />
+        <Line
+          label="ประวัติการผ่าตัด"
+          value={join([
+            label(admit, 'surgery_status', 'ever'),
+            admit.surgery_status === 'present' ? val(admit, 'surgery_detail') : null,
+          ], ' — ')}
+        />
+        <Line
+          label="ประวัติการติดยา / สารเสพติด"
+          value={join([
+            label(admit, 'substance_status', 'presence'),
+            admit.substance_status === 'present' ? val(admit, 'substance_detail') : null,
+          ], ' — ')}
+        />
+        <Line
+          label="โรคประจำตัว"
+          value={join([
+            label(admit, 'chronic_status', 'presence'),
+            admit.chronic_status === 'present' ? val(admit, 'chronic_diseases') : null,
+            admit.chronic_status === 'present' && admit.chronic_other
+              ? `อื่นๆ ${val(admit, 'chronic_other')}` : null,
+          ], ' — ')}
+        />
+        <Line
+          label="ประวัติการรักษา"
+          value={join([
+            label(admit, 'treatment_status', 'presence'),
+            admit.treatment_status === 'present' ? val(admit, 'treatment_detail') : null,
+          ], ' — ')}
+        />
+        <Line label="บันทึกเพิ่มเติม (โรคประจำตัว / ประวัติผ่าตัด)" value={val(admit, 'past_illness')} />
+
+        <Text style={styles.subHeader}>ข้อมูลทั่วไป / สถานภาพทางสังคม</Text>
+        <View style={styles.row}>
+          <Field
+            label="สถานภาพทางสังคม"
+            value={join([
+              label(admit, 'social_role'),
+              admit.social_role === 'head' && admit.dependents_count !== null && admit.dependents_count !== undefined
+                ? `รับผิดชอบสมาชิก ${admit.dependents_count} คน` : null,
+              admit.social_role === 'other' ? val(admit, 'social_other') : null,
+            ], ' — ')}
+            width="50%"
+          />
+          <Field
+            label="ลักษณะครอบครัว"
+            value={join([label(admit, 'family_housing'), label(admit, 'caregiver_status')])}
+            width="50%"
+          />
+        </View>
+        <Line
+          label="ความพิการที่พบ"
+          value={join([
+            label(admit, 'disability_status', 'presence'),
+            admit.disability_status === 'present' ? val(admit, 'disability_detail') : null,
+          ], ' — ')}
+        />
+        <Line
+          label="สภาพแวดล้อมที่มีผลต่อการเจ็บป่วยครั้งนี้"
+          value={join([
+            label(admit, 'environment_status', 'presence'),
+            admit.environment_status === 'present' ? val(admit, 'environment_detail') : null,
+          ], ' — ')}
+        />
+        <Line
+          label="ปัญหาทางด้านเศรษฐกิจ"
+          value={join([
+            label(admit, 'economic_status', 'presence'),
+            admit.economic_status === 'present' ? val(admit, 'economic_detail') : null,
+          ], ' — ')}
+        />
+        <Line label="จิตวิญญาณ / ความเชื่อ / สิ่งยึดเหนี่ยวจิตใจ" value={val(admit, 'spiritual_belief')} />
+        <View style={styles.row}>
+          <Field label="ที่อยู่ที่ติดต่อได้" value={val(admit, 'contact_address')} width="70%" />
+          <Field label="โทรศัพท์" value={val(admit, 'contact_phone')} width="30%" />
         </View>
 
         <Text style={styles.subHeader}>สภาพร่างกายแรกรับ</Text>

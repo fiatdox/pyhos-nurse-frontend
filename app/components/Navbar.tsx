@@ -3,15 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Drawer, Menu, ConfigProvider, Checkbox, Alert, Spin, Typography, Segmented } from 'antd';
-import { PiSparkleBold, PiListChecksBold, PiMoonBold, PiIdentificationBadgeBold } from 'react-icons/pi';
+import { PiSparkleBold, PiListChecksBold, PiMoonBold, PiIdentificationBadgeBold, PiMoneyWavyBold, PiCalendarXBold } from 'react-icons/pi';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import {
     VscSignOut,
     VscAccount,
-    VscSettingsGear,
     VscChecklist
 } from "react-icons/vsc";
-import { GrSchedulePlay, GrUserAdd, GrWheelchairActive, GrWorkshop } from 'react-icons/gr';
+import { GrSchedulePlay, GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
 import { SiWikibooks } from 'react-icons/si';
 import { IoFastFoodOutline } from 'react-icons/io5';
 import { TbReportSearch } from 'react-icons/tb';
@@ -19,9 +18,8 @@ import Link from 'next/link';
 import { CgPerformance } from 'react-icons/cg';
 import { LiaHospital } from 'react-icons/lia';
 import { PiVirusBold } from 'react-icons/pi';
-import { FaShippingFast } from 'react-icons/fa';
-import { RiShareForwardFill, RiSurgicalMaskLine } from 'react-icons/ri';
-import { GiChemicalBolt } from 'react-icons/gi';
+import { RiShareForwardFill } from 'react-icons/ri';
+import type { IconType } from 'react-icons';
 
 interface AiSetting {
     enabled: boolean;
@@ -30,6 +28,79 @@ interface AiSetting {
     /** ผู้ใช้คนนี้เป็นผู้ดูแลระบบหรือไม่ — เซิร์ฟเวอร์เป็นคนบอก */
     can_manage: boolean;
 }
+
+/** ทางลัดบนแถบบน — เอาเฉพาะงานที่เปิดใช้ทุกวัน */
+const TOP_LINKS: { href: string; label: string; icon: IconType }[] = [
+    { href: '/ipd/fte', label: 'FTE', icon: CgPerformance },
+    { href: '/ipd/dashboard', label: 'Dashboard', icon: TbReportSearch },
+];
+
+/**
+ * เมนูย่อยใต้ "ระบบงาน" — จัดเป็นคอลัมน์ตามโมดูล
+ * ไอคอนใช้ตัวเดียวกับลิ้นชักซ้าย เพื่อให้จำได้ว่าเป็นหน้าเดียวกันไม่ว่าเข้าจากทางไหน
+ */
+const MEGA_MENU: {
+    heading: string;
+    icon: IconType;
+    /** จริง = แสดงเฉพาะเจ้าหน้าที่งานโภชนาการ (เซิร์ฟเวอร์เป็นคนบอกว่าใช่หรือไม่) */
+    nutritionOnly?: boolean;
+    items: { href: string; label: string; icon: IconType }[];
+}[] = [
+    {
+        heading: 'IPD',
+        icon: VscAccount,
+        items: [
+            { href: '/ipd/register', label: 'รับผู้ป่วย / รับย้าย', icon: GrUserAdd },
+            { href: '/ipd/patients', label: 'ทะเบียนผู้ป่วย', icon: SiWikibooks },
+            { href: '/ipd/discharge', label: 'จำหน่าย / ย้ายออก', icon: GrWheelchairActive },
+            { href: '/ipd/daily-routine', label: 'ประเมินระดับการดูแลรายเวร', icon: VscChecklist },
+            { href: '/ipd/shift-patient', label: 'สรุปยอดผู้ป่วยรายเวร', icon: RiShareForwardFill },
+            { href: '/ipd/order-food', label: 'สั่งอาหาร', icon: IoFastFoodOutline },
+        ],
+    },
+    {
+        heading: 'IC : Infection Controls',
+        icon: PiVirusBold,
+        items: [
+            { href: '/ic/opd', label: 'OPD Daily', icon: TbReportSearch },
+            { href: '/ic/ipd', label: 'IPD Daily', icon: TbReportSearch },
+            { href: '/ic/follow-up', label: 'ติดตามผู้ป่วยผ่าตัด (T814, A499)', icon: TbReportSearch },
+            { href: '/ic/dashboard', label: 'IC Dashboard', icon: TbReportSearch },
+        ],
+    },
+    {
+        heading: 'งานโภชนาการ',
+        icon: IoFastFoodOutline,
+        nutritionOnly: true,
+        items: [
+            { href: '/ipd/nutrition-summary', label: 'สรุปรายการอาหารประจำวัน', icon: IoFastFoodOutline },
+            { href: '/ipd/order-food', label: 'รายการสั่งอาหารรายหอผู้ป่วย', icon: TbReportSearch },
+        ],
+    },
+    {
+        heading: 'ตั้งค่า',
+        icon: LiaHospital,
+        items: [
+            { href: '/ipd/positions', label: 'จัดการตำแหน่งบุคลากร', icon: PiIdentificationBadgeBold },
+            { href: '/ipd/ward-staffs', label: 'ตั้งค่าหอผู้ป่วยปฏิบัติงาน', icon: LiaHospital },
+            { href: '/ipd/ward-quotas', label: 'ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)', icon: LiaHospital },
+            { href: '/ipd/shift-configs', label: 'ตั้งค่าเวรเจ้าหน้าที่', icon: GrSchedulePlay },
+            { href: '/ipd/shift-rates', label: 'ตั้งค่าตอบแทนตามเวร', icon: PiMoneyWavyBold },
+        ],
+    },
+];
+
+/**
+ * หัวข้อคั่นกลุ่มเมนูในลิ้นชักตั้งค่า
+ *
+ * เมนูตั้งค่ายาวขึ้นเรื่อยๆ จนหาของไม่เจอ จึงแบ่งเป็นหมวดตามลำดับที่ใช้งานจริง
+ * เส้นคั่นอยู่บนหัวข้อ ไม่ใช่ใต้ เพราะหัวข้อควรติดกับรายการที่มันคุมอยู่
+ */
+const DrawerSection = ({ label }: { label: string }) => (
+    <div className="mt-4 mb-1 pt-3 px-2 border-t border-white/15 text-[11px] font-semibold tracking-wide text-white/55">
+        {label}
+    </div>
+);
 
 const Navbar = () => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -73,6 +144,26 @@ const Navbar = () => {
             }
         })();
     }, [authHeaders]);
+
+    /**
+     * สิทธิ์งานโภชนาการ — ผูกกับกลุ่มงานจริงในทะเบียนบุคลากร ไม่ได้เดาจากฝั่งหน้าจอ
+     * ซ่อนเมนูเป็นแค่ความสะดวก การกันจริงอยู่ที่เซิร์ฟเวอร์ซึ่งตรวจทุกครั้งที่กดรับรายการ
+     */
+    const [canNutrition, setCanNutrition] = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch('/api/v1/nutrition/access', { headers: authHeaders() });
+                const json = await res.json();
+                setCanNutrition(json?.data?.can_receive === true);
+            } catch {
+                // อ่านไม่ได้ก็ถือว่าไม่มีสิทธิ์ ไม่ต้องรบกวนผู้ใช้
+            }
+        })();
+    }, [authHeaders]);
+
+    const visibleMegaMenu = MEGA_MENU.filter(g => !g.nutritionOnly || canNutrition);
 
     const toggleAi = async (enabled: boolean) => {
         setAiSaving(true);
@@ -137,8 +228,14 @@ const Navbar = () => {
                         </div>
                         <div className="hidden sm:block sm:ml-6">
                             <div className="flex space-x-4">
-                                <Link href="/main" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">Home</span></Link>
-                                {/* Products Dropdown Trigger */}
+                                <Link
+                                    href="/main"
+                                    className={`hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium ${pathname === '/main' ? 'bg-white/15' : ''}`}
+                                >
+                                    <span className="text-white">หน้าหลัก</span>
+                                </Link>
+
+                                {/* เมนูย่อยแบบเดิม เปลี่ยนแค่รายการข้างในให้เป็นหน้าที่มีจริง */}
                                 <div className="group">
                                     <button className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium flex items-center">
                                         ระบบงาน
@@ -146,47 +243,59 @@ const Navbar = () => {
                                             <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                                         </svg>
                                     </button>
-                                    {/* Mega Menu */}
                                     <div className="absolute left-0 top-16 w-full bg-white border-b border-gray-200 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 before:absolute before:-top-4 before:h-4 before:w-full">
                                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-6">
-                                                <div>
-                                                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Software</h3>
-                                                    <ul className="space-y-3">
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">IC : Infection Controls</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Mobile Apps</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Desktop Software</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Enterprise Solutions</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">API Services</span></Link></li>
-                                                    </ul>
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Hardware</h3>
-                                                    <ul className="space-y-3">
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Laptops</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Desktops</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Tablets</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Accessories</span></Link></li>
-                                                        <li><Link href="#"><span className="text-gray-600 hover:text-indigo-600">Networking</span></Link></li>
-                                                    </ul>
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Featured</h3>
-                                                    <div className="bg-gray-100 p-4 rounded-lg">
-                                                        <img src="https://images.unsplash.com/photo-1546435770-a3e426bf472b?q=80&w=2065&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Featured Product" className="rounded-lg mb-3" />
-                                                        <h4 className="font-medium text-gray-900">New Release</h4>
-                                                        <p className="text-sm text-gray-600 mb-2">Check out our latest product offering with advanced
-                                                            features.</p>
-                                                        <Link href="#" className="text-sm font-medium"><span className="text-indigo-600 hover:text-indigo-800">Learn more →</span></Link>
+                                            {/* จำนวนคอลัมน์ตามกลุ่มที่มองเห็นจริง ไม่งั้นกลุ่มที่ 4 จะตกไปอยู่แถวล่างตัวเดียว */}
+                                            <div className={`grid grid-cols-1 gap-8 p-6 ${
+                                                visibleMegaMenu.length >= 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'
+                                            }`}>
+                                                {visibleMegaMenu.map(group => (
+                                                    <div key={group.heading}>
+                                                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                                            <group.icon className="w-5 h-5 text-[var(--brand-text)]" />
+                                                            {group.heading}
+                                                        </h3>
+                                                        <ul className="space-y-3">
+                                                            {group.items.map(item => {
+                                                                const active = pathname === item.href;
+                                                                return (
+                                                                    <li key={item.href}>
+                                                                        <Link href={item.href} className="flex items-center gap-2 group/item">
+                                                                            {/* ไอคอนจางกว่าตัวหนังสือ ให้ตายังอ่านชื่อเมนูก่อน */}
+                                                                            <item.icon className={`w-4 h-4 shrink-0 ${
+                                                                                active ? 'text-[var(--brand-text)]' : 'text-gray-400 group-hover/item:text-[var(--brand-text)]'
+                                                                            }`} />
+                                                                            <span className={`group-hover/item:text-[var(--brand-text)] ${
+                                                                                active ? 'font-semibold text-[var(--brand-text)]' : 'text-gray-600'
+                                                                            }`}>
+                                                                                {item.label}
+                                                                            </span>
+                                                                        </Link>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
                                                     </div>
-                                                </div>
+                                                ))}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <Link href="#" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">FTE</span></Link>
-                                <Link href="#" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">Dashboard</span></Link>
-                                <Link href="#" className="hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium"><span className="text-white">Contact</span></Link>
+
+                                {TOP_LINKS.map(item => (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={`hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium ${
+                                            pathname === item.href ? 'bg-white/15' : ''
+                                        }`}
+                                    >
+                                        <span className="text-white flex items-center gap-1.5">
+                                            <item.icon className="w-4 h-4" />
+                                            {item.label}
+                                        </span>
+                                    </Link>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -239,6 +348,8 @@ const Navbar = () => {
                                 selectedKeys={[pathname]}
                                 style={{ background: 'transparent', borderRight: 'none', padding: 0 }}
                                 className="mt-2 [&_.ant-menu-submenu-title]:px-2 [&_.ant-menu-submenu-title]:border-t [&_.ant-menu-submenu-title]:border-b [&_.ant-menu-submenu-title]:border-white/10 [&_.ant-menu-submenu-title]:font-bold [&_.ant-menu-submenu-title]:text-white [&_.ant-menu-title-content]:text-left"
+                                /* key ของทุกรายการต้องเป็น path จริง เพราะ selectedKeys เทียบกับ pathname
+                                   ของเดิมกลุ่ม IPD ใช้ชื่อสั้นๆ ทำให้ไม่เคยไฮไลต์ว่าอยู่หน้าไหน */
                                 items={[
                                     {
                                         key: 'ipd',
@@ -246,42 +357,37 @@ const Navbar = () => {
                                         label: <span className="text-white text-left block w-full">IPD</span>,
                                         children: [
                                             {
-                                                key: 'register',
+                                                key: '/ipd/register',
                                                 icon: <GrUserAdd className="w-5 h-5" />,
                                                 label: <Link href="/ipd/register" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รับผู้ป่วย / รับย้าย</span></Link>,
                                             },
                                             {
-                                                key: 'patients',
+                                                key: '/ipd/patients',
                                                 icon: <SiWikibooks className="w-5 h-5" />,
                                                 label: <Link href="/ipd/patients" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ทะเบียนผู้ป่วย</span></Link>,
                                             },
                                             {
-                                                key: 'food_order',
+                                                key: '/ipd/discharge',
+                                                icon: <GrWheelchairActive className="w-5 h-5" />,
+                                                label: <Link href="/ipd/discharge" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">จำหน่าย / ย้ายออก</span></Link>,
+                                            },
+                                            {
+                                                key: '/ipd/order-food',
                                                 icon: <IoFastFoodOutline className="w-5 h-5" />,
                                                 label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">สั่งอาหาร</span></Link>,
                                             },
                                             {
-                                                key: 'daily_routine',
+                                                key: '/ipd/daily-routine',
                                                 icon: <VscChecklist className="w-5 h-5" />,
-                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รายงานประจำวัน </span></Link>,
-                                            },
-                                            // {
-                                            //     key: 'fte',
-                                            //     icon: <CgPerformance  className="w-5 h-5" />,
-                                            //     label: <Link href="/ipd/fte" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">Full-Time Equivalent (FTE)</span></Link>,
-                                            // },
-                                            // {
-                                            //     key: 'employee_shift_schedule',
-                                            //     icon: <GrSchedulePlay className="w-5 h-5" />,
-                                            //     label: <Link href="/ipd/shift-configs" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ตารางการปฏิบัติงาน</span></Link>,
-                                            // },
-                                            {
-                                                key: 'ipd_report',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="#" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รายงาน</span></Link>,
+                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ประเมินระดับการดูแลรายเวร</span></Link>,
                                             },
                                             {
-                                                key: 'dashboard',
+                                                key: '/ipd/shift-patient',
+                                                icon: <RiShareForwardFill className="w-5 h-5" />,
+                                                label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">สรุปยอดผู้ป่วยรายเวร</span></Link>,
+                                            },
+                                            {
+                                                key: '/ipd/dashboard',
                                                 icon: <TbReportSearch className="w-5 h-5" />,
                                                 label: <Link href="/ipd/dashboard" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">Dashboard</span></Link>,
                                             },
@@ -314,42 +420,9 @@ const Navbar = () => {
                                             },
                                         ]
                                     },
-                                    {
-                                        key: 'ER',
-                                        icon: <FaShippingFast  className="w-5 h-5 text-white" />,
-                                        label: <span className="text-white text-left block w-full">ER</span>,
-                                        children: [
-                                            {
-                                                key: '/er/statistics',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">บันทึกข้อมูลสถิติการรักษา</span></Link>,
-                                            },
-                                        ]
-                                    },
-                                    {
-                                        key: 'OR',
-                                        icon: <RiSurgicalMaskLine   className="w-5 h-5 text-white" />,
-                                        label: <span className="text-white text-left block w-full">OR</span>,
-                                        children: [
-                                            {
-                                                key: '/or/statistics',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/or/statistics" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">บันทึกข้อมูลสถิติการรักษา</span></Link>,
-                                            },
-                                        ]
-                                    },
-                                    {
-                                        key: 'CHEMO',
-                                        icon: <GiChemicalBolt    className="w-5 h-5 text-white" />,
-                                        label: <span className="text-white text-left block w-full">CHEMO</span>,
-                                        children: [
-                                            {
-                                                key: '/chemo/statistics',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/chemo/statistics" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">บันทึกข้อมูลสถิติการรักษา</span></Link>,
-                                            },
-                                        ]
-                                    },
+                                    /* ER / OR / CHEMO เอาออกก่อน — ทั้งสามชี้ไป /or/statistics และ
+                                       /chemo/statistics ซึ่งยังไม่มีหน้าจริงในระบบ กดแล้วได้ 404
+                                       (ของ ER ยังชี้ผิดไปที่ URL ของ OR ด้วย) ใส่กลับได้เมื่อหน้าพร้อม */
                                 ]}
                             />
                         </ConfigProvider>
@@ -374,6 +447,41 @@ const Navbar = () => {
                             <VscAccount className="w-5 h-5" />
                             <span>Setting Information</span>
                         </div>
+                        {/* เรียงตามลำดับที่ต้องตั้งค่าจริง — ตำแหน่งต้องมาก่อน
+                            เพราะหน้าหอผู้ป่วยดึงรายชื่อจากตำแหน่งที่จับคู่ไว้ */}
+                        <DrawerSection label="บุคลากรและเวร" />
+                        <Link href="/ipd/positions" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <PiIdentificationBadgeBold className="w-5 h-5 text-white" />
+                            <span>จัดการตำแหน่งบุคลากร</span>
+                           </div>
+                        </Link>
+                        <Link href="/ipd/ward-staffs" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <LiaHospital    className="w-5 h-5 text-white" />
+                            <span>ตั้งค่าหอผู้ป่วยปฏิบัติงาน</span>
+                           </div>
+                        </Link>
+                        <Link href="/ipd/ward-quotas" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <LiaHospital    className="w-5 h-5 text-white" />
+                            <span>ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)</span>
+                           </div>
+                        </Link>
+                        <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <GrSchedulePlay    className="w-5 h-5 text-white" />
+                            <span>ตั้งค่าเวรเจ้าหน้าที่</span>
+                           </div>
+                        </Link>
+                        <Link href="/ipd/shift-rates" onClick={onCloseLeft}>
+                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                            <PiMoneyWavyBold className="w-5 h-5 text-white" />
+                            <span>ตั้งค่าตอบแทนตามเวร</span>
+                           </div>
+                        </Link>
+
+                        <DrawerSection label="รายงานภาระงาน" />
                         {/* <Link href="#" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <CgPerformance    className="w-5 h-5 text-white" />
@@ -386,31 +494,8 @@ const Navbar = () => {
                             <span>Full-Time Equivalent (FTE)</span>
                            </div>
                         </Link>
-                        <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <GrSchedulePlay    className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าเวรเจ้าหน้าที่</span>
-                           </div>
-                        </Link>
-                        <Link href="/ipd/ward-staffs" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <LiaHospital    className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าหอผู้ป่วยปฏิบัติงาน</span>
-                           </div>
-                        </Link>
-                        <Link href="/ipd/positions" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <PiIdentificationBadgeBold className="w-5 h-5 text-white" />
-                            <span>จัดการตำแหน่งบุคลากร</span>
-                           </div>
-                        </Link>
-                        <Link href="#" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <GrWorkshop   className="w-5 h-5 text-white" />
-                            <span>เจ้าหน้าที่</span>
-                           </div>
-                        </Link>
 
+                        <DrawerSection label="การแสดงผล" />
                         {/* โหมดสว่าง/มืด — ทุกคนตั้งได้ เป็นความชอบส่วนตัวรายเครื่อง
                             ไม่ใช่นโยบายระดับระบบแบบสวิตช์ผู้ช่วย AI */}
                         <div className="p-2 text-white">
@@ -436,31 +521,41 @@ const Navbar = () => {
                             )}
                         </div>
 
-                        {/* เห็นเฉพาะผู้ดูแลระบบ ตามบทบาท ADMIN ใน core_kon */}
+                        {/* งานออกแบบเนื้อหาวิชาการ คนละเรื่องกับการดูแลระบบ จึงแยกหมวดกัน
+                            สิทธิ์เข้าถึงยังผูกกับ can_manage เหมือนเดิม (ADMIN ใน core_kon)
+                            การเปิดให้หัวหน้าพยาบาลเข้าได้ต้องแก้ที่ฝั่งเซิร์ฟเวอร์ ไม่ใช่ที่เมนู */}
                         {aiSetting?.can_manage && (
-                            <button
-                                onClick={() => setAiDrawerOpen(true)}
-                                className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white w-full text-left"
-                            >
-                                <PiSparkleBold className="w-5 h-5 text-white" />
-                                <span className="flex-1">ผู้ช่วย AI</span>
-                                <span className={`text-xs px-2 py-0.5 rounded ${aiSetting.enabled ? 'bg-emerald-400/30 text-emerald-50' : 'bg-white/10 text-white/60'}`}>
-                                    {aiSetting.enabled ? 'เปิด' : 'ปิด'}
-                                </span>
-                            </button>
-                        )}
+                            <>
+                                <DrawerSection label="งานวิชาการการพยาบาล" />
+                                <Link href="/ipd/care-plan-templates" onClick={onCloseRight}>
+                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                        <PiListChecksBold className="w-5 h-5 text-white" />
+                                        <span>ออกแบบแม่แบบแผนการพยาบาล</span>
+                                    </div>
+                                </Link>
 
-                        {aiSetting?.can_manage && (
-                            <Link href="/ipd/care-plan-templates" onClick={onCloseRight}>
-                                <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                    <PiListChecksBold className="w-5 h-5 text-white" />
-                                    <span>แม่แบบแผนการพยาบาล</span>
-                                </div>
-                            </Link>
+                                <DrawerSection label="ผู้ดูแลระบบ" />
+                                <Link href="/ipd/holidays" onClick={onCloseRight}>
+                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                        <PiCalendarXBold className="w-5 h-5 text-white" />
+                                        <span>จัดการวันหยุด</span>
+                                    </div>
+                                </Link>
+                                <button
+                                    onClick={() => setAiDrawerOpen(true)}
+                                    className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white w-full text-left"
+                                >
+                                    <PiSparkleBold className="w-5 h-5 text-white" />
+                                    <span className="flex-1">ผู้ช่วย AI</span>
+                                    <span className={`text-xs px-2 py-0.5 rounded ${aiSetting.enabled ? 'bg-emerald-400/30 text-emerald-50' : 'bg-white/10 text-white/60'}`}>
+                                        {aiSetting.enabled ? 'เปิด' : 'ปิด'}
+                                    </span>
+                                </button>
+                            </>
                         )}
 
                     </div>
-                    <button onClick={handleLogout} className="flex items-center gap-3 p-2 hover:bg-white/10 rounded text-red-100 hover:text-white transition-colors w-full text-left mt-auto">
+                    <button onClick={handleLogout} className="flex items-center gap-3 p-2 mt-auto pt-3 border-t border-white/15 hover:bg-white/10 rounded-b text-red-100 hover:text-white transition-colors w-full text-left">
                         <VscSignOut className="w-5 h-5" />
                         <span>ออกจากระบบ</span>
                     </button>

@@ -65,7 +65,9 @@ const ScheduleTableAntd = () => {
         if (record.shift === 'N') bgColor = '#e6f7ff';
         if (record.shift === 'D') bgColor = '#fff7e6';
         if (record.shift === 'E') bgColor = '#fff1f0';
-        return { style: { backgroundColor: bgColor, fontWeight: 'bold' } };
+        // พื้นหลังเป็นพาสเทลอ่อนทั้งสองโหมด ตัวอักษรจึงต้องล็อกเป็นดำ
+        // ไม่งั้นโหมดมืดจะสืบทอดสีอ่อนของ antd มาแล้วอ่านไม่ออก
+        return { style: { backgroundColor: bgColor, fontWeight: 'bold', color: '#000000' } };
       }
     },
     {
@@ -451,8 +453,9 @@ const ScheduleTableAntd = () => {
                     const isAvg = row.shift === 'เฉลี่ย/วัน';
                     const bg = isAvg ? '#f6ffed' : SHIFT_COLORS[row.shift as string] || '#fafafa';
                     const label = isAvg ? 'เฉลี่ย/วัน' : SHIFT_LABELS[row.shift as string];
+                    // พื้นหลังแถวสรุปเป็นพาสเทลอ่อนทั้งสองโหมด จึงล็อกตัวอักษรเป็นดำไว้ด้วย
                     return (
-                      <Table.Summary.Row key={rowIdx} style={{ backgroundColor: bg }}>
+                      <Table.Summary.Row key={rowIdx} style={{ backgroundColor: bg, color: '#000000' }}>
                         <Table.Summary.Cell index={0} colSpan={2} align="center">
                           <strong style={{ color: isAvg ? '#389e0d' : '#006b5f' }}>{label}</strong>
                         </Table.Summary.Cell>

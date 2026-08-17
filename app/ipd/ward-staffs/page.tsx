@@ -389,7 +389,7 @@ export default function WardStaffPage() {
                                 type="warning"
                                 showIcon
                                 className="mb-4"
-                                message="ยังไม่ได้จับคู่ตำแหน่ง"
+                                title="ยังไม่ได้จับคู่ตำแหน่ง"
                                 description={
                                     <span>
                                         รายชื่อเจ้าหน้าที่มาจากตำแหน่งที่จับคู่ไว้ในหน้า{' '}

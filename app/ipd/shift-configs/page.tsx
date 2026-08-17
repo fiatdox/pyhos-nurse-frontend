@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Typography, Modal, DatePicker, Select, message, Spin } from 'antd';
+import { Table, Card, Typography, Modal, DatePicker, Select, message, Spin, Button, Tooltip, Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { PiMagicWandBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import axios from 'axios';
@@ -10,6 +11,25 @@ import Navbar from '@/app/components/Navbar';
 
 const { Title } = Typography;
 const { Option } = Select;
+
+/** ร่างที่ตัวจัดเวรอัตโนมัติคืนมา — ยังไม่ได้บันทึกลงฐานข้อมูล */
+interface AutoDraft {
+  month: string;
+  days_in_month: number;
+  assignments: { staff_id: number; shift_date: string; shift_code: string; nurse_shift_type_id: number | null }[];
+  summary: { assigned: number; needed: number; locked: number; gap_shifts: number };
+  impossible_positions: { staff_position_id: number; shifts_per_day: number }[];
+  per_staff: { staff_id: number; fullname: string; code: string; total: number; nights: number; days_off: number }[];
+  rules: { maxConsecutiveDays: number; minDaysOffPerMonth: number; forbidNightThenMorning: boolean };
+  notes: string[];
+}
+
+const HOLIDAY_TYPE_LABEL: Record<string, string> = {
+  public: 'วันหยุดราชการ',
+  substitution: 'วันหยุดชดเชย',
+  special: 'มติ ครม.',
+  organization: 'เฉพาะโรงพยาบาล',
+};
 dayjs.locale('th');
 
 interface StaffRecord {
@@ -63,6 +83,12 @@ export default function ShiftMatrix() {
   const [touched, setTouched] = useState(false);
   const [shiftTypes, setShiftTypes] = useState<NurseShiftType[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  // วันหยุดที่ประกาศไว้ เก็บเป็น map ของ 'YYYY-MM-DD' เพื่อค้นทีละวันได้เร็ว
+  const [holidays, setHolidays] = useState<Record<string, { name: string; type: string }>>({});
+  // ร่างตารางเวรที่ตัวจัดอัตโนมัติเสนอมา — ยังไม่ได้บันทึกจนกว่าจะกดยืนยัน
+  const [generating, setGenerating] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [draft, setDraft] = useState<AutoDraft | null>(null);
 
   // โหลด ward list และชั่วโมงเวร
   useEffect(() => {
@@ -94,6 +120,28 @@ export default function ShiftMatrix() {
     };
     fetchInitialData();
   }, [messageApi]);
+
+  // วันหยุดผูกกับปี ไม่ใช่หอผู้ป่วย จึงโหลดใหม่เฉพาะตอนข้ามปี ไม่ใช่ทุกครั้งที่เปลี่ยนเดือน
+  const viewYear = currentDate.year();
+  useEffect(() => {
+    const year = viewYear;
+    const fetchHolidays = async () => {
+      try {
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get('/api/v1/holidays/', { headers, params: { year } });
+        const map: Record<string, { name: string; type: string }> = {};
+        for (const h of res.data?.data ?? []) {
+          map[h.holiday_date] = { name: h.name_th, type: h.holiday_type };
+        }
+        setHolidays(map);
+      } catch {
+        // ไม่มีวันหยุดก็ยังจัดเวรได้ ไม่ต้องรบกวนผู้ใช้ด้วย error
+        setHolidays({});
+      }
+    };
+    fetchHolidays();
+  }, [viewYear]);
 
   // โหลดข้อมูลตารางเวรภาพรวมทั้งหมดเมื่อเลือก Ward หรือเปลี่ยนเดือน/ปี
   useEffect(() => {
@@ -305,10 +353,76 @@ export default function ShiftMatrix() {
     setEditingCell(null);
   };
 
+  /*
+    ขอร่างตารางเวรจากเซิร์ฟเวอร์ — endpoint นี้อ่านอย่างเดียว ไม่เขียนอะไรลงฐาน
+    แยกขั้นตอน "เสนอ" กับ "บันทึก" ออกจากกัน เพราะตารางเวรกระทบรายได้และชีวิตคน
+    ไม่ควรมีอะไรลงฐานข้อมูลโดยที่หัวหน้าเวรยังไม่เห็นว่าจะได้อะไร
+  */
+  const handleGenerate = async () => {
+    if (!selectedWard) return;
+    setGenerating(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post('/api/v1/nurse/auto-schedule', {
+        ward: selectedWard,
+        month: currentDate.format('YYYY-MM'),
+      }, { headers });
+      setDraft(res.data?.data ?? null);
+    } catch (error) {
+      const msg = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+      messageApi.error(msg ?? 'สร้างร่างตารางเวรไม่สำเร็จ');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  /** บันทึกร่างผ่านเส้นทางบันทึกเดิม ไม่ได้เขียนฐานข้อมูลด้วยทางลัดของตัวเอง */
+  const handleApplyDraft = async () => {
+    if (!draft || !selectedWard) return;
+    setApplying(true);
+    try {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const payload = draft.assignments.map(a => ({
+        staff_id: a.staff_id,
+        shift_date: a.shift_date,
+        shift_code: a.shift_code,
+        nurse_shift_type_id: a.nurse_shift_type_id ?? 0,
+        ward: selectedWard,
+        created_by: userId,
+      }));
+      await axios.post('/api/v1/nurse/nurse-schedules', payload, { headers });
+
+      // วาดลงตารางทันที ไม่ต้องรอโหลดใหม่ทั้งเดือน
+      setDutyData(prev => {
+        const next: DutyState = { ...prev };
+        for (const a of draft.assignments) {
+          const day = Number(a.shift_date.slice(-2));
+          next[a.staff_id] = { ...(next[a.staff_id] ?? {}), [day]: [a.shift_code] };
+        }
+        return next;
+      });
+      setDraft(null);
+      messageApi.success(`บันทึกตารางเวรแล้ว ${payload.length} เวร`);
+    } catch {
+      messageApi.error('บันทึกร่างไม่สำเร็จ');
+    } finally {
+      setApplying(false);
+    }
+  };
+
   const isWeekend = (day: number) => {
     const dayOfWeek = currentDate.date(day).day();
     return dayOfWeek === 0 || dayOfWeek === 6; // 0 = วันอาทิตย์, 6 = วันเสาร์
   };
+
+  /*
+    วันหยุดที่ประกาศ ต่างจากเสาร์–อาทิตย์ตรงที่มองจากปฏิทินไม่ออก
+    จึงต้องเน้นให้เห็นชัดกว่า และวันหยุดที่ตรงกับเสาร์–อาทิตย์ให้สีวันหยุดชนะ
+    เพราะเป็นข้อมูลที่ผู้จัดเวรยังไม่รู้ ส่วนเสาร์อาทิตย์เขารู้อยู่แล้ว
+  */
+  const holidayOf = (day: number) => holidays[currentDate.date(day).format('YYYY-MM-DD')];
 
   const columns: ColumnsType<StaffRecord> = [
     {
@@ -326,18 +440,27 @@ export default function ShiftMatrix() {
     },
     ...daysArray.map(day => {
       const weekend = isWeekend(day);
+      const holiday = holidayOf(day);
       return {
-        title: weekend ? <span className="text-yellow-300">{day}</span> : `${day}`,
+        title: holiday ? (
+          <Tooltip title={`${holiday.name} (${HOLIDAY_TYPE_LABEL[holiday.type] ?? holiday.type})`}>
+            <span className="text-rose-200 underline decoration-dotted underline-offset-2">{day}</span>
+          </Tooltip>
+        ) : weekend ? (
+          <span className="text-yellow-300">{day}</span>
+        ) : `${day}`,
         dataIndex: 'day_' + day,
         key: day,
         align: 'center' as const,
-        className: weekend ? 'bg-slate-100/60' : '',
+        className: holiday ? 'bg-rose-100/70' : weekend ? 'bg-slate-100/60' : '',
         render: (_: any, record: StaffRecord) => {
           const shifts = dutyData[record.id]?.[day] || [];
           return (
             <div
               onClick={() => handleCellClick(record, day)}
-              className={`cursor-pointer h-8 flex flex-wrap justify-center items-center content-center transition-colors ${weekend ? 'hover:bg-slate-200' : 'hover:bg-blue-50'}`}
+              className={`cursor-pointer h-8 flex flex-wrap justify-center items-center content-center transition-colors ${
+                holiday ? 'hover:bg-rose-200' : weekend ? 'hover:bg-slate-200' : 'hover:bg-blue-50'
+              }`}
             >
               {shifts.length > 0 ? (
                 shifts.map((s) => {
@@ -698,6 +821,16 @@ export default function ShiftMatrix() {
                 onChange={(date) => date && setCurrentDate(date)}
                 allowClear={false}
               />
+              <Tooltip title={selectedWard ? 'สร้างร่างตารางเวรจากอัตรากำลังที่ตั้งไว้' : 'เลือกหอผู้ป่วยก่อน'}>
+                <Button
+                  icon={<PiMagicWandBold />}
+                  disabled={!selectedWard || generating}
+                  loading={generating}
+                  onClick={handleGenerate}
+                >
+                  จัดเวรอัตโนมัติ
+                </Button>
+              </Tooltip>
             </div>
             <div className="flex gap-3">
               <span className="text-xs text-blue-600 font-bold">ช: เช้า</span>
@@ -705,6 +838,14 @@ export default function ShiftMatrix() {
               <span className="text-xs text-purple-600 font-bold">ด: ดึก</span>
               <span className="text-xs text-red-500 font-bold">OT8: ล่วงเวลา 8 ชม.</span>
               <span className="text-xs text-red-400 font-bold">OT4: ล่วงเวลา 4 ชม.</span>
+              <span className="text-xs text-gray-500 font-bold flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded-sm bg-slate-200 border border-slate-300" />
+                เสาร์–อาทิตย์
+              </span>
+              <span className="text-xs text-rose-500 font-bold flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded-sm bg-rose-200 border border-rose-300" />
+                วันหยุด
+              </span>
             </div>
           </div>
 
@@ -901,6 +1042,94 @@ export default function ShiftMatrix() {
                 </svg>
               </button>
             </div>
+          </Modal>
+
+          {/* หน้าตรวจร่างก่อนบันทึก — ตั้งใจให้เห็นตัวเลขที่สำคัญครบก่อนตัดสินใจ */}
+          <Modal
+            title="ร่างตารางเวรอัตโนมัติ"
+            open={draft !== null}
+            onCancel={() => setDraft(null)}
+            width={720}
+            style={{ maxWidth: 'calc(100vw - 32px)' }}
+            okText={`บันทึก ${draft?.assignments.length ?? 0} เวรลงตาราง`}
+            cancelText="ทิ้งร่างนี้"
+            onOk={handleApplyDraft}
+            confirmLoading={applying}
+            okButtonProps={{ className: 'bg-[#006b5f]', disabled: (draft?.assignments.length ?? 0) === 0 }}
+          >
+            {draft && (
+              <div className="flex flex-col gap-4 mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                  {[
+                    { label: 'ต้องการตามโควตา', value: draft.summary.needed, cls: 'text-gray-600' },
+                    { label: 'จัดให้ได้', value: draft.summary.assigned, cls: 'text-emerald-600' },
+                    { label: 'เติมไม่ได้', value: draft.summary.gap_shifts, cls: 'text-red-500' },
+                    { label: 'จัดมือไว้ก่อน', value: draft.summary.locked, cls: 'text-blue-500' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-gray-50 rounded-lg p-2">
+                      <div className={`text-lg font-bold ${s.cls}`}>{s.value}</div>
+                      <div className="text-[11px] text-gray-500">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {draft.impossible_positions.length > 0 && (
+                  <Alert
+                    type="error"
+                    showIcon
+                    title="มีตำแหน่งที่ไม่มีเจ้าหน้าที่ในหอนี้เลย"
+                    description={
+                      <span>
+                        โควตาขอไว้แต่ไม่มีคนให้จัด รวม{' '}
+                        <b>{draft.impossible_positions.reduce((a, p) => a + p.shifts_per_day, 0)}</b> เวรต่อวัน —
+                        แก้ด้วยการจัดเวรไม่ได้ ต้องแก้ที่อัตรากำลังหรือเพิ่มคนเข้าหอ
+                      </span>
+                    }
+                  />
+                )}
+
+                <Alert
+                  type="warning"
+                  showIcon
+                  title="ยังไม่ได้ตรวจวันลา"
+                  description="ระบบลายังไม่มีข้อมูล กรุณาตรวจว่าไม่มีใครถูกจัดเวรทับวันลาก่อนบันทึก"
+                />
+
+                <div>
+                  <div className="text-sm font-semibold text-gray-700 mb-1">ภาระงานรายคน</div>
+                  <div className="max-h-56 overflow-auto border border-gray-200 rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr className="text-gray-500">
+                          <th className="text-left p-2 font-medium">ชื่อ</th>
+                          <th className="p-2 font-medium">ตำแหน่ง</th>
+                          <th className="p-2 font-medium">รวมเวร</th>
+                          <th className="p-2 font-medium">เวรดึก</th>
+                          <th className="p-2 font-medium">วันหยุด</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draft.per_staff.map(s => (
+                          <tr key={s.staff_id} className="border-t border-gray-100">
+                            <td className="p-2">{s.fullname}</td>
+                            <td className="p-2 text-center text-gray-500">{s.code}</td>
+                            <td className="p-2 text-center font-semibold">{s.total}</td>
+                            <td className="p-2 text-center">{s.nights}</td>
+                            <td className="p-2 text-center text-gray-500">{s.days_off}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-gray-400 leading-relaxed">
+                  กติกาที่ใช้: ไม่ลงดึกติดเช้า · ขึ้นติดต่อกันไม่เกิน {draft.rules.maxConsecutiveDays} วัน ·
+                  หยุดอย่างน้อย {draft.rules.minDaysOffPerMonth} วัน/เดือน · จัดเฉพาะเวรปกติ ไม่รวม OT ·
+                  เวรที่จัดด้วยมือไว้แล้วถูกคงไว้ทั้งหมด
+                </div>
+              </div>
+            )}
           </Modal>
         </Card>
       </div>
