@@ -65,6 +65,7 @@ const MEGA_MENU: {
             { href: '/ic/opd', label: 'OPD Daily', icon: TbReportSearch },
             { href: '/ic/ipd', label: 'IPD Daily', icon: TbReportSearch },
             { href: '/ic/follow-up', label: 'ติดตามผู้ป่วยผ่าตัด (T814, A499)', icon: TbReportSearch },
+            { href: '/ic/amr-report', label: 'รายงานผู้ป่วยเชื้อดื้อยา (AMR)', icon: PiVirusBold },
             { href: '/ic/dashboard', label: 'IC Dashboard', icon: TbReportSearch },
         ],
     },
@@ -74,7 +75,10 @@ const MEGA_MENU: {
         nutritionOnly: true,
         items: [
             { href: '/ipd/nutrition-summary', label: 'สรุปรายการอาหารประจำวัน', icon: IoFastFoodOutline },
+            { href: '/ipd/nutrition-labels', label: 'พิมพ์ฉลากติดถาดอาหาร', icon: IoFastFoodOutline },
+            { href: '/ipd/nutrition-dashboard', label: 'ยอดอาหารตามประเภท Dashboard', icon: TbReportSearch },
             { href: '/ipd/order-food', label: 'รายการสั่งอาหารรายหอผู้ป่วย', icon: TbReportSearch },
+            { href: '/ipd/food-items', label: 'จัดการรายการเมนูอาหาร', icon: IoFastFoodOutline },
         ],
     },
     {

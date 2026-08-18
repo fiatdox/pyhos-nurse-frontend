@@ -4,13 +4,14 @@ import React from 'react';
 import Navbar from '../../components/Navbar';
 import NestPie from '@/app/components/ic/NestPie';
 import LineSmooth from '@/app/components/ic/LineSmooth';
+import MdroSankey from '@/app/components/ic/MdroSankey';
 import { Card } from 'antd';
 
 const DashboardPage = () => {
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
-      <div className="p-6 max-w-full mx-auto">
+      <div className="p-6 max-w-full mx-auto space-y-6">
         {/* Container สำหรับแบ่ง 50/50 */}
         <div className="flex flex-col lg:flex-row gap-6">
           
@@ -39,6 +40,16 @@ const DashboardPage = () => {
           </div>
 
         </div>
+
+        {/* กราฟเส้นทางเชื้อดื้อยา วางเต็มความกว้าง เพราะมีสามคอลัมน์และป้ายชื่อเชื้อยาว */}
+        <Card
+          className="shadow-xl rounded-2xl border-none"
+          title={<span className="text-lg font-bold text-rose-700">เส้นทางเชื้อดื้อยา (MDRO Pathway)</span>}
+        >
+          <div style={{ width: '100%', height: '560px' }}>
+            <MdroSankey />
+          </div>
+        </Card>
       </div>
     </div>
   );
