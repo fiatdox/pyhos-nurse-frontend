@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Alert, App, Button, Card, InputNumber, Modal, Segmented, Space, Spin, Statistic, Typography } from 'antd';
-import { PiClockCounterClockwiseBold, PiFloppyDiskBold } from 'react-icons/pi';
+import { Alert, App, Card, InputNumber, Segmented, Space, Spin, Statistic, Typography } from 'antd';
+import { PiClockCounterClockwiseBold } from 'react-icons/pi';
 import Navbar from '../../components/Navbar';
 import { RX_RETENTION_ITEM } from '../../lib/menu';
 import { useMenuAccess } from '../../lib/useMenuAccess';
@@ -11,10 +11,11 @@ import { useMenuAccess } from '../../lib/useMenuAccess';
 const { Text, Title } = Typography;
 
 /**
- * ระยะเวลาจัดเก็บไฟล์ใบสั่งยา (ผู้ดูแลระบบ)
+ * ระยะเวลาจัดเก็บไฟล์ใบสั่งยา
  *
- * ไฟล์ภาพที่หอสแกนส่งห้องยา เก็บไว้ตามจำนวนวันที่ตั้ง ครบแล้วเซิร์ฟเวอร์ลบออกจากดิสก์เอง
- * หน้านี้ต้องบอกให้ชัดก่อนกดบันทึกว่า "จะมีไฟล์หายกี่ไฟล์" เพราะการลบย้อนกลับไม่ได้
+ * ค่าจริงตั้งใน .env ของเซิร์ฟเวอร์ (RX_FILE_RETENTION_DAYS) ไม่ได้ตั้งจากหน้านี้
+ * หน้านี้มีไว้ดูว่าใช้ค่าอะไรอยู่ และลองนับว่าถ้าเปลี่ยนเป็นกี่วันจะมีไฟล์ถูกลบเท่าไร
+ * ก่อนไปแก้ .env จริง เพราะการลบย้อนกลับไม่ได้
  */
 
 interface RetentionInfo {
@@ -22,9 +23,7 @@ interface RetentionInfo {
     min: number;
     max: number;
     default: number;
-    updated_at: string | null;
-    updated_by: string | null;
-    can_manage: boolean;
+    env_key: string;
     preview_days: number;
     due: { files: number; orders: number; bytes: number };
     last_run: { at: string; files: number; skipped: number } | null;
@@ -50,7 +49,6 @@ export default function RxRetentionPage() {
     const [info, setInfo] = useState<RetentionInfo | null>(null);
     const [draft, setDraft] = useState<number | null>(null);
     const [preview, setPreview] = useState<RetentionInfo['due'] | null>(null);
-    const [saving, setSaving] = useState(false);
 
     const load = useCallback(async (days?: number) => {
         const res = await axios.get('/api/v1/rx/retention', {
@@ -61,13 +59,10 @@ export default function RxRetentionPage() {
 
     useEffect(() => {
         load().then(d => { setInfo(d); setDraft(d.days); setPreview(d.due); })
-            .catch(() => message.error('อ่านค่าตั้งไม่สำเร็จ'));
+            .catch(() => message.error('อ่านค่าไม่สำเร็จ'));
     }, [load, message]);
 
-    /*
-      นับล่วงหน้าทุกครั้งที่เปลี่ยนตัวเลข (รอให้หยุดพิมพ์ก่อน)
-      คนตั้งต้องเห็นผลก่อนกดบันทึก ไม่ใช่รู้ทีหลังว่าไฟล์หายไปเป็นพันไฟล์
-    */
+    /* นับล่วงหน้าทุกครั้งที่เปลี่ยนตัวเลข (รอให้หยุดพิมพ์ก่อน) */
     useEffect(() => {
         if (!info || !draft || draft < info.min || draft > info.max) return;
         const t = setTimeout(() => {
@@ -77,45 +72,12 @@ export default function RxRetentionPage() {
     }, [draft, info, load]);
 
     const valid = !!info && !!draft && Number.isInteger(draft) && draft >= info.min && draft <= info.max;
-    const changed = valid && draft !== info?.days;
-
-    const save = async () => {
-        if (!info || !draft || !valid) return;
-        const commit = async () => {
-            setSaving(true);
-            try {
-                await axios.put('/api/v1/rx/retention', { days: draft }, { headers: authHeaders() });
-                message.success(`ตั้งเก็บไฟล์ ${draft} วันแล้ว`);
-                const d = await load();
-                setInfo(d); setDraft(d.days); setPreview(d.due);
-            } catch (e) {
-                message.error(axios.isAxiosError(e) ? (e.response?.data?.message ?? 'บันทึกไม่สำเร็จ') : 'บันทึกไม่สำเร็จ');
-            } finally {
-                setSaving(false);
-            }
-        };
-        /* ตั้งให้สั้นลงแล้วมีไฟล์เข้าเกณฑ์ลบ ต้องยืนยันอีกครั้ง เพราะย้อนกลับไม่ได้ */
-        if (preview && preview.files > 0) {
-            Modal.confirm({
-                title: `ยืนยันตั้งเก็บไฟล์ ${draft} วัน`,
-                content: (
-                    <div className="text-sm">
-                        ไฟล์ภาพ <b>{preview.files.toLocaleString('th-TH')} ไฟล์</b> จาก {preview.orders.toLocaleString('th-TH')} ใบ
-                        จะถูกลบในรอบถัดไป (ภายใน 6 ชั่วโมง) และ<b>กู้คืนไม่ได้</b>
-                        <div className="text-gray-500 mt-2">ข้อมูลใบ ชื่อผู้ป่วย สถานะ และประวัติยังอยู่ครบ</div>
-                    </div>
-                ),
-                okText: 'ยืนยัน', cancelText: 'ยกเลิก', okButtonProps: { danger: true },
-                onOk: commit,
-            });
-            return;
-        }
-        await commit();
-    };
 
     if (!access.ready || !info) {
         return (<><Navbar /><div className="p-6 grid place-items-center"><Spin /></div></>);
     }
+
+    const trying = valid && draft !== info.days;
 
     return (
         <>
@@ -126,11 +88,9 @@ export default function RxRetentionPage() {
                         <Title level={4} className="m-0! flex items-center gap-2">
                             <PiClockCounterClockwiseBold /> {RX_RETENTION_ITEM.label}
                         </Title>
-                        {info.updated_at && (
-                            <Text type="secondary" className="text-xs">
-                                แก้ไขล่าสุด {thaiDateTime(info.updated_at)}{info.updated_by ? ` โดย ${info.updated_by}` : ''}
-                            </Text>
-                        )}
+                        <span className="ml-auto text-sm">
+                            ใช้อยู่ตอนนี้ <b className="text-lg">{info.days}</b> วัน
+                        </span>
                     </div>
                 </Card>
 
@@ -147,17 +107,27 @@ export default function RxRetentionPage() {
                     }
                 />
 
-                <Card size="small" title="จำนวนวันที่เก็บไฟล์">
+                <Card size="small" title="วิธีเปลี่ยนจำนวนวัน">
+                    <div className="text-sm flex flex-col gap-2">
+                        <span>แก้ในไฟล์ <code>.env</code> ของเซิร์ฟเวอร์ (backend) แล้ว restart เซิร์ฟเวอร์</span>
+                        <pre className="m-0 px-3 py-2 rounded bg-gray-100 text-sm overflow-x-auto">{`${info.env_key}=${info.days}`}</pre>
+                        <Text type="secondary" className="text-xs">
+                            ตั้งได้ {info.min}-{info.max} วัน · ไม่ตั้งหรือค่าผิด = {info.default} วัน
+                            (ค่าที่ผิดจะไม่ถูกใช้ตรง ๆ เพราะพิมพ์ผิดเป็น 1 แปลว่าไฟล์ทั้งระบบหายในรอบถัดไป)
+                        </Text>
+                    </div>
+                </Card>
+
+                <Card size="small" title="ลองนับก่อนแก้ .env">
                     <div className="flex flex-wrap items-center gap-3">
                         <Space.Compact>
                             <InputNumber
                                 min={info.min} max={info.max} precision={0}
                                 value={draft}
                                 onChange={v => setDraft(typeof v === 'number' ? v : null)}
-                                disabled={!info.can_manage}
                                 status={valid ? undefined : 'error'}
                                 className="w-28"
-                                aria-label="จำนวนวันที่เก็บไฟล์"
+                                aria-label="จำนวนวันที่ต้องการลองนับ"
                             />
                             <Space.Addon>วัน</Space.Addon>
                         </Space.Compact>
@@ -165,17 +135,17 @@ export default function RxRetentionPage() {
                             value={PRESETS.includes(draft ?? -1) ? draft : undefined}
                             onChange={v => setDraft(Number(v))}
                             options={PRESETS.map(d => ({ label: `${d} วัน`, value: d }))}
-                            disabled={!info.can_manage}
                         />
                     </div>
                     <Text type="secondary" className="text-xs block mt-2">
-                        ตั้งได้ {info.min}-{info.max} วัน · ค่าเริ่มต้น {info.default} วัน ·
-                        ขั้นต่ำ {info.min} วันกันพิมพ์ผิดแล้วไฟล์ทั้งระบบถูกลบในรอบถัดไป
+                        {trying
+                            ? `ตัวเลขด้านล่างคือผลถ้าเปลี่ยนเป็น ${draft} วัน ยังไม่มีอะไรเปลี่ยน จนกว่าจะแก้ .env และ restart`
+                            : 'ตัวเลขด้านล่างคือไฟล์ที่จะถูกลบในรอบถัดไปตามค่าที่ใช้อยู่'}
                     </Text>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
                         <Statistic
-                            title={`ไฟล์ที่จะถูกลบ (ถ้าตั้ง ${valid ? draft : '-'} วัน)`}
+                            title={`ไฟล์ที่จะถูกลบ (ที่ ${valid ? draft : '-'} วัน)`}
                             value={preview?.files ?? '-'}
                             suffix="ไฟล์"
                             styles={preview && preview.files > 0 ? { content: { color: '#cf1322' } } : undefined}
@@ -183,22 +153,6 @@ export default function RxRetentionPage() {
                         <Statistic title="จากใบสั่งยา" value={preview?.orders ?? '-'} suffix="ใบ" />
                         <Statistic title="พื้นที่ที่ได้คืน" value={preview ? mb(preview.bytes) : '-'} suffix="MB" />
                     </div>
-
-                    {info.can_manage ? (
-                        <div className="flex justify-end mt-4">
-                            <Button
-                                type="primary" icon={<PiFloppyDiskBold />}
-                                disabled={!changed} loading={saving} onClick={save}
-                            >
-                                บันทึก
-                            </Button>
-                        </div>
-                    ) : (
-                        <Alert
-                            className="mt-4" type="warning" showIcon
-                            title="ดูได้อย่างเดียว · เฉพาะผู้ดูแลระบบเท่านั้นที่เปลี่ยนค่านี้ได้"
-                        />
-                    )}
                 </Card>
 
                 <Text type="secondary" className="text-xs">
