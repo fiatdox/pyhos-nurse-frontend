@@ -13,7 +13,8 @@ interface DepResult {
   cc: number;
 }
 
-const NestPie = () => {
+/** fy = ปีงบประมาณ พ.ศ. ไม่ส่ง = ปีงบปัจจุบัน */
+const NestPie = ({ fy }: { fy?: number }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [outerData, setOuterData] = useState<{name: string, value: number}[]>([]);
   const router = useRouter();
@@ -31,7 +32,7 @@ const NestPie = () => {
           return;
         }
         const headers = { Authorization: `Bearer ${token}` };
-        const res = await axios.get('/api/v1/ic/result-dep-in-fiscal-year', { headers });
+        const res = await axios.get('/api/v1/ic/result-dep-in-fiscal-year', { headers, params: { fy } });
         
         if (res.data && res.data.success && Array.isArray(res.data.data)) {
           const formatted = res.data.data.map((item: DepResult) => ({
@@ -40,9 +41,9 @@ const NestPie = () => {
           }));
           setOuterData(formatted);
         }
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error fetching pie data:", error);
-        if (error.response?.status === 401) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
           message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
           router.push('/');
         } else {
@@ -51,7 +52,7 @@ const NestPie = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [fy, router]);
 
   useEffect(() => {
     let chartInstance: echarts.ECharts | null = null;

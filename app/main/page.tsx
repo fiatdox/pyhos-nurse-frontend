@@ -7,7 +7,7 @@ import type { IconType } from 'react-icons';
 import { PiHandWavingBold, PiShieldCheckBold, PiSquaresFourBold } from 'react-icons/pi';
 import Navbar from '../components/Navbar';
 import { useMenuAccess } from '../lib/useMenuAccess';
-import { MENU_ACCESS_ITEM, type MenuItem } from '../lib/menu';
+import { MENU_ACCESS_ITEM, RX_RETENTION_ITEM, type MenuItem } from '../lib/menu';
 import { getUserProfile } from '../lib/auth';
 
 /**
@@ -98,7 +98,7 @@ const Main = () => {
       .map(({ section, items }) => ({ key: section.key, heading: section.heading, icon: section.icon, items })),
     { key: 'base', heading: 'ทั่วไป', icon: PiSquaresFourBold, items: access.baseLinks },
     ...(access.isAdmin
-      ? [{ key: 'admin', heading: 'ผู้ดูแลระบบ', icon: PiShieldCheckBold, items: [MENU_ACCESS_ITEM] }]
+      ? [{ key: 'admin', heading: 'ผู้ดูแลระบบ', icon: PiShieldCheckBold, items: [MENU_ACCESS_ITEM, RX_RETENTION_ITEM] }]
       : []),
   ];
 

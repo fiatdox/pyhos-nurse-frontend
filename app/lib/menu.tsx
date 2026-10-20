@@ -2,6 +2,7 @@ import type { IconType } from 'react-icons';
 import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
+    PiClockCounterClockwiseBold,
 } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
 import { GrSchedulePlay, GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
@@ -160,6 +161,15 @@ export const MENU_ACCESS_ITEM: MenuItem = {
     href: '/ipd/menu-access',
     label: 'สิทธิ์การมองเห็นเมนู',
     icon: PiSlidersHorizontalBold,
+    groups: ['admin'],
+};
+
+/** ระยะเวลาจัดเก็บไฟล์ใบสั่งยา แอดมินเท่านั้น เซิร์ฟเวอร์ตรวจสิทธิ์ตอนบันทึกเองอีกชั้น */
+export const RX_RETENTION_ITEM: MenuItem = {
+    key: 'admin.rx-retention',
+    href: '/ipd/rx-retention',
+    label: 'ระยะเวลาจัดเก็บไฟล์ใบสั่งยา',
+    icon: PiClockCounterClockwiseBold,
     groups: ['admin'],
 };
 

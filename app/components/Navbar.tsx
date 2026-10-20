@@ -13,7 +13,7 @@ import { GrSchedulePlay } from 'react-icons/gr';
 import Link from 'next/link';
 import { CgPerformance } from 'react-icons/cg';
 import { LiaHospital } from 'react-icons/lia';
-import { MENU, MENU_ACCESS_ITEM } from '../lib/menu';
+import { MENU, MENU_ACCESS_ITEM, RX_RETENTION_ITEM } from '../lib/menu';
 import { useMenuAccess } from '../lib/useMenuAccess';
 
 interface AiSetting {
@@ -433,6 +433,12 @@ const Navbar = () => {
                                     <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                                         <PiSlidersHorizontalBold className="w-5 h-5 text-white" />
                                         <span>{MENU_ACCESS_ITEM.label}</span>
+                                    </div>
+                                </Link>
+                                <Link href={RX_RETENTION_ITEM.href} onClick={onCloseRight}>
+                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                        <RX_RETENTION_ITEM.icon className="w-5 h-5 text-white" />
+                                        <span>{RX_RETENTION_ITEM.label}</span>
                                     </div>
                                 </Link>
                                 <Link href="/ipd/holidays" onClick={onCloseRight}>

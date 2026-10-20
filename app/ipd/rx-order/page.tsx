@@ -24,6 +24,7 @@ import type { HnSource } from '../../lib/hnReader';
 import { SHIFTS, shiftRange, type ShiftKey } from '../../lib/rxShifts';
 import { PRIORITY, PriorityDot, type RxPriority } from '../../lib/rxPriority';
 import { TubeFeedTag } from '../../lib/rxTubeFeed';
+import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
@@ -130,7 +131,7 @@ const ACTION_LABEL: Record<string, string> = {
     submit: 'หอส่งใบ', ack: 'ห้องยารับ', complete: 'คีย์ลง HIS เสร็จ',
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     /* ชื่อผู้ทำอยู่ข้างหลังอยู่แล้ว ไม่ระบุว่าเป็นห้องยา เพราะตอนนี้หอก็เปิดดูได้ */
-    reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์',
+    reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
 };
 
 const SOURCE_LABEL: Record<HnSource, string> = {
@@ -165,6 +166,8 @@ interface RxOrder {
     tube_feed: boolean;
     rejected_by_name: string | null;
     file_count: number;
+    /** ไฟล์ภาพทุกไฟล์ของใบนี้ถูกลบตามระยะเวลาจัดเก็บแล้ว */
+    files_purged: boolean;
     waiting_seconds: number;
 }
 
@@ -246,6 +249,7 @@ export default function RxOrderPage() {
     */
     const [viewing, setViewing] = useState<RxOrder | null>(null);
     const [viewFiles, setViewFiles] = useState<RxFile[]>([]);
+    const retention = useRxRetention();
     const [viewEvents, setViewEvents] = useState<RxEvent[]>([]);
 
     /* ตัวกรองของตารางด้านล่าง ดูย้อนหลังได้ทีละวัน/ทีละเวร */
@@ -742,7 +746,12 @@ export default function RxOrderPage() {
             render: (_, r) => (
                 <div className="leading-tight">
                     <div className="font-semibold">{r.patient_name || <span className="text-gray-500">ไม่ระบุชื่อ</span>}</div>
-                    {r.tube_feed && <TubeFeedTag compact className="mt-0.5" />}
+                    {(r.tube_feed || r.files_purged) && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                            {r.tube_feed && <TubeFeedTag compact />}
+                            {r.files_purged && <PurgedTag />}
+                        </div>
+                    )}
                     <div className="text-xs text-gray-500">
                         HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}
                     </div>
@@ -805,7 +814,7 @@ export default function RxOrderPage() {
             title: '', key: 'view', width: 110, align: 'center',
             render: (_, r) => (
                 <Button size="small" icon={<PiEyeBold />} onClick={() => openView(r)}>
-                    ดูไฟล์ ({r.file_count})
+                    {r.files_purged ? 'ดูใบ' : `ดูไฟล์ (${r.file_count})`}
                 </Button>
             ),
         },
@@ -1291,6 +1300,12 @@ export default function RxOrderPage() {
                         )}
                     </div>
 
+                    {rows.some(r => r.files_purged) && (
+                        <div className="mb-3">
+                            <PurgedNotice days={retention} count={rows.filter(r => r.files_purged).length} />
+                        </div>
+                    )}
+
                     {listView === 'board' ? (
                         <RxBoard
                             columns={boardColumns}
@@ -1326,7 +1341,9 @@ export default function RxOrderPage() {
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                                            <Tag className="m-0! text-[11px]">{r.file_count} ไฟล์</Tag>
+                                            {r.files_purged
+                                                ? <PurgedTag />
+                                                : <Tag className="m-0! text-[11px]">{r.file_count} ไฟล์</Tag>}
                                             {r.prepared_by_name && (
                                                 <Tag color="green" className="m-0! text-[11px]">
                                                     <PiPackageBold className="inline mr-1" />ไปรับได้
@@ -1414,6 +1431,7 @@ export default function RxOrderPage() {
                         <RxFileViewer
                             orderId={viewing.rx_order_id}
                             files={viewFiles}
+                            retentionDays={retention}
                             className="flex-1 min-w-0"
                         />
 

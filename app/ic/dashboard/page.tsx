@@ -1,40 +1,85 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import Navbar from '../../components/Navbar';
 import NestPie from '@/app/components/ic/NestPie';
 import LineSmooth from '@/app/components/ic/LineSmooth';
 import MdroSankey from '@/app/components/ic/MdroSankey';
-import { Card } from 'antd';
+import { Card, Select } from 'antd';
+import { PiCalendarBlankBold } from 'react-icons/pi';
+
+/** ย้อนหลังได้กี่ปีงบ นับรวมปีปัจจุบัน */
+const FY_SPAN = 6;
+
+const TH_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+/**
+ * ปีงบประมาณ พ.ศ. ปัจจุบัน
+ * ปีงบเริ่ม 1 ต.ค. ตั้งแต่เดือนตุลาคมจึงขึ้นปีงบใหม่แล้ว (20 ต.ค. 2569 = ปีงบ 2570)
+ * ต้องตรงกับ fiscalRange ฝั่งเซิร์ฟเวอร์ ถ้าไม่ตรง ตัวเลือกบนจอจะไม่ตรงกับข้อมูลที่ได้
+ */
+const currentFiscalYear = (now = new Date()) =>
+  (now.getMonth() + 1 >= 10 ? now.getFullYear() + 1 : now.getFullYear()) + 543;
 
 const DashboardPage = () => {
+  const current = useMemo(() => currentFiscalYear(), []);
+  const [fy, setFy] = useState(current);
+
+  const options = useMemo(
+    () => Array.from({ length: FY_SPAN }, (_, i) => current - i).map(y => ({
+      value: y,
+      label: y === current ? `ปีงบประมาณ ${y} (ปัจจุบัน)` : `ปีงบประมาณ ${y}`,
+    })),
+    [current],
+  );
+
+  /* ช่วงวันที่ของปีงบที่เลือก บอกไว้ตรงหัวหน้า ให้รู้ว่าตัวเลขทุกกราฟนับจากช่วงไหน */
+  const rangeText = useMemo(() => {
+    const start = `1 ${TH_MONTH[9]} ${fy - 1}`;
+    if (fy !== current) return `${start} – 30 ${TH_MONTH[8]} ${fy}`;
+    const d = new Date();
+    return `${start} – ${d.getDate()} ${TH_MONTH[d.getMonth()]} ${d.getFullYear() + 543} (ถึงวันนี้)`;
+  }, [fy, current]);
+
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
       <div className="p-6 max-w-full mx-auto space-y-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <Select
+            value={fy}
+            onChange={setFy}
+            options={options}
+            className="min-w-56"
+            suffixIcon={<PiCalendarBlankBold />}
+            aria-label="เลือกปีงบประมาณ"
+          />
+          <span className="text-sm text-gray-500">{rangeText}</span>
+        </div>
+
         {/* Container สำหรับแบ่ง 50/50 */}
         <div className="flex flex-col lg:flex-row gap-6">
-          
+
           {/* Chart ที่ 1 (50%) */}
           <div className="w-full lg:w-1/2">
-            <Card 
-              className="shadow-xl rounded-2xl border-none" 
+            <Card
+              className="shadow-xl rounded-2xl border-none"
               title={<span className="text-lg font-bold text-emerald-700">Infection Trends</span>}
             >
               <div style={{ width: '100%', height: '450px' }}>
-                <LineSmooth />
+                <LineSmooth fy={fy} />
               </div>
             </Card>
           </div>
 
           {/* Chart ที่ 2 (50%) - ตัวอย่างโครงสร้างเตรียมไว้ให้ */}
           <div className="w-full lg:w-1/2">
-            <Card 
-              className="shadow-xl rounded-2xl border-none bg-white" 
+            <Card
+              className="shadow-xl rounded-2xl border-none bg-white"
               title={<span className="text-lg font-bold text-blue-700">Future Chart</span>}
             >
               <div className="flex items-center justify-center text-gray-400" style={{ width: '100%', height: '450px' }}>
-                <NestPie />
+                <NestPie fy={fy} />
               </div>
             </Card>
           </div>
@@ -47,7 +92,7 @@ const DashboardPage = () => {
           title={<span className="text-lg font-bold text-rose-700">เส้นทางเชื้อดื้อยา (MDRO Pathway)</span>}
         >
           <div style={{ width: '100%', height: '560px' }}>
-            <MdroSankey />
+            <MdroSankey fy={fy} />
           </div>
         </Card>
       </div>

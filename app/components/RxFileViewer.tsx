@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Segmented, Spin } from 'antd';
+import { Alert, Button, Empty, Segmented, Spin } from 'antd';
+import { PiClockCounterClockwiseBold } from 'react-icons/pi';
+import { purgedMessage } from '../lib/rxRetention';
 import {
     PiMagnifyingGlassPlusBold, PiMagnifyingGlassMinusBold, PiArrowClockwiseBold, PiPrinterBold,
 } from 'react-icons/pi';
@@ -20,6 +22,8 @@ export interface RxFile {
     original_name: string;
     mime_type: string;
     byte_size: number;
+    /** เวลาที่ไฟล์ถูกลบตามระยะเวลาจัดเก็บ ว่าง = ไฟล์ยังอยู่ */
+    purged_at?: string | null;
 }
 
 interface Props {
@@ -27,6 +31,8 @@ interface Props {
     files: RxFile[];
     /** ความสูงของกล่องดูไฟล์ ปล่อยว่างแล้วจะยืดเต็มพื้นที่ที่พ่อให้มา */
     className?: string;
+    /** จำนวนวันที่เก็บไฟล์ ใช้ในข้อความเมื่อไฟล์ถูกลบตามกำหนดแล้ว */
+    retentionDays?: number | null;
 }
 
 const authHeaders = (): Record<string, string> => {
@@ -34,7 +40,7 @@ const authHeaders = (): Record<string, string> => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export default function RxFileViewer({ orderId, files, className = '' }: Props) {
+export default function RxFileViewer({ orderId, files, className = '', retentionDays }: Props) {
     const [idx, setIdx] = useState(0);
     const [zoom, setZoom] = useState(1);
     const [rotate, setRotate] = useState(0);
@@ -47,6 +53,8 @@ export default function RxFileViewer({ orderId, files, className = '' }: Props) 
     */
     const [src, setSrc] = useState('');
     const [err, setErr] = useState('');
+    /* ไฟล์ถูกลบตามกำหนด แยกจากข้อผิดพลาด เพราะไม่ใช่ความผิดพลาด และ "ลองอีกครั้ง" ไม่ช่วยอะไร */
+    const [gone, setGone] = useState('');
     const [loading, setLoading] = useState(false);
     const blobRef = useRef('');
     /* นับลำดับคำขอ กันภาพของหน้าที่กดไว้ก่อนมาถึงช้ากว่าแล้วทับหน้าที่กำลังดูอยู่ */
@@ -62,11 +70,20 @@ export default function RxFileViewer({ orderId, files, className = '' }: Props) 
         release();
         setSrc('');
         setErr('');
+        setGone('');
         if (!file) return;
+        /* รู้อยู่แล้วว่าไฟล์ถูกลบ ไม่ต้องยิงไปถามให้เสียเวลา */
+        if (file.purged_at) { setGone(purgedMessage(file.purged_at, retentionDays)); return; }
         setLoading(true);
         try {
             const res = await fetch(`/api/v1/rx/orders/${orderId}/files/${file.rx_file_id}`,
                 { headers: authHeaders() });
+            /* ถูกลบระหว่างที่หน้าจอเปิดค้างไว้ เซิร์ฟเวอร์ตอบ 410 พร้อมข้อความที่บอกวันที่ลบ */
+            if (res.status === 410) {
+                const j = await res.json().catch(() => null) as { message?: string } | null;
+                if (my === reqRef.current) setGone(j?.message ?? purgedMessage(null, retentionDays));
+                return;
+            }
             if (!res.ok) {
                 throw new Error(res.status === 401
                     ? 'หมดเวลาเข้าใช้งาน กรุณาเข้าระบบใหม่'
@@ -82,7 +99,7 @@ export default function RxFileViewer({ orderId, files, className = '' }: Props) 
         } finally {
             if (my === reqRef.current) setLoading(false);
         }
-    }, [orderId, release]);
+    }, [orderId, release, retentionDays]);
 
     /* เปลี่ยนใบหรือได้รายการไฟล์มาแล้ว ให้เปิดหน้าแรกทันที ไม่ต้องรอให้กดอะไรอีก */
     useEffect(() => {
@@ -176,7 +193,7 @@ export default function RxFileViewer({ orderId, files, className = '' }: Props) 
                       PDF ไม่ต้องมี เพราะตัวอ่าน PDF ของเบราว์เซอร์มีปุ่มพิมพ์ของตัวเองอยู่แล้ว
                       ใส่เพิ่มจะกลายเป็นปุ่มพิมพ์สองปุ่มที่ทำงานคนละแบบในกรอบเดียวกัน
                     */}
-                    {!isPdf && src && !err && (
+                    {!isPdf && src && !err && !gone && (
                         <Button size="small" icon={<PiPrinterBold />} onClick={printImage}>
                             พิมพ์
                         </Button>
@@ -191,7 +208,22 @@ export default function RxFileViewer({ orderId, files, className = '' }: Props) 
                   จะมีหนึ่งเฟรมที่ src ยังว่างแล้ว <img src=""> ทำให้เบราว์เซอร์
                   ไปโหลดที่อยู่ของหน้าปัจจุบันซ้ำมาเป็นรูป
                 */}
-                {!current || loading || (!src && !err) ? (
+                {gone ? (
+                    <div className="h-full grid place-items-center p-4">
+                        <Empty
+                            image={<PiClockCounterClockwiseBold className="text-5xl text-gray-500 mx-auto" />}
+                            styles={{ image: { height: 56 } }}
+                            description={
+                                <div className="max-w-sm">
+                                    <div className="font-semibold">{gone}</div>
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        ข้อมูลใบ ชื่อผู้ป่วย สถานะ และประวัติการดำเนินการยังอยู่ครบ
+                                    </div>
+                                </div>
+                            }
+                        />
+                    </div>
+                ) : !current || loading || (!src && !err) ? (
                     <div className="h-full grid place-items-center"><Spin /></div>
                 ) : err ? (
                     <div className="h-full grid place-items-center p-4">

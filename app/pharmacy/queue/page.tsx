@@ -25,6 +25,7 @@ import { useRxSocket, createBeeper, type RxOrderEvent } from '../../lib/rxSocket
 import { SHIFTS, shiftRange, type ShiftKey } from '../../lib/rxShifts';
 import { PRIORITY, PRIORITY_ORDER, PriorityDot, type RxPriority } from '../../lib/rxPriority';
 import { TubeFeedTag } from '../../lib/rxTubeFeed';
+import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 
@@ -59,6 +60,8 @@ interface RxOrder {
     /** ผู้ป่วยได้รับอาหารทางสายยาง ต้องเตรียมยาให้ใช้ทางสายได้ */
     tube_feed: boolean;
     file_count: number;
+    /** ไฟล์ภาพทุกไฟล์ของใบนี้ถูกลบตามระยะเวลาจัดเก็บแล้ว */
+    files_purged: boolean;
     waiting_seconds: number;
 }
 
@@ -111,7 +114,7 @@ const ACTION_LABEL: Record<string, string> = {
     submit: 'หอส่งใบ', ack: 'ห้องยารับ', complete: 'คีย์ลง HIS เสร็จ',
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     resend: 'หอส่งฉบับแก้',
-    reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์',
+    reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
 };
 
 /** ปิดเสียงเป็นการตั้งค่าประจำเครื่อง เครื่องหลังเคาน์เตอร์กับเครื่องในห้องประชุมไม่เหมือนกัน */
@@ -220,6 +223,7 @@ export default function PharmacyQueuePage() {
 
     const [open, setOpen] = useState<RxOrder | null>(null);
     const [files, setFiles] = useState<RxFile[]>([]);
+    const retention = useRxRetention();
     const [events, setEvents] = useState<RxEvent[]>([]);
     const [detail, setDetail] = useState<RxDetail | null>(null);
     const [busy, setBusy] = useState(false);
@@ -546,7 +550,12 @@ export default function PharmacyQueuePage() {
                             )}
                             {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
                         </div>
-                        {r.tube_feed && <TubeFeedTag compact className="mt-0.5" />}
+                        {(r.tube_feed || r.files_purged) && (
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                                {r.tube_feed && <TubeFeedTag compact />}
+                                {r.files_purged && <PurgedTag />}
+                            </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className="text-sm tabular-nums">HN {r.hn || '-'}</span>
                             {r.an && <span className="text-xs text-gray-500">AN {r.an}</span>}
@@ -588,7 +597,7 @@ export default function PharmacyQueuePage() {
                     type={r.status === 'submitted' ? 'primary' : 'default'}
                     onClick={() => openOrder(r)}
                 >
-                    เปิดดู ({r.file_count})
+                    {r.files_purged ? 'เปิดดู' : `เปิดดู (${r.file_count})`}
                 </Button>
             ),
         },
@@ -950,6 +959,10 @@ export default function PharmacyQueuePage() {
                 </p>
             </Modal>
 
+{rows.some(r => r.files_purged) && (
+                <PurgedNotice days={retention} count={rows.filter(r => r.files_purged).length} />
+            )}
+
             {view === 'board' ? (
                 <RxBoard
                     columns={boardColumns}
@@ -990,7 +1003,9 @@ export default function PharmacyQueuePage() {
 
                                 <div className="flex flex-wrap items-center gap-1 mt-1.5">
                                     <Tag className="m-0! text-[11px]">{r.ward_name}</Tag>
-                                    <Tag className="m-0! text-[11px]">{r.file_count} ไฟล์</Tag>
+                                    {r.files_purged
+                                        ? <PurgedTag />
+                                        : <Tag className="m-0! text-[11px]">{r.file_count} ไฟล์</Tag>}
                                     {!r.his_verified && <Tag color="red" className="m-0! text-[11px]">ยังไม่ยืนยัน HIS</Tag>}
                                     {HN_SOURCE[r.hn_source] && (
                                         <Tag color={HN_SOURCE[r.hn_source].color} className="m-0! text-[11px]">
@@ -1119,6 +1134,7 @@ export default function PharmacyQueuePage() {
                         <RxFileViewer
                             orderId={open.rx_order_id}
                             files={files}
+                            retentionDays={retention}
                             className="flex-1 min-w-0"
                         />
 

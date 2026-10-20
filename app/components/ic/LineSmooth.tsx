@@ -23,7 +23,8 @@ interface InfectionResult {
   monthName: string;
 }
 
-const LineSmooth = () => {
+/** fy = ปีงบประมาณ พ.ศ. ไม่ส่ง = ปีงบปัจจุบัน */
+const LineSmooth = ({ fy }: { fy?: number }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -45,10 +46,12 @@ const LineSmooth = () => {
         }
 
         const headers = { Authorization: `Bearer ${token}` };
-        const response = await axios.get('/api/v1/ic/result-in-fiscal-year', { headers });
+        const response = await axios.get('/api/v1/ic/result-in-fiscal-year', { headers, params: { fy } });
 
         if (response.data.success && Array.isArray(response.data.data)) {
-          let rawData: InfectionResult[] = response.data.data;
+          /* แถวที่ไม่รู้เดือน ข้ามไป ถ้าปล่อยไว้ ตัวหาเดือนต่อเนื่องด้านล่างจะเจอเป็นตัวแรกแล้วตัดทิ้งทั้งปี */
+          const rawData: InfectionResult[] = (response.data.data as InfectionResult[])
+            .filter(item => Number.isInteger(item.fiscal_month_order) && !!item.monthName);
 
           // Logic: หาเดือนที่ต่อเนื่องกันเพื่อตัดเดือนที่กระโดด (เช่น เดือน 12) ออก
           const orders = [...new Set(rawData.map(item => item.fiscal_month_order))].sort((a, b) => a - b);
@@ -136,8 +139,8 @@ const LineSmooth = () => {
             chartInstance.setOption(option);
           }
         }
-      } catch (error: any) {
-        if (error.response?.status === 401) {
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
           message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
           router.push('/');
         } else {
@@ -155,7 +158,7 @@ const LineSmooth = () => {
       chartInstance?.dispose();
       window.removeEventListener('resize', handleResize);
     };
-  }, [resolved]);
+  }, [resolved, fy, router]);
 
   return (
     <div className="relative w-full h-full min-h-100">

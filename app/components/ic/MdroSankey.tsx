@@ -24,6 +24,8 @@ interface SankeyData {
     fiscal_year: number;
     start_date: string;
     end_date: string;
+    /** วันสุดท้ายที่นับจริง ปีงบปัจจุบัน = วันนี้ */
+    until_date: string;
     total: number;
     department_count: number;
     organism_count: number;
@@ -50,12 +52,19 @@ const RESISTANCE_COLOR: { match: RegExp; color: string }[] = [
 
 const DEPTH_COLOR = ['#006b5f', '#2980b9'];
 
+/** 2025-10-01 → 1/10/2568 */
+const beDate = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return y ? `${d}/${m}/${y + 543}` : iso;
+};
+
 const colorOf = (node: SankeyNode) => {
     if (node.depth < 2) return DEPTH_COLOR[node.depth];
     return RESISTANCE_COLOR.find(r => r.match.test(node.name))?.color ?? '#7f8c8d';
 };
 
-const MdroSankey = () => {
+/** fy = ปีงบประมาณ พ.ศ. ไม่ส่ง = ปีงบปัจจุบัน */
+const MdroSankey = ({ fy }: { fy?: number }) => {
     const chartRef = useRef<HTMLDivElement>(null);
     const [data, setData] = useState<SankeyData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -71,8 +80,10 @@ const MdroSankey = () => {
                     router.push('/');
                     return;
                 }
+                setLoading(true);
                 const res = await axios.get('/api/v1/ic/mdro-sankey-fiscal-year', {
                     headers: { Authorization: `Bearer ${token}` },
+                    params: { fy },
                 });
                 if (res.data?.success) setData(res.data.data);
             } catch (error) {
@@ -83,7 +94,7 @@ const MdroSankey = () => {
             }
         };
         fetchData();
-    }, [router]);
+    }, [router, fy]);
 
     useEffect(() => {
         if (!chartRef.current || !data || data.nodes.length === 0) return;
@@ -160,7 +171,7 @@ const MdroSankey = () => {
             <div className="flex flex-wrap items-center gap-2 mb-2 text-sm">
                 <Tag color="green" className="m-0">ปีงบประมาณ {data.fiscal_year}</Tag>
                 <span className="text-gray-500">
-                    {data.start_date.split('-').reverse().join('/')} ถึงวันนี้
+                    {beDate(data.start_date)} ถึง {beDate(data.until_date)}
                 </span>
                 <span className="text-gray-400">·</span>
                 <span className="text-gray-600">
