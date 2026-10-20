@@ -6,8 +6,8 @@ const nextConfig: NextConfig & { allowedDevOrigins?: string[] } = {
     return [
       {
         source: "/api/v1/:path*",
-        // เปลี่ยน http://127.0.0.1:8080 เป็น URL Backend ของคุณ (ถ้ามีใน env ก็จะใช้ค่าจาก env)
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080"}/api/v1/:path*`,
+        // URL ของ backend มาจาก NEXT_PUBLIC_API_URL ใน .env ไม่ตั้ง = API บนเครื่องเดียวกันพอร์ต 4001
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4001"}/api/v1/:path*`,
       },
     ];
   },
