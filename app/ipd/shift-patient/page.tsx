@@ -336,7 +336,7 @@ export default function ShiftPatientPage() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.get(`/api/v1/patients-register-by-ward/${selectedWard}`, { headers });
+      const response = await axios.get(`/api/v1/patients/patients-register-by-ward/${selectedWard}`, { headers });
       if (response.data) {
         setPatients(Array.isArray(response.data) ? response.data : response.data.data || []);
       }
@@ -377,7 +377,7 @@ export default function ShiftPatientPage() {
 
      //console.log('📥 Fetching assessment with payload:', payload);
 
-      const response = await axios.post('/api/v1/get-shift-assessment', payload, { headers });
+      const response = await axios.post('/api/v1/patients/get-shift-assessment', payload, { headers });
 
       if (response.data?.success && response.data?.data) {
         const data = response.data.data;
@@ -558,7 +558,7 @@ export default function ShiftPatientPage() {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const response = await axios.post('/api/v1/save-shift-assessment', cleanPayload, { headers });
+      const response = await axios.post('/api/v1/patients/save-shift-assessment', cleanPayload, { headers });
 
       if (response.status === 200 || response.status === 201) {
         Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: `บันทึกข้อมูลวันที่ ${recordDate.format('DD/MM/YYYY')} สำเร็จ`, timer: 2000, showConfirmButton: false });
@@ -752,7 +752,7 @@ export default function ShiftPatientPage() {
                   try {
                     const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
                     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-                    const response = await axios.post('/api/v1/get-shift-assessment', payload, { headers });
+                    const response = await axios.post('/api/v1/patients/get-shift-assessment', payload, { headers });
 
                     if (response.data?.success && response.data?.data) {
                       const data = response.data.data;

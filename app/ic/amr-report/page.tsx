@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import Swal from 'sweetalert2';
 import Navbar from '../../components/Navbar';
 import { PiFileXlsBold, PiMagnifyingGlassBold, PiVirusBold } from 'react-icons/pi';
+import { colorOfResistance } from '../../components/ic/resistance';
 
 dayjs.extend(buddhistEra);
 dayjs.locale('th');
@@ -45,25 +46,8 @@ interface Summary {
     by_resistance: { name: string; count: number }[];
 }
 
-/*
-  สีตามความเร่งด่วนทางระบาดวิทยา ไม่ใช่ไล่ตามลำดับตัวอักษร
-  กลุ่มดื้อ carbapenem กับ VRE ต้องแยกผู้ป่วยทันที จึงใช้โทนแดง
-*/
-const RESISTANCE_COLOR: { match: RegExp; color: string }[] = [
-    { match: /CRE/, color: 'red' },
-    { match: /CRAB/, color: 'volcano' },
-    { match: /CRPA/, color: 'orange' },
-    { match: /VRE/, color: 'magenta' },
-    { match: /MRSA/, color: 'purple' },
-    { match: /MRCONS|MRSE/, color: 'geekblue' },
-    { match: /ESCR/, color: 'gold' },
-    { match: /MDR/, color: 'cyan' },
-];
-
-const colorOfResistance = (value: string) =>
-    RESISTANCE_COLOR.find(r => r.match.test(value))?.color ?? 'default';
-
 const HEADERS = [
+    'ลำดับ',
     'วันที่รายงานผล', 'วันที่ส่งตรวจ', 'เลขที่ Lab', 'HN', 'ชื่อ-สกุล', 'เพศ', 'อายุ',
     'AN', 'หอผู้ป่วย', 'หน่วยงานที่ส่งตรวจ', 'สิ่งส่งตรวจ', 'เชื้อก่อโรค', 'กลุ่มการดื้อยา',
 ];
@@ -79,6 +63,12 @@ export default function AmrReportPage() {
     const [searched, setSearched] = useState(false);
     const [keyword, setKeyword] = useState('');
     const [groupFilter, setGroupFilter] = useState<string | null>(null);
+    /*
+      คุมเลขหน้าเอง เพราะคอลัมน์ลำดับต้องนับต่อจากหน้าก่อนหน้า
+      ถ้าปล่อยให้ตารางคุมเอง จะได้ index ของหน้าปัจจุบัน แล้วหน้า 2 จะเริ่มที่ 1 ใหม่
+    */
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50);
 
     const fetchReport = useCallback(async () => {
         setLoading(true);
@@ -91,6 +81,7 @@ export default function AmrReportPage() {
 
             if (res.data?.success) {
                 setRows(res.data.data ?? []);
+                setPage(1);
                 setSummary(res.data.summary ?? null);
                 setSearched(true);
             }
@@ -113,7 +104,9 @@ export default function AmrReportPage() {
             .some(v => String(v ?? '').toLowerCase().includes(k));
     });
 
-    const toRow = (r: AmrRow) => [
+    /* ลำดับใส่ในไฟล์ด้วย ไม่งั้นเวลาประชุมแล้วอ้าง "บรรทัดที่ 12" จอกับไฟล์จะคนละบรรทัด */
+    const toRow = (r: AmrRow, index: number) => [
+        index + 1,
         r.confirm_date, r.order_date ?? '', r.lab_no, r.hn, r.ptname ?? '', r.sex ?? '',
         r.age ?? '', r.an ?? '', r.ward_name ?? '', r.department ?? '', r.specimen ?? '',
         r.organism, r.resistance,
@@ -153,10 +146,11 @@ export default function AmrReportPage() {
         const ws = XLSX.utils.aoa_to_sheet([
             ...titleRows,
             HEADERS,
-            ...filtered.map(toRow),
+            ...filtered.map((r, i) => toRow(r, i)),
             ...summaryRows,
         ]);
         ws['!cols'] = [
+            { wch: 6 },
             { wch: 14 }, { wch: 13 }, { wch: 12 }, { wch: 10 }, { wch: 26 }, { wch: 6 }, { wch: 6 },
             { wch: 12 }, { wch: 18 }, { wch: 24 }, { wch: 12 }, { wch: 28 }, { wch: 14 },
         ];
@@ -167,6 +161,13 @@ export default function AmrReportPage() {
     };
 
     const columns: TableColumnsType<AmrRow> = [
+        {
+            title: 'ลำดับ', key: 'seq', width: 64, align: 'center', fixed: 'left',
+            /* นับตามลำดับที่เห็นบนจอ บวกออฟเซ็ตของหน้า กรองหรือเรียงใหม่แล้วเลขก็ยังไล่ 1..n ตามที่ตาเห็น */
+            render: (_, __, index) => (
+                <span className="text-gray-400">{(page - 1) * pageSize + index + 1}</span>
+            ),
+        },
         {
             title: 'วันที่รายงานผล', dataIndex: 'confirm_date', key: 'confirm_date', width: 120, fixed: 'left',
             render: (d: string) => dayjs(d).format('DD/MM/BBBB'),
@@ -269,7 +270,7 @@ export default function AmrReportPage() {
                                     key={g.name}
                                     color={groupFilter === g.name ? colorOfResistance(g.name) : 'default'}
                                     className="m-0 cursor-pointer px-2"
-                                    onClick={() => setGroupFilter(groupFilter === g.name ? null : g.name)}
+                                    onClick={() => { setGroupFilter(groupFilter === g.name ? null : g.name); setPage(1); }}
                                 >
                                     {g.name} {g.count}
                                 </Tag>
@@ -282,14 +283,14 @@ export default function AmrReportPage() {
                             <Input
                                 placeholder="ค้นหา HN / AN / ชื่อ / เชื้อ / หอผู้ป่วย"
                                 value={keyword}
-                                onChange={e => setKeyword(e.target.value)}
+                                onChange={e => { setKeyword(e.target.value); setPage(1); }}
                                 allowClear
                                 style={{ width: 300 }}
                                 prefix={<PiMagnifyingGlassBold className="text-gray-400" />}
                             />
                             <Select
                                 value={groupFilter}
-                                onChange={v => setGroupFilter(v ?? null)}
+                                onChange={v => { setGroupFilter(v ?? null); setPage(1); }}
                                 placeholder="ทุกกลุ่มการดื้อยา"
                                 allowClear
                                 style={{ width: 200 }}
@@ -320,7 +321,13 @@ export default function AmrReportPage() {
                             size="small"
                             bordered
                             scroll={{ x: 'max-content' }}
-                            pagination={{ pageSize: 50, showSizeChanger: true, showTotal: (t) => `ทั้งหมด ${t} บรรทัด` }}
+                            pagination={{
+                                current: page,
+                                pageSize,
+                                showSizeChanger: true,
+                                showTotal: (t) => `ทั้งหมด ${t} บรรทัด`,
+                                onChange: (p, size) => { setPage(p); setPageSize(size); },
+                            }}
                             className="
                                 [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
                                 [&_.ant-table-thead_.ant-table-cell]:text-white!

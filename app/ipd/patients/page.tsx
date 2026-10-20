@@ -329,7 +329,7 @@ export default function PatientList() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.post('/api/v1/update-patient', payload, { headers });
+      await axios.put('/api/v1/patients/update-patient', payload, { headers });
       closeEditDrawer();
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'แก้ไขข้อมูลสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       fetchPatients();

@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 import Navbar from '../../components/Navbar';
 import type { WardOrderPDFProps } from './WardOrderPDF';
 import { MdOutlineFastfood } from 'react-icons/md';
-import { PiCheckCircleBold, PiArrowUUpLeftBold, PiNoteBold, PiPrinterBold } from 'react-icons/pi';
+import { PiCheckCircleBold, PiArrowUUpLeftBold, PiNoteBold, PiPrinterBold, PiPaperPlaneTiltBold } from 'react-icons/pi';
 import Swal from 'sweetalert2';
 
 dayjs.extend(buddhistEra);
@@ -71,6 +71,12 @@ interface WardStatus {
     pending: number;
     reciever_name: string | null;
     received_at: string | null;
+    /** อนุมัติแล้วกี่รายการ — บริษัทผู้รับจ้างเห็นเฉพาะที่อนุมัติแล้ว */
+    approved: number;
+    /** ที่หอสั่งเพิ่มหลังอนุมัติ ยังค้างอยู่โดยบริษัทมองไม่เห็น */
+    unapproved: number;
+    approved_by_name: string | null;
+    approved_at: string | null;
 }
 
 interface SummaryData {
@@ -205,6 +211,66 @@ function NutritionSummaryContent() {
         }
     };
 
+    /*
+      อนุมัติคือการส่งรายการต่อให้บริษัทผู้รับจ้าง คนละขั้นกับการรับมอบของ
+      ก่อนอนุมัติ บริษัทมองไม่เห็นรายการเลย จึงยังไม่ได้เริ่มทำอาหาร
+    */
+    const handleApprove = async (ward: WardStatus, undo: boolean) => {
+        const key = `${ward.ward}-${ward.meal}`;
+        setWorking(key);
+        try {
+            const res = await axios.post('/api/v1/nutrition/approve-orders', {
+                ward: ward.ward, date: date.format('YYYY-MM-DD'), meal, undo,
+            }, { headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+
+            if (res.data?.success) {
+                await fetchSummary();
+                Swal.fire({
+                    icon: 'success',
+                    title: undo ? 'ถอนการอนุมัติแล้ว' : 'อนุมัติส่งบริษัทแล้ว',
+                    text: res.data.message, timer: 2000, showConfirmButton: false,
+                });
+            }
+        } catch (error) {
+            const message = axios.isAxiosError(error)
+                ? error.response?.data?.message ?? 'กรุณาลองใหม่อีกครั้ง'
+                : 'กรุณาลองใหม่อีกครั้ง';
+            Swal.fire({ icon: 'error', title: 'ทำรายการไม่สำเร็จ', text: message, timer: 4000, showConfirmButton: false });
+        } finally {
+            setWorking(null);
+        }
+    };
+
+    const confirmApprove = (ward: WardCardRow, undo: boolean) => {
+        modal.confirm({
+            title: undo ? 'ถอนการอนุมัติ' : 'อนุมัติส่งบริษัทผู้รับจ้าง',
+            width: 520,
+            okText: undo ? 'ถอนการอนุมัติ' : 'อนุมัติ',
+            cancelText: 'ไม่ใช่ตอนนี้',
+            okButtonProps: undo ? { danger: true } : { style: { backgroundColor: '#0369a1', borderColor: '#0369a1' } },
+            content: (
+                <div className="space-y-2 pt-1">
+                    <p className="mb-0">
+                        <span className="font-semibold">{ward.ward_name}</span> · มื้อ{MEALS.find(m => m.value === meal)?.label}{' '}
+                        วันที่ {date.format('DD/MM/YYYY')} จำนวน{' '}
+                        <span className="font-semibold">{undo ? ward.approved : ward.unapproved}</span> รายการ
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                        {ward.menus.map(m => (
+                            <Tag key={m.food_name} color="blue" className="m-0">{m.food_name} × {m.qty}</Tag>
+                        ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mb-0">
+                        {undo
+                            ? 'เมื่อถอนแล้ว รายการจะหายไปจากใบงานของบริษัททันที ถอนไม่ได้ถ้ารับมอบของไปแล้ว'
+                            : 'เมื่ออนุมัติแล้ว บริษัทจะเห็นรายการนี้และเริ่มเตรียมอาหารได้ — ตรวจยอดให้นิ่งก่อนกด'}
+                    </p>
+                </div>
+            ),
+            onOk: () => handleApprove(ward, undo),
+        });
+    };
+
     const confirmReceive = (ward: WardCardRow, undo: boolean) => {
         modal.confirm({
             title: undo ? 'ถอนการรับรายการ' : 'รับรายการอาหาร',
@@ -298,24 +364,45 @@ function NutritionSummaryContent() {
             render: (n: number) => <span className="text-lg font-bold">{n}</span>,
         },
         {
-            title: 'สถานะ', key: 'status', width: 210,
-            render: (_, row) => {
-                if (row.received === 0) return <Tag color="default">ยังไม่ได้รับรายการ</Tag>;
-                const partial = row.pending > 0;
-                return (
+            /*
+              สองขั้นต้องเห็นคู่กัน อนุมัติ (ส่งให้บริษัท) แล้วจึง รับมอบ (ตั้งต้นการจ่ายเงิน)
+              ป้าย "มีรายการใหม่" สำคัญที่สุด เพราะรายการที่หอสั่งเพิ่มหลังอนุมัติ
+              บริษัทจะมองไม่เห็น ถ้าไม่มีอะไรเตือน คนไข้รายนั้นจะไม่ได้อาหาร
+            */
+            title: 'สถานะ', key: 'status', width: 240,
+            render: (_, row) => (
+                <div className="flex flex-col gap-1">
                     <div className="flex flex-col gap-0.5">
-                        <Tag color={partial ? 'gold' : 'green'} className="m-0 w-fit">
-                            {partial ? `รับแล้วบางส่วน ${row.received}/${row.total}` : 'รับรายการแล้ว'}
-                        </Tag>
-                        <span className="text-[11px] text-gray-500">
-                            {row.reciever_name || 'ไม่ทราบผู้รับ'} · {row.received_at} น.
-                        </span>
+                        {row.approved === 0
+                            ? <Tag color="default" className="m-0 w-fit">ยังไม่ได้อนุมัติ</Tag>
+                            : (
+                                <>
+                                    <Tag color={row.unapproved > 0 ? 'orange' : 'blue'} className="m-0 w-fit">
+                                        {row.unapproved > 0
+                                            ? `มีรายการใหม่ ${row.unapproved} รายการ ยังไม่อนุมัติ`
+                                            : 'อนุมัติส่งบริษัทแล้ว'}
+                                    </Tag>
+                                    <span className="text-[11px] text-gray-500">
+                                        {row.approved_by_name || 'ไม่ทราบผู้อนุมัติ'} · {row.approved_at} น.
+                                    </span>
+                                </>
+                            )}
                     </div>
-                );
-            },
+                    {row.received > 0 && (
+                        <div className="flex flex-col gap-0.5">
+                            <Tag color={row.pending > 0 ? 'gold' : 'green'} className="m-0 w-fit">
+                                {row.pending > 0 ? `รับแล้วบางส่วน ${row.received}/${row.total}` : 'รับรายการแล้ว'}
+                            </Tag>
+                            <span className="text-[11px] text-gray-500">
+                                {row.reciever_name || 'ไม่ทราบผู้รับ'} · {row.received_at} น.
+                            </span>
+                        </div>
+                    )}
+                </div>
+            ),
         },
         {
-            title: 'ดำเนินการ', key: 'action', width: 230, align: 'center',
+            title: 'ดำเนินการ', key: 'action', width: 330, align: 'center',
             render: (_, row) => {
                 const busy = working === `${row.ward}-${row.meal}`;
                 const hasAddon = mealAddons.some(a => a.ward === row.ward);
@@ -327,6 +414,21 @@ function NutritionSummaryContent() {
                         {hasAddon && (
                             <Tooltip title="ดูหมายเหตุพิเศษของหอนี้">
                                 <Button size="small" icon={<PiNoteBold />} onClick={() => setAddonModalWard(row)} />
+                            </Tooltip>
+                        )}
+                        {canReceive && row.unapproved > 0 && (
+                            <Button
+                                size="small" type="primary" loading={busy} icon={<PiPaperPlaneTiltBold />}
+                                className="bg-sky-700 hover:bg-sky-800"
+                                onClick={() => confirmApprove(row, false)}
+                            >
+                                {row.approved > 0 ? 'อนุมัติเพิ่ม' : 'อนุมัติส่งบริษัท'}
+                            </Button>
+                        )}
+                        {canReceive && row.approved > 0 && row.received === 0 && (
+                            <Tooltip title="ถอนการอนุมัติ รายการจะหายไปจากใบงานของบริษัท">
+                                <Button size="small" loading={busy} icon={<PiArrowUUpLeftBold />}
+                                    onClick={() => confirmApprove(row, true)} />
                             </Tooltip>
                         )}
                         {canReceive && row.pending > 0 && (

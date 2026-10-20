@@ -3,23 +3,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Drawer, Menu, ConfigProvider, Checkbox, Alert, Spin, Typography, Segmented } from 'antd';
-import { PiSparkleBold, PiListChecksBold, PiMoonBold, PiIdentificationBadgeBold, PiMoneyWavyBold, PiCalendarXBold } from 'react-icons/pi';
-import { useThemeMode, type ThemeMode } from '../lib/theme';
 import {
-    VscSignOut,
-    VscAccount,
-    VscChecklist
-} from "react-icons/vsc";
-import { GrSchedulePlay, GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
-import { SiWikibooks } from 'react-icons/si';
-import { IoFastFoodOutline } from 'react-icons/io5';
-import { TbReportSearch } from 'react-icons/tb';
+    PiSparkleBold, PiListChecksBold, PiMoonBold, PiIdentificationBadgeBold,
+    PiMoneyWavyBold, PiCalendarXBold, PiBuildingsBold, PiSlidersHorizontalBold,
+} from 'react-icons/pi';
+import { useThemeMode, type ThemeMode } from '../lib/theme';
+import { VscSignOut, VscAccount } from 'react-icons/vsc';
+import { GrSchedulePlay } from 'react-icons/gr';
 import Link from 'next/link';
 import { CgPerformance } from 'react-icons/cg';
 import { LiaHospital } from 'react-icons/lia';
-import { PiVirusBold } from 'react-icons/pi';
-import { RiShareForwardFill } from 'react-icons/ri';
-import type { IconType } from 'react-icons';
+import { MENU, MENU_ACCESS_ITEM } from '../lib/menu';
+import { useMenuAccess } from '../lib/useMenuAccess';
 
 interface AiSetting {
     enabled: boolean;
@@ -28,71 +23,6 @@ interface AiSetting {
     /** ผู้ใช้คนนี้เป็นผู้ดูแลระบบหรือไม่ — เซิร์ฟเวอร์เป็นคนบอก */
     can_manage: boolean;
 }
-
-/** ทางลัดบนแถบบน — เอาเฉพาะงานที่เปิดใช้ทุกวัน */
-const TOP_LINKS: { href: string; label: string; icon: IconType }[] = [
-    { href: '/ipd/fte', label: 'FTE', icon: CgPerformance },
-    { href: '/ipd/dashboard', label: 'Dashboard', icon: TbReportSearch },
-];
-
-/**
- * เมนูย่อยใต้ "ระบบงาน" — จัดเป็นคอลัมน์ตามโมดูล
- * ไอคอนใช้ตัวเดียวกับลิ้นชักซ้าย เพื่อให้จำได้ว่าเป็นหน้าเดียวกันไม่ว่าเข้าจากทางไหน
- */
-const MEGA_MENU: {
-    heading: string;
-    icon: IconType;
-    /** จริง = แสดงเฉพาะเจ้าหน้าที่งานโภชนาการ (เซิร์ฟเวอร์เป็นคนบอกว่าใช่หรือไม่) */
-    nutritionOnly?: boolean;
-    items: { href: string; label: string; icon: IconType }[];
-}[] = [
-    {
-        heading: 'IPD',
-        icon: VscAccount,
-        items: [
-            { href: '/ipd/register', label: 'รับผู้ป่วย / รับย้าย', icon: GrUserAdd },
-            { href: '/ipd/patients', label: 'ทะเบียนผู้ป่วย', icon: SiWikibooks },
-            { href: '/ipd/discharge', label: 'จำหน่าย / ย้ายออก', icon: GrWheelchairActive },
-            { href: '/ipd/daily-routine', label: 'ประเมินระดับการดูแลรายเวร', icon: VscChecklist },
-            { href: '/ipd/shift-patient', label: 'สรุปยอดผู้ป่วยรายเวร', icon: RiShareForwardFill },
-            { href: '/ipd/order-food', label: 'สั่งอาหาร', icon: IoFastFoodOutline },
-        ],
-    },
-    {
-        heading: 'IC : Infection Controls',
-        icon: PiVirusBold,
-        items: [
-            { href: '/ic/opd', label: 'OPD Daily', icon: TbReportSearch },
-            { href: '/ic/ipd', label: 'IPD Daily', icon: TbReportSearch },
-            { href: '/ic/follow-up', label: 'ติดตามผู้ป่วยผ่าตัด (T814, A499)', icon: TbReportSearch },
-            { href: '/ic/amr-report', label: 'รายงานผู้ป่วยเชื้อดื้อยา (AMR)', icon: PiVirusBold },
-            { href: '/ic/dashboard', label: 'IC Dashboard', icon: TbReportSearch },
-        ],
-    },
-    {
-        heading: 'งานโภชนาการ',
-        icon: IoFastFoodOutline,
-        nutritionOnly: true,
-        items: [
-            { href: '/ipd/nutrition-summary', label: 'สรุปรายการอาหารประจำวัน', icon: IoFastFoodOutline },
-            { href: '/ipd/nutrition-labels', label: 'พิมพ์ฉลากติดถาดอาหาร', icon: IoFastFoodOutline },
-            { href: '/ipd/nutrition-dashboard', label: 'ยอดอาหารตามประเภท Dashboard', icon: TbReportSearch },
-            { href: '/ipd/order-food', label: 'รายการสั่งอาหารรายหอผู้ป่วย', icon: TbReportSearch },
-            { href: '/ipd/food-items', label: 'จัดการรายการเมนูอาหาร', icon: IoFastFoodOutline },
-        ],
-    },
-    {
-        heading: 'ตั้งค่า',
-        icon: LiaHospital,
-        items: [
-            { href: '/ipd/positions', label: 'จัดการตำแหน่งบุคลากร', icon: PiIdentificationBadgeBold },
-            { href: '/ipd/ward-staffs', label: 'ตั้งค่าหอผู้ป่วยปฏิบัติงาน', icon: LiaHospital },
-            { href: '/ipd/ward-quotas', label: 'ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)', icon: LiaHospital },
-            { href: '/ipd/shift-configs', label: 'ตั้งค่าเวรเจ้าหน้าที่', icon: GrSchedulePlay },
-            { href: '/ipd/shift-rates', label: 'ตั้งค่าตอบแทนตามเวร', icon: PiMoneyWavyBold },
-        ],
-    },
-];
 
 /**
  * หัวข้อคั่นกลุ่มเมนูในลิ้นชักตั้งค่า
@@ -113,7 +43,8 @@ const Navbar = () => {
     const router = useRouter();
     const pathname = usePathname();
 
-    const openKey = pathname ? pathname.split('/')[1] : '';
+    /* หมวดที่มีหน้าปัจจุบันอยู่ ใช้กางหมวดนั้นไว้ตอนเปิดลิ้นชัก */
+    const openKey = MENU.find(sec => sec.items.some(i => i.href === pathname))?.key ?? '';
 
     const showLeftDrawer = () => setOpenLeft(true);
     const onCloseLeft = () => setOpenLeft(false);
@@ -153,21 +84,12 @@ const Navbar = () => {
      * สิทธิ์งานโภชนาการ — ผูกกับกลุ่มงานจริงในทะเบียนบุคลากร ไม่ได้เดาจากฝั่งหน้าจอ
      * ซ่อนเมนูเป็นแค่ความสะดวก การกันจริงอยู่ที่เซิร์ฟเวอร์ซึ่งตรวจทุกครั้งที่กดรับรายการ
      */
-    const [canNutrition, setCanNutrition] = useState(false);
-
-    useEffect(() => {
-        (async () => {
-            try {
-                const res = await fetch('/api/v1/nutrition/access', { headers: authHeaders() });
-                const json = await res.json();
-                setCanNutrition(json?.data?.can_receive === true);
-            } catch {
-                // อ่านไม่ได้ก็ถือว่าไม่มีสิทธิ์ ไม่ต้องรบกวนผู้ใช้
-            }
-        })();
-    }, [authHeaders]);
-
-    const visibleMegaMenu = MEGA_MENU.filter(g => !g.nutritionOnly || canNutrition);
+    /*
+      กลุ่มของผู้ใช้เป็นตัวตัดสินว่าเมนูไหนขึ้น (ดู lib/useMenuAccess)
+      ของเดิมถามเฉพาะ "เป็นเจ้าหน้าที่โภชนาการไหม" ซึ่งตอบได้แค่เมนูเดียว
+      ตอนนี้ทุกหมวดใช้กลไกเดียวกัน และผู้ดูแลระบบเปิด/ปิดรายหมวดได้เอง
+    */
+    const access = useMenuAccess();
 
     const toggleAi = async (enabled: boolean) => {
         setAiSaving(true);
@@ -251,19 +173,19 @@ const Navbar = () => {
                                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                                             {/* จำนวนคอลัมน์ตามกลุ่มที่มองเห็นจริง ไม่งั้นกลุ่มที่ 4 จะตกไปอยู่แถวล่างตัวเดียว */}
                                             <div className={`grid grid-cols-1 gap-8 p-6 ${
-                                                visibleMegaMenu.length >= 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'
+                                                access.sections.length >= 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'
                                             }`}>
-                                                {visibleMegaMenu.map(group => (
-                                                    <div key={group.heading}>
+                                                {access.sections.map(({ section, items }) => (
+                                                    <div key={section.key}>
                                                         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                                                            <group.icon className="w-5 h-5 text-[var(--brand-text)]" />
-                                                            {group.heading}
+                                                            <section.icon className="w-5 h-5 text-[var(--brand-text)]" />
+                                                            {section.heading}
                                                         </h3>
                                                         <ul className="space-y-3">
-                                                            {group.items.map(item => {
+                                                            {items.map(item => {
                                                                 const active = pathname === item.href;
                                                                 return (
-                                                                    <li key={item.href}>
+                                                                    <li key={item.key}>
                                                                         <Link href={item.href} className="flex items-center gap-2 group/item">
                                                                             {/* ไอคอนจางกว่าตัวหนังสือ ให้ตายังอ่านชื่อเมนูก่อน */}
                                                                             <item.icon className={`w-4 h-4 shrink-0 ${
@@ -281,14 +203,27 @@ const Navbar = () => {
                                                         </ul>
                                                     </div>
                                                 ))}
+                                                {/*
+                                                  คนที่ไม่ได้อยู่กลุ่มไหนเลย (แพทย์ การเงิน พัสดุ ฯลฯ)
+                                                  ต้องรู้ว่าทำไมไม่มีเมนู ไม่ใช่เจอกล่องเปล่าแล้วเดาว่าระบบพัง
+                                                */}
+                                                {access.ready && access.sections.length === 0 && (
+                                                    <div className="text-sm text-gray-500 py-2">
+                                                        บัญชีนี้ยังไม่ได้อยู่ในกลุ่มผู้ใช้ใด จึงเห็นเฉพาะเมนูพื้นฐาน
+                                                        {access.majorName ? ` (กลุ่มงาน: ${access.majorName})` : ''}
+                                                        <div className="text-xs text-gray-400 mt-1">
+                                                            ถ้าต้องใช้เมนูของหน่วยงาน แจ้งผู้ดูแลระบบเพื่อเปิดให้กลุ่มงานนี้
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {TOP_LINKS.map(item => (
+                                {access.baseLinks.map(item => (
                                     <Link
-                                        key={item.href}
+                                        key={item.key}
                                         href={item.href}
                                         className={`hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium ${
                                             pathname === item.href ? 'bg-white/15' : ''
@@ -349,85 +284,32 @@ const Navbar = () => {
                                 theme="dark"
                                 inlineIndent={12}
                                 defaultOpenKeys={[openKey]}
-                                selectedKeys={[pathname]}
+                                /* ไฮไลต์ทุกรายการที่ชี้มาหน้านี้ หน้าที่อยู่สองหมวดจะสว่างทั้งสองที่ ซึ่งถูกแล้ว */
+                                selectedKeys={access.sections.flatMap(({ items }) =>
+                                    items.filter(i => i.href === pathname).map(i => i.key))}
                                 style={{ background: 'transparent', borderRight: 'none', padding: 0 }}
                                 className="mt-2 [&_.ant-menu-submenu-title]:px-2 [&_.ant-menu-submenu-title]:border-t [&_.ant-menu-submenu-title]:border-b [&_.ant-menu-submenu-title]:border-white/10 [&_.ant-menu-submenu-title]:font-bold [&_.ant-menu-submenu-title]:text-white [&_.ant-menu-title-content]:text-left"
                                 /* key ของทุกรายการต้องเป็น path จริง เพราะ selectedKeys เทียบกับ pathname
-                                   ของเดิมกลุ่ม IPD ใช้ชื่อสั้นๆ ทำให้ไม่เคยไฮไลต์ว่าอยู่หน้าไหน */
-                                items={[
-                                    {
-                                        key: 'ipd',
-                                        icon: <VscAccount className="w-5 h-5 text-white" />,
-                                        label: <span className="text-white text-left block w-full">IPD</span>,
-                                        children: [
-                                            {
-                                                key: '/ipd/register',
-                                                icon: <GrUserAdd className="w-5 h-5" />,
-                                                label: <Link href="/ipd/register" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">รับผู้ป่วย / รับย้าย</span></Link>,
-                                            },
-                                            {
-                                                key: '/ipd/patients',
-                                                icon: <SiWikibooks className="w-5 h-5" />,
-                                                label: <Link href="/ipd/patients" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ทะเบียนผู้ป่วย</span></Link>,
-                                            },
-                                            {
-                                                key: '/ipd/discharge',
-                                                icon: <GrWheelchairActive className="w-5 h-5" />,
-                                                label: <Link href="/ipd/discharge" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">จำหน่าย / ย้ายออก</span></Link>,
-                                            },
-                                            {
-                                                key: '/ipd/order-food',
-                                                icon: <IoFastFoodOutline className="w-5 h-5" />,
-                                                label: <Link href="/ipd/order-food" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">สั่งอาหาร</span></Link>,
-                                            },
-                                            {
-                                                key: '/ipd/daily-routine',
-                                                icon: <VscChecklist className="w-5 h-5" />,
-                                                label: <Link href="/ipd/daily-routine" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ประเมินระดับการดูแลรายเวร</span></Link>,
-                                            },
-                                            {
-                                                key: '/ipd/shift-patient',
-                                                icon: <RiShareForwardFill className="w-5 h-5" />,
-                                                label: <Link href="/ipd/shift-patient" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">สรุปยอดผู้ป่วยรายเวร</span></Link>,
-                                            },
-                                            {
-                                                key: '/ipd/dashboard',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ipd/dashboard" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">Dashboard</span></Link>,
-                                            },
-                                        ]
-                                    },
-                                    {
-                                        key: 'ic',
-                                        icon: <PiVirusBold className="w-5 h-5 text-white" />,
-                                        label: <span className="text-white text-left block w-full">IC : Infection Controls</span>,
-                                        children: [
-                                            {
-                                                key: '/ic/opd',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/opd" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">OPD Daily</span></Link>,
-                                            },
-                                            {
-                                                key: '/ic/ipd',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/ipd" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">IPD Daily</span></Link>,
-                                            },
-                                            {
-                                                key: '/ic/follow-up',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/follow-up" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">ติดตามผู้ป่วยผ่าตัด(T814,A499)</span></Link>,
-                                            },
-                                            {
-                                                key: '/ic/dashboard',
-                                                icon: <TbReportSearch className="w-5 h-5" />,
-                                                label: <Link href="/ic/dashboard" onClick={onCloseLeft} className="block w-full text-left"><span className="text-white">IC Dashboard</span></Link>,
-                                            },
-                                        ]
-                                    },
-                                    /* ER / OR / CHEMO เอาออกก่อน — ทั้งสามชี้ไป /or/statistics และ
-                                       /chemo/statistics ซึ่งยังไม่มีหน้าจริงในระบบ กดแล้วได้ 404
-                                       (ของ ER ยังชี้ผิดไปที่ URL ของ OR ด้วย) ใส่กลับได้เมื่อหน้าพร้อม */
-                                ]}
+                                   ของเดิมกลุ่ม IPD ใช้ชื่อสั้นๆ ทำให้ไม่เคยไฮไลต์ว่าอยู่หน้าไหน
+
+                                   รายการมาจากสารบัญเดียวกับแถบบน (lib/menu.tsx) ไม่ได้พิมพ์ซ้ำอีกชุด
+                                   ของเดิมพิมพ์แยกกัน แล้วลิ้นชักก็ขาดเมนูที่แถบบนมีอยู่หลายรายการ */
+                                items={access.sections.map(({ section, items }) => ({
+                                    key: section.key,
+                                    icon: <section.icon className="w-5 h-5 text-white" />,
+                                    label: <span className="text-white text-left block w-full">{section.heading}</span>,
+                                    children: items.map(item => ({
+                                        /* รหัสเมนู ไม่ใช่ URL เพราะหน้าเดียวอยู่ได้หลายหมวด
+                                           (/ipd/order-food อยู่ทั้ง IPD และงานโภชนาการ) แล้ว key จะซ้ำกัน */
+                                        key: item.key,
+                                        icon: <item.icon className="w-5 h-5" />,
+                                        label: (
+                                            <Link href={item.href} onClick={onCloseLeft} className="block w-full text-left">
+                                                <span className="text-white">{item.label}</span>
+                                            </Link>
+                                        ),
+                                    })),
+                                }))}
                             />
                         </ConfigProvider>
 
@@ -451,39 +333,47 @@ const Navbar = () => {
                             <VscAccount className="w-5 h-5" />
                             <span>Setting Information</span>
                         </div>
+                        {/* เห็นเมนูไม่เท่ากันเพราะอยู่คนละกลุ่ม บอกไว้ตรงนี้จะได้ไม่ต้องเดา */}
+                        {access.ready && (
+                            <div className="px-2 pb-2 text-xs text-white/60 leading-snug">
+                                กลุ่มผู้ใช้: {access.groupLabels.length > 0 ? access.groupLabels.join(' · ') : 'ยังไม่ได้จัดกลุ่ม'}
+                                {access.majorName && <div className="text-white/60">{access.majorName}</div>}
+                            </div>
+                        )}
                         {/* เรียงตามลำดับที่ต้องตั้งค่าจริง — ตำแหน่งต้องมาก่อน
                             เพราะหน้าหอผู้ป่วยดึงรายชื่อจากตำแหน่งที่จับคู่ไว้ */}
-                        <DrawerSection label="บุคลากรและเวร" />
-                        <Link href="/ipd/positions" onClick={onCloseLeft}>
+                        {/* เมนูตั้งค่าใช้สิทธิ์ชุดเดียวกับหมวด "ตั้งค่า" บนแถบบน จะได้ไม่ขัดกันเอง */}
+                        {access.can('settings.positions') && <DrawerSection label="บุคลากรและเวร" />}
+                        {access.can('settings.positions') && <Link href="/ipd/positions" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <PiIdentificationBadgeBold className="w-5 h-5 text-white" />
                             <span>จัดการตำแหน่งบุคลากร</span>
                            </div>
-                        </Link>
-                        <Link href="/ipd/ward-staffs" onClick={onCloseLeft}>
+                        </Link>}
+                        {access.can('settings.ward-staffs') && <Link href="/ipd/ward-staffs" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <LiaHospital    className="w-5 h-5 text-white" />
                             <span>ตั้งค่าหอผู้ป่วยปฏิบัติงาน</span>
                            </div>
-                        </Link>
-                        <Link href="/ipd/ward-quotas" onClick={onCloseLeft}>
+                        </Link>}
+                        {access.can('settings.ward-quotas') && <Link href="/ipd/ward-quotas" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <LiaHospital    className="w-5 h-5 text-white" />
                             <span>ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)</span>
                            </div>
-                        </Link>
-                        <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
+                        </Link>}
+                        {access.can('settings.shift-configs') && <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <GrSchedulePlay    className="w-5 h-5 text-white" />
                             <span>ตั้งค่าเวรเจ้าหน้าที่</span>
                            </div>
-                        </Link>
-                        <Link href="/ipd/shift-rates" onClick={onCloseLeft}>
+                        </Link>}
+                        {access.can('settings.shift-rates') && <Link href="/ipd/shift-rates" onClick={onCloseLeft}>
                            <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                             <PiMoneyWavyBold className="w-5 h-5 text-white" />
                             <span>ตั้งค่าตอบแทนตามเวร</span>
                            </div>
-                        </Link>
+                        </Link>}
 
                         <DrawerSection label="รายงานภาระงาน" />
                         {/* <Link href="#" onClick={onCloseLeft}>
@@ -539,10 +429,28 @@ const Navbar = () => {
                                 </Link>
 
                                 <DrawerSection label="ผู้ดูแลระบบ" />
+                                <Link href={MENU_ACCESS_ITEM.href} onClick={onCloseRight}>
+                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                        <PiSlidersHorizontalBold className="w-5 h-5 text-white" />
+                                        <span>{MENU_ACCESS_ITEM.label}</span>
+                                    </div>
+                                </Link>
                                 <Link href="/ipd/holidays" onClick={onCloseRight}>
                                     <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
                                         <PiCalendarXBold className="w-5 h-5 text-white" />
                                         <span>จัดการวันหยุด</span>
+                                    </div>
+                                </Link>
+                                <Link href="/ipd/food-prices" onClick={onCloseRight}>
+                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                        <PiMoneyWavyBold className="w-5 h-5 text-white" />
+                                        <span>ตั้งราคาอาหารตามประเภท</span>
+                                    </div>
+                                </Link>
+                                <Link href="/ipd/vendors" onClick={onCloseRight}>
+                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+                                        <PiBuildingsBold className="w-5 h-5 text-white" />
+                                        <span>บัญชีบริษัทผู้รับจ้างทำอาหาร</span>
                                     </div>
                                 </Link>
                                 <button

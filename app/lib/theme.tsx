@@ -102,7 +102,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             <ConfigProvider
                 theme={{
                     algorithm: resolved === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-                    token: { colorPrimary: BRAND, borderRadius: 8 },
+                    token: {
+                        colorPrimary: BRAND,
+                        borderRadius: 8,
+                        /*
+                          antd ตั้งฟอนต์ของตัวเองไว้ในโทเคน และ CSS ของ antd ไม่ได้อยู่ใน layer
+                          (ดูเหตุผลที่หัว globals.css) กฎนั้นจึงชนะฟอนต์ที่ตั้งไว้ที่ <body>
+                          ผลคือหน้าเดียวกันมีภาษาไทยสองฟอนต์ ตัวที่ antd วาด (ปุ่ม ตาราง
+                          ช่องกรอก โมดัล) เป็นฟอนต์สำรองของระบบ ส่วนข้อความธรรมดาเป็นสารบรรณ
+                          รูปสระกับวรรณยุกต์คนละทรง ความสูงบรรทัดคนละค่า มองแล้วเหมือนจอเพี้ยน
+                          บอกฟอนต์เดียวกันให้ antd รู้ ทั้งจอจึงกลับมาเป็นชุดเดียว
+                        */
+                        fontFamily: "var(--font-sarabun), 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                    },
                     components: { Card: { headerHeight: 40 } },
                 }}
             >

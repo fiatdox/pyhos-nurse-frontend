@@ -4,6 +4,22 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Swal from "sweetalert2";
+import { saveVendorSession, type VendorProfile } from "./lib/vendorAuth";
+
+/**
+ * โหมดการเข้าระบบ
+ *
+ * สองฝั่งยิงไปคนละ endpoint คนละฐานบัญชี และเข้าไปคนละหน้า
+ * ทำเป็นแท็บที่เห็นชัดตลอดเวลา ไม่ใช่สวิตช์เล็กๆ เพราะถ้าผู้ใช้ไม่รู้ว่า
+ * ตัวเองอยู่โหมดไหน จะกรอกบัญชีเจ้าหน้าที่ส่งไปที่ endpoint ของบริษัท
+ * แล้วได้ข้อความว่ารหัสผ่านไม่ถูกต้องทั้งที่รหัสผ่านถูก
+ */
+type LoginMode = "staff" | "vendor";
+
+const MODES: { key: LoginMode; label: string; hint: string }[] = [
+  { key: "staff", label: "เจ้าหน้าที่โรงพยาบาล", hint: "ใช้บัญชีเดียวกับระบบบุคลากร" },
+  { key: "vendor", label: "บริษัทผู้รับจ้างทำอาหาร", hint: "ใช้บัญชีที่โรงพยาบาลออกให้" },
+];
 
 interface UserProfile {
   id: number;
@@ -44,6 +60,26 @@ const IconAlert = () => (
   </svg>
 );
 
+const IconBuilding = () => (
+  <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+  </svg>
+);
+
+/*
+  สีในหน้านี้เขียนเป็นค่าคงที่ ไม่ใช้ text-gray-* / text-slate-* / teal-*
+
+  หน้านี้เป็นพื้นมืดตายตัวทั้งสองโหมด (#0f1117 กับ #1a1d27) แต่ globals.css
+  กลับด้านเฉดสีกลางทั้งชุดเมื่อ <html> มีคลาส .dark เฉดเดียวกันจึงให้ค่าคนละสี
+  คนละโหมด ผลคือ text-gray-500 เหลือความต่าง 3.5:1 ในโหมดสว่าง
+  ส่วน hover:text-gray-200 เหลือ 1.4:1 ในโหมดมืด คือหายไปเลยตอนเอาเมาส์ชี้
+
+  เฉดเขียวก็กลับด้านเหมือนกัน teal-200 ในโหมดมืดคือ #144848 ซึ่งเข้มกว่า
+  ม่านเขียวที่อยู่ข้างหลัง เหลือความต่างแค่ 1.6:1 คำว่า "โรงพยาบาลพะเยา" จึงหายไป
+
+  ค่าคงที่ไม่ผูกกับโหมด พื้นหลังตรงนี้ก็ไม่เปลี่ยน สิ่งที่เห็นจึงเหมือนกันทุกเครื่อง
+*/
+
 const BG_URL =
   "https://images.unsplash.com/photo-1725870953863-4ad4db0acfc2?q=80&w=1170&auto=format&fit=crop";
 
@@ -53,8 +89,26 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [mode, setMode] = useState<LoginMode>("staff");
 
   const router = useRouter();
+
+  /*
+    ล้างช่องกรอกทุกครั้งที่สลับแท็บ
+
+    ถ้าไม่ล้าง ผู้ใช้ที่กรอกไว้แล้วสลับแท็บจะกดส่งต่อทันทีโดยไม่ทันดู
+    แล้วบัญชีของฝั่งหนึ่งจะถูกส่งไปให้อีกฝั่งตรวจ ซึ่งไม่มีทางผ่าน
+    และตัวนับรหัสผ่านผิดของฝั่งบริษัทจะเพิ่มขึ้นฟรีๆ จนบัญชีถูกล็อก
+  */
+  const switchMode = (next: LoginMode) => {
+    if (next === mode) return;
+    setMode(next);
+    setError("");
+    setUsername("");
+    setPassword("");
+  };
+
+  const activeMode = MODES.find(m => m.key === mode)!;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +116,18 @@ export default function Home() {
     setIsLoading(true);
 
     try {
+      if (mode === "vendor") {
+        const response = await axios.post("/api/v1/vendor/login", { username, password });
+        if (response.data?.success) {
+          // เก็บคนละคุกกี้กับของเจ้าหน้าที่ ดู lib/vendorAuth
+          saveVendorSession(response.data.token, response.data.data as VendorProfile);
+          router.push("/vendor/report");
+        } else {
+          setError("เข้าระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        }
+        return;
+      }
+
       const response = await axios.post<LoginResponse>("/api/v1/auth/login", {
         username,
         password,
@@ -76,14 +142,37 @@ export default function Home() {
       } else {
         setError("Login Failed: Invalid response from server.");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login Error:", err);
-      if (err.response) {
-        if (err.response.status === 401) {
-          const serverMsg = err.response.data?.message;
+
+      // แยกชนิดด้วย axios.isAxiosError แทนการประกาศ any ให้ตัวตรวจชนิดยังทำงานได้
+      if (!axios.isAxiosError(err)) {
+        setError("เกิดข้อผิดพลาดในการส่งคำขอ");
+      } else if (err.response) {
+        const data = err.response.data as { message?: string } | undefined;
+        if (err.response.status === 423) {
+          // บัญชีบริษัทถูกล็อกเพราะกรอกรหัสผ่านผิดหลายครั้ง ข้อความจากเซิร์ฟเวอร์บอกครบแล้ว
+          const msg = data?.message ?? "บัญชีถูกล็อกชั่วคราว";
+          setError(msg);
+          Swal.fire({ icon: "warning", title: "บัญชีถูกล็อก", text: msg, confirmButtonText: "ตกลง" });
+        } else if (err.response.status === 401) {
+          const serverMsg = data?.message;
           const errorMsg = serverMsg || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
           setError(errorMsg);
-          Swal.fire({ icon: "error", title: "เข้าสู่ระบบไม่สำเร็จ", text: errorMsg, confirmButtonText: "ตกลง" });
+          /*
+            เตือนเรื่องแท็บด้วย เพราะเป็นสาเหตุที่เจอบ่อยที่สุดเมื่อกรอกถูกแล้วยังเข้าไม่ได้
+            ข้อความหลักยังไม่บอกว่าผิดที่ชื่อผู้ใช้หรือรหัสผ่าน เพื่อไม่ให้คนนอก
+            ไล่หาได้ว่าบัญชีไหนมีอยู่จริง การบอกเรื่องแท็บไม่ได้เปิดเผยอะไรเพิ่ม
+          */
+          Swal.fire({
+            icon: "error",
+            title: "เข้าสู่ระบบไม่สำเร็จ",
+            text: errorMsg,
+            footer: mode === "vendor"
+              ? "ถ้านี่เป็นบัญชีเจ้าหน้าที่โรงพยาบาล ให้สลับไปแท็บ “เจ้าหน้าที่โรงพยาบาล”"
+              : "ถ้านี่เป็นบัญชีของบริษัทผู้รับจ้าง ให้สลับไปแท็บ “บริษัทผู้รับจ้างทำอาหาร”",
+            confirmButtonText: "ตกลง",
+          });
         } else if (err.response.status === 404) {
           setError("ไม่พบ API (404) ตรวจสอบการตั้งค่า Rewrites หรือ URL Backend");
         } else {
@@ -123,13 +212,13 @@ export default function Home() {
           <h1 className="text-5xl font-bold text-white leading-tight mb-4">
             ระบบบริหารจัดการพยาบาล
           </h1>
-          <p className="text-xl text-teal-200 mb-6">โรงพยาบาลพะเยา</p>
-          <div className="h-1 w-16 rounded-full bg-teal-400" />
+          <p className="text-xl text-[#ccfbf1] mb-6">โรงพยาบาลพะเยา</p>
+          <div className="h-1 w-16 rounded-full bg-[#2dd4bf]" />
         </div>
 
         {/* bottom caption */}
         <div className="relative z-10">
-          <p className="text-white/50 text-sm">Phayao Hospital · Nursing Management System</p>
+          <p className="text-white/75 text-sm">Phayao Hospital · Nursing Management System</p>
         </div>
       </div>
 
@@ -157,21 +246,46 @@ export default function Home() {
         <div className="relative z-10 w-full max-w-sm">
           {/* mobile logo */}
           <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-teal-600/30 border border-teal-500/40 backdrop-blur-sm mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0d9488]/30 border border-[#14b8a6]/40 backdrop-blur-sm mb-4">
               <IconCross />
             </div>
             <h1 className="text-3xl font-bold text-white">PYHOS-NURSE</h1>
-            <p className="text-teal-300 mt-1 text-sm">โรงพยาบาลพะเยา</p>
+            <p className="text-[#99f6e4] mt-1 text-sm">
+              {mode === "staff" ? "โรงพยาบาลพะเยา" : activeMode.label}
+            </p>
           </div>
 
           {/* form card */}
           <div className="bg-white/5 lg:bg-[#1a1d27] backdrop-blur-md border border-white/10 rounded-2xl p-8 shadow-2xl">
-            <div className="hidden lg:block mb-8">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-teal-600/20 border border-teal-500/30 mb-5">
-                <span className="text-teal-400"><IconCross /></span>
+            <div className="hidden lg:block mb-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#0d9488]/20 border border-[#14b8a6]/30 mb-5">
+                <span className="text-[#2dd4bf]">{mode === "staff" ? <IconCross /> : <IconBuilding />}</span>
               </div>
               <h2 className="text-2xl font-bold text-white mb-1">เข้าสู่ระบบ</h2>
-              <p className="text-gray-400 text-sm">กรุณากรอกชื่อผู้ใช้และรหัสผ่าน</p>
+              <p className="text-white/70 text-sm">{activeMode.hint}</p>
+            </div>
+
+            {/*
+              แท็บต้องเห็นชัดว่าอันไหนถูกเลือกอยู่ ไม่ใช่ต่างกันแค่สีจางๆ
+              เพราะการเลือกผิดทำให้เข้าระบบไม่ได้โดยไม่มีคำอธิบายที่ตรงสาเหตุ
+            */}
+            <div className="grid grid-cols-2 gap-1 p-1 mb-5 rounded-xl bg-white/5 border border-white/10">
+              {MODES.map(m => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => switchMode(m.key)}
+                  disabled={isLoading}
+                  aria-pressed={mode === m.key}
+                  className={`py-2 px-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 ${
+                    mode === m.key
+                      ? "bg-[#0f766e] text-white shadow-lg shadow-black/40"
+                      : "text-white/65 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -185,15 +299,17 @@ export default function Home() {
 
               {/* username */}
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5 font-medium">ชื่อผู้ใช้</label>
+                <label className="block text-sm text-white/70 mb-1.5 font-medium">ชื่อผู้ใช้</label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/50">
                     <IconUser />
                   </span>
                   <input
                     type="text"
                     placeholder="กรอกชื่อผู้ใช้"
-                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/50 transition-all"
+                    name={mode === "staff" ? "username" : "vendor-username"}
+                    autoComplete="username"
+                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/50 text-sm focus:outline-none focus:border-[#14b8a6] focus:ring-1 focus:ring-[#14b8a6]/50 transition-all"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={isLoading}
@@ -204,15 +320,17 @@ export default function Home() {
 
               {/* password */}
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5 font-medium">รหัสผ่าน</label>
+                <label className="block text-sm text-white/70 mb-1.5 font-medium">รหัสผ่าน</label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/50">
                     <IconLock />
                   </span>
                   <input
                     type={showPass ? "text" : "password"}
                     placeholder="กรอกรหัสผ่าน"
-                    className="w-full pl-11 pr-11 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/50 transition-all"
+                    name={mode === "staff" ? "password" : "vendor-password"}
+                    autoComplete="current-password"
+                    className="w-full pl-11 pr-11 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/50 text-sm focus:outline-none focus:border-[#14b8a6] focus:ring-1 focus:ring-[#14b8a6]/50 transition-all"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
@@ -221,7 +339,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setShowPass(p => !p)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/50 hover:text-white transition-colors"
                     tabIndex={-1}
                   >
                     {showPass ? (
@@ -243,9 +361,9 @@ export default function Home() {
                   type="submit"
                   disabled={isLoading}
                   className="w-full py-3 rounded-xl font-semibold text-sm tracking-wide transition-all shadow-lg
-                    bg-linear-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400
+                    bg-linear-to-r from-[#115e59] to-[#0f766e] hover:from-[#13746b] hover:to-[#14857a]
                     text-white disabled:opacity-50 disabled:cursor-wait
-                    hover:shadow-teal-500/25 hover:shadow-xl active:scale-[0.98]"
+                    hover:shadow-[#14b8a6]/25 hover:shadow-xl active:scale-[0.98]"
                 >
                   {isLoading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -261,9 +379,17 @@ export default function Home() {
                 </button>
               </div>
             </form>
+
+            {mode === "vendor" && (
+              <p className="text-center text-white/60 text-xs mt-5 leading-relaxed">
+                กรอกรหัสผ่านผิดติดกัน 5 ครั้ง บัญชีจะถูกล็อก 15 นาที
+                <br />
+                ลืมรหัสผ่านหรือบัญชีถูกล็อก ติดต่องานโภชนาการของโรงพยาบาล
+              </p>
+            )}
           </div>
 
-          <p className="text-center text-white/25 text-xs mt-6">
+          <p className="text-center text-white/55 text-xs mt-6">
             Phayao Hospital · Nursing Management System
           </p>
         </div>

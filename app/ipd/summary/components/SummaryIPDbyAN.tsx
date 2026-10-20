@@ -8,6 +8,7 @@ import {
   Document,
   StyleSheet,
   Font,
+  Image,
   PDFViewer,
 } from '@react-pdf/renderer';
 import axios from 'axios';
@@ -29,25 +30,114 @@ dayjs.locale('th');
 Font.register({
   family: 'Sarabun',
   fonts: [
-    { src: '/fonts/sarabun/Sarabun-Regular.ttf' },
-    { src: '/fonts/sarabun/Sarabun-Bold.ttf', fontWeight: 'bold' },
+    { src: '/fonts/Sarabun/Sarabun-Regular.ttf' },
+    { src: '/fonts/Sarabun/Sarabun-Bold.ttf', fontWeight: 'bold' },
   ],
 });
 
+/**
+ * หัวกระดาษของโรงพยาบาล
+ *
+ * รวมไว้ที่เดียวเพราะใบนี้พิมพ์ออกไปเก็บในแฟ้มเวชระเบียน ถ้าที่อยู่หรือเบอร์เปลี่ยน
+ * ต้องแก้จุดเดียวแล้วทุกหน้าทั้งสิบใบเปลี่ยนตาม ไม่ใช่ไล่แก้ทีละหน้าแล้วตกหล่น
+ *
+ * !! ที่อยู่กับเบอร์โทรด้านล่างยังไม่ได้ยืนยันกับงานเวชระเบียน !!
+ * กรุณาตรวจให้ตรงกับหัวกระดาษของฟอร์มจริงก่อนนำไปใช้ เพราะเอกสารนี้เป็นส่วนหนึ่ง
+ * ของเวชระเบียน ข้อมูลติดต่อที่ผิดบนเอกสารที่ส่งต่อให้หน่วยงานอื่นแก้ย้อนหลังไม่ได้
+ */
+const HOSPITAL = {
+    nameTh: 'โรงพยาบาลพะเยา',
+    nameEn: 'Phayao Hospital',
+    address: '269 หมู่ 11 ถนนพหลโยธิน ตำบลบ้านต๋อม อำเภอเมืองพะเยา จังหวัดพะเยา 56000',
+    phone: 'โทร. 0-5440-9300',
+    /* ไฟล์อยู่ที่ public/assets/images/ Next เสิร์ฟโฟลเดอร์ public ที่รากของเว็บ
+       เขียนตามชื่อไฟล์จริงรวมช่องว่าง เบราว์เซอร์เข้ารหัสให้เองตอนร้องขอ */
+    logo: '/assets/images/logo MOPH.png',
+};
+
 // 2. Styles
 const styles = StyleSheet.create({
+  /*
+    หัวกับท้ายกระดาษวางแบบ absolute และสั่ง fixed จึงซ้ำทุกหน้ารวมถึงหน้าที่ล้นมาเอง
+    ตัวเนื้อหาต้องเว้นที่ด้านบนล่างให้พอ ไม่งั้นบรรทัดแรกจะพิมพ์ทับหัวกระดาษ
+  */
   page: {
-    padding: 30,
+    paddingTop: 96,
+    paddingBottom: 38,
+    paddingHorizontal: 28,
     fontFamily: 'Sarabun',
     fontSize: 8,
     lineHeight: 1.4,
   },
-  header: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 10,
-    color: '#006b5f',
+  /*
+    ระบุความกว้างตรง ๆ ไม่ใช้ left คู่กับ right
+    กระดาษ A4 กว้าง 595.28 pt หักขอบซ้ายขวาข้างละ 28 เหลือ 539.28
+  */
+  formHeader: {
+    position: 'absolute',
+    top: 22,
+    left: 28,
+    width: 539.28,
+  },
+  /*
+    ต้องกำหนดความสูงตรง ๆ
+
+    กล่องหัวกระดาษวางแบบ absolute จึงไม่มีความสูงของพ่อแม่มาจำกัด
+    แถวข้างในเลยยืดเต็มพื้นที่ที่เหลือของหน้า สูงราวสามพันจุด
+    พอสั่ง alignItems center ลูกทุกตัวก็ไปอยู่กึ่งกลางของสามพันจุดนั้น
+    คือหลุดใต้กระดาษไปไกล ส่วนเส้นคั่นใต้แถวก็ไปอยู่ที่ก้นกล่องเช่นกัน
+    เหลือแต่คอลัมน์ขวาที่กำหนดความกว้างไว้เองเลยยังพอเห็น
+    จึงดูเหมือนหัวกระดาษหายไปครึ่งเดียว
+
+    ล็อกความสูงไว้ แถวจึงสูงเท่าโลโก้ ลูกทุกตัวกลับมาอยู่ในกรอบ
+  */
+  formHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 42,
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#006b5f',
+    borderBottomStyle: 'solid',
+    paddingBottom: 4,
+  },
+  logo: { width: 40, height: 40, marginRight: 9 },
+  /* ชื่อไทยกับอังกฤษอยู่บรรทัดเดียวกันด้วย Text ซ้อนใน Text ไม่ต้องเปลืองอีกบรรทัด */
+  hospitalTh: { fontSize: 12.5, fontWeight: 'bold', color: '#006b5f', lineHeight: 1.25 },
+  hospitalEn: { fontSize: 7.5, fontWeight: 'normal', color: '#6b7a78' },
+  hospitalMeta: { fontSize: 6.5, color: '#6b7a78', lineHeight: 1.35 },
+  headerRight: { width: 100, alignItems: 'flex-end' },
+  docCode: { fontSize: 6.5, color: '#8a9795', lineHeight: 1.4 },
+  /*
+    ชื่อฟอร์มเป็นแถบชิดซ้าย มีขีดเขียวนำหน้า
+    แบบฟอร์มกระดาษของโรงพยาบาลวางชื่อฟอร์มชิดซ้ายเหมือนกัน
+    และสายตาที่ไล่จากซ้ายลงมาอ่านบล็อกผู้ป่วยต่อ จะได้ไม่ต้องวิ่งกลับไปกลางหน้า
+
+    ต้องกำหนดความสูงให้ทั้งแถบและขีด ด้วยเหตุผลเดียวกับ formHeaderRow
+    กล่อง absolute ไม่มีความสูงของพ่อแม่มาจำกัด ลูกจะยืดจนหลุดกระดาษ
+  */
+  titleBand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 17,
+    marginTop: 6,
+    backgroundColor: '#eef6f5',
+  },
+  titleBar: { width: 3, height: 17, backgroundColor: '#006b5f', marginRight: 7 },
+  titleText: { fontSize: 10.5, fontWeight: 'bold', color: '#00564d' },
+  /* ล็อกความสูงด้วยเหตุผลเดียวกับหัวกระดาษ */
+  formFooter: {
+    position: 'absolute',
+    bottom: 18,
+    left: 28,
+    width: 539.28,
+    height: 12,
+    flexDirection: 'row',
+    fontSize: 6.5,
+    color: '#888',
+    borderTopWidth: 0.5,
+    borderTopColor: '#ccc',
+    borderTopStyle: 'solid',
+    paddingTop: 3,
   },
   subHeader: {
     fontSize: 10,
@@ -141,6 +231,51 @@ interface PatientRow {
 
 /** บันทึกแรกรับจาก /api/v1/nursing-records/admit/:an — คีย์ตรงกับชื่อคอลัมน์ */
 type AdmitRecord = Record<string, unknown>;
+
+/**
+ * แผนการพยาบาลจาก /api/v1/nursing-records/focus/:an
+ *
+ * รูปร่างของฟอร์มไม่ได้อยู่ในโค้ด แต่อยู่ใน structure ของแต่ละบันทึก
+ * เพราะแต่ละหอใช้แม่แบบของตัวเอง และแม่แบบถูกคัดลอกติดไปกับบันทึกตอนบันทึก
+ * รายงานย้อนหลังจึงต้องวาดตามแม่แบบรุ่นที่ใช้ตอนนั้น ไม่ใช่รุ่นล่าสุดในระบบ
+ */
+type PlanAnswer = boolean | number | string;
+
+interface PlanEval {
+  id: string;
+  kind: 'check' | 'choice' | 'number' | 'text' | 'time';
+  label: string;
+  unit?: string | null;
+  options?: string[];
+  allow_other?: boolean;
+}
+
+interface PlanSection {
+  id: string;
+  title: string;
+  activities: string[];
+  evaluations: PlanEval[];
+}
+
+interface FocusRecord {
+  id: number;
+  template_code: string;
+  template_title: string;
+  template_version: number;
+  structure: { sections: PlanSection[] } | null;
+  answers: Record<string, PlanAnswer> | null;
+  record_datetime: string;
+  shift?: string | null;
+  status: 'draft' | 'final' | 'cancelled';
+  nurse_name?: string | null;
+  nurse_major?: string | null;
+  note?: string | null;
+  is_late_entry?: boolean;
+  entered_at?: string | null;
+  late_entry_reason?: string | null;
+  cancel_reason?: string | null;
+  cancelled_by_name?: string | null;
+}
 
 /**
  * สัญญาณชีพจาก /api/v1/nursing-records/vital/:an
@@ -298,6 +433,57 @@ const Line = ({ label: l, value }: { label: string; value: string }) => (
   </Text>
 );
 
+/**
+ * หัวกระดาษมาตรฐานของโรงพยาบาล ใช้ทุกหน้าของรายงานนี้
+ *
+ * สั่ง fixed เพื่อให้ซ้ำในหน้าที่ล้นออกไปเองด้วย เช่น ตารางสัญญาณชีพที่ยาวหลายหน้า
+ * ถ้าไม่ซ้ำ หน้าที่สองของตารางจะเป็นกระดาษเปล่าไม่มีชื่อโรงพยาบาล
+ * ซึ่งใช้เป็นเอกสารในแฟ้มเวชระเบียนไม่ได้ เพราะแผ่นที่หลุดออกมาจะไม่รู้ว่าของที่ไหน
+ */
+const FormHeader = ({ title, docCode }: { title: string; docCode?: string }) => (
+  <View style={styles.formHeader} fixed>
+    <View style={styles.formHeaderRow}>
+      {/* Image ตัวนี้ของ @react-pdf ไม่ใช่ <img> ของ HTML จึงไม่มี prop alt ให้ใส่ */}
+      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+      <Image src={HOSPITAL.logo} style={styles.logo} />
+      <View style={styles.flex1}>
+        <Text style={styles.hospitalTh}>
+          {HOSPITAL.nameTh}
+          <Text style={styles.hospitalEn}>  ·  {HOSPITAL.nameEn}</Text>
+        </Text>
+        <Text style={styles.hospitalMeta}>{HOSPITAL.address}</Text>
+        <Text style={styles.hospitalMeta}>{HOSPITAL.phone}</Text>
+      </View>
+      <View style={styles.headerRight}>
+        {!!docCode && <Text style={styles.docCode}>{docCode}</Text>}
+        {/* เลขหน้าอยู่บนหัวกระดาษด้วย เวลาแฟ้มกระจายจะเรียงกลับได้โดยไม่ต้องพลิกดูท้ายแผ่น */}
+        <Text
+          style={styles.docCode}
+          render={({ pageNumber, totalPages }) => `หน้า ${pageNumber} / ${totalPages}`}
+        />
+      </View>
+    </View>
+    <View style={styles.titleBand}>
+      <View style={styles.titleBar} />
+      <Text style={styles.titleText}>{title}</Text>
+    </View>
+  </View>
+);
+
+/*
+  เวลาที่พิมพ์ต้องอยู่บนกระดาษ เพราะข้อมูลในระบบเปลี่ยนได้ตลอด
+  ใบที่ถืออยู่ในมือจึงต้องบอกได้ว่าเป็นภาพของข้อมูล ณ เวลาไหน
+
+  คิดเวลาเองตอนวาด ไม่ส่งผ่าน prop ลงไปทีละหน้า ทั้งสิบหน้าวาดในจังหวะเดียวกัน
+  พอตัดที่หน่วยนาทีจึงได้ค่าเท่ากันหมด และไม่ต้องร้อย prop ผ่านทุกคอมโพเนนต์
+*/
+const FormFooter = () => (
+  <View style={styles.formFooter} fixed>
+    <Text style={styles.flex1}>{HOSPITAL.nameTh} · สรุปเวชระเบียนผู้ป่วยใน</Text>
+    <Text style={{ textAlign: 'right' }}>พิมพ์เมื่อ {dayjs().format('D MMM BBBB HH:mm')} น.</Text>
+  </View>
+);
+
 // 4. Component ส่วนหัวกระดาษที่ใช้ซ้ำทุกหน้า
 const PatientHeader = ({ patientData }: { patientData: PatientData }) => (
   <View style={{ marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#ccc', borderBottomStyle: 'solid' }}>
@@ -325,7 +511,8 @@ const PatientHeader = ({ patientData }: { patientData: PatientData }) => (
 const AdmissionPage = ({ patientData, admit }: { patientData: PatientData; admit: AdmitRecord | null }) => (
   <Page size="A4" style={styles.page} wrap>
     {/* ชื่อตรงกับฟอร์มกระดาษ SD-IM-003.019 เพื่อให้เทียบกับแฟ้มเวชระเบียนได้ */}
-    <Text style={styles.header}>1. ใบบันทึกการรวบรวมข้อมูลแรกรับ (Admission Record)</Text>
+    <FormHeader title="1. ใบบันทึกการรวบรวมข้อมูลแรกรับ (Admission Record)" docCode="SD-IM-003.019" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
 
     {!admit ? (
@@ -689,7 +876,8 @@ const VitalSignsPage = ({ patientData, vitals, vitalMeta }: {
 
   return (
     <Page size="A4" style={styles.page} wrap>
-      <Text style={styles.header}>2. แบบบันทึกสัญญาณชีพ (Vital Signs Record)</Text>
+      <FormHeader title="2. แบบบันทึกสัญญาณชีพ (Vital Signs Record)" />
+    <FormFooter />
       <PatientHeader patientData={patientData} />
 
       {rows.length === 0 ? (
@@ -851,7 +1039,8 @@ const VitalSignsPage = ({ patientData, vitals, vitalMeta }: {
 // ===================== Page 3 =====================
 const ProgressNotesPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>3. บันทึกทางการพยาบาล (Nursing Progress Notes)</Text>
+    <FormHeader title="3. บันทึกทางการพยาบาล (Nursing Progress Notes)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
       <View style={styles.tableRow}>
@@ -875,41 +1064,149 @@ const ProgressNotesPage = ({ patientData }: { patientData: PatientData }) => (
 );
 
 // ===================== Page 4 =====================
-const CarePlanPage = ({ patientData }: { patientData: PatientData }) => (
-  <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>4. แผนการพยาบาล (Nursing Care Plan)</Text>
-    <PatientHeader patientData={patientData} />
-    <View style={styles.table}>
-      <View style={styles.tableRow}>
-        <View style={[styles.tableColHeader, styles.w25]}><Text>ข้อวินิจฉัยทางการพยาบาล</Text></View>
-        <View style={[styles.tableColHeader, styles.w25]}><Text>เป้าหมาย</Text></View>
-        <View style={[styles.tableColHeader, styles.w25]}><Text>กิจกรรมการพยาบาล</Text></View>
-        <View style={[styles.tableColHeader, styles.w25]}><Text>การประเมินผล</Text></View>
-      </View>
-      <View style={styles.tableRow}>
-        <View style={[styles.tableCol, styles.w25]}>
-          <Text>เสี่ยงต่อภาวะพร่องออกซิเจนเนื่องจากประสิทธิภาพการแลกเปลี่ยนก๊าซลดลง</Text>
-        </View>
-        <View style={[styles.tableCol, styles.w25]}>
-          <Text>ผู้ป่วยไม่มีภาวะพร่องออกซิเจน (O2 Sat `{'>'}` 95%, หายใจไม่หอบ 16-20 ครั้ง/นาที)</Text>
-        </View>
-        <View style={[styles.tableCol, styles.w25]}>
-          <Text>1. ประเมิน V/S และ O2 Sat ทุก 4 ชม.</Text>
-          <Text>2. ดูแลให้ O2 ตามแผนการรักษา</Text>
-          <Text>3. สอนการไออย่างถูกวิธี</Text>
-        </View>
-        <View style={[styles.tableCol, styles.w25]}>
-          <Text>27/10/66: ผู้ป่วยหายใจ 20 ครั้ง/นาที O2 sat 98% ไอบรรเทาลง</Text>
-        </View>
-      </View>
-    </View>
-  </Page>
-);
+
+const PLAN_STATUS: Record<string, string> = {
+  draft: 'ฉบับร่าง',
+  final: 'ยืนยันแล้ว',
+  cancelled: 'ยกเลิกแล้ว',
+};
+
+/**
+ * แปลงคำตอบหนึ่งข้อให้เป็นข้อความบนกระดาษ
+ * ชนิดของช่องมาจากแม่แบบ ไม่ได้เดาจากค่าที่เก็บไว้ — true ของ check คือ "ปฏิบัติแล้ว"
+ * แต่ true ที่หลุดมาในช่องชนิดอื่นไม่ได้แปลว่าอย่างนั้น
+ */
+const answerText = (item: PlanEval, raw: PlanAnswer | undefined): string => {
+  if (raw === undefined || raw === null || raw === '') return BLANK;
+  switch (item.kind) {
+    case 'check':
+      return raw === true ? 'ปฏิบัติแล้ว' : BLANK;
+    case 'number':
+      return `${raw}${item.unit ? ` ${item.unit}` : ''}`;
+    case 'time':
+      return `${raw} น.`;
+    case 'choice':
+      /* ค่าที่ไม่อยู่ในตัวเลือกคือค่าที่พยาบาลพิมพ์เองในช่อง "อื่นๆ (ระบุ)" ต้องบอกให้รู้ */
+      return (item.options ?? []).includes(String(raw)) ? String(raw) : `${raw} (ระบุเอง)`;
+    default:
+      return String(raw);
+  }
+};
+
+/**
+ * แผนการพยาบาลตามแม่แบบของหอ
+ *
+ * ไม่ตั้งหัวตารางเป็น ข้อวินิจฉัย / เป้าหมาย / กิจกรรม / ประเมินผล ตามฟอร์มกระดาษทั่วไป
+ * เพราะแม่แบบที่หอใช้เก็บแค่ "กิจกรรมการพยาบาล" กับ "ผลการประเมิน"
+ * ถ้าตั้งสี่คอลัมน์ไว้ จะมีสองคอลัมน์ที่ไม่มีข้อมูลมาเติมได้เลย เหลือเป็นช่องว่างถาวร
+ */
+const CarePlanPage = ({ patientData, plans }: { patientData: PatientData; plans: FocusRecord[] }) => {
+  // เรียงเก่าไปใหม่ ให้อ่านตามลำดับเวลาที่ดูแลจริง เหมือนหน้าสัญญาณชีพ
+  const rows = [...plans].sort(
+    (a, b) => dayjs(a.record_datetime).unix() - dayjs(b.record_datetime).unix()
+  );
+
+  return (
+    <Page size="A4" style={styles.page} wrap>
+      <FormHeader title="4. แผนการพยาบาล (Nursing Care Plan)" />
+      <FormFooter />
+      <PatientHeader patientData={patientData} />
+
+      {rows.length === 0 ? (
+        <Text style={{ marginTop: 12, color: '#8a8a8a' }}>
+          ยังไม่มีการบันทึกแผนการพยาบาลของ AN นี้
+        </Text>
+      ) : rows.map(r => {
+        const sections = r.structure?.sections ?? [];
+        const answers = r.answers ?? {};
+
+        return (
+          <View key={r.id} style={{ marginBottom: 10 }}>
+            <Text style={styles.subHeader}>
+              {dayjs(r.record_datetime).format('D MMM BBBB HH:mm น.')}
+              {r.shift ? ` · เวร${r.shift}` : ''} · {r.template_title}
+            </Text>
+            <Text style={{ fontSize: 7, color: '#8a8a8a', marginBottom: 3 }}>
+              {join([
+                `ผู้บันทึก ${r.nurse_name ?? BLANK}`,
+                r.nurse_major,
+                `แม่แบบ ${r.template_code} v${r.template_version}`,
+                PLAN_STATUS[r.status] ?? r.status,
+                r.is_late_entry && r.entered_at
+                  ? `บันทึกเข้าระบบ ${dayjs(r.entered_at).format('DD/MM/BB HH:mm')}`
+                    + (r.late_entry_reason ? ` — ${r.late_entry_reason}` : '')
+                  : null,
+              ])}
+            </Text>
+
+            {/* ร่างยังแก้ได้และยังไม่มีใครยืนยัน ต้องเห็นบนกระดาษว่าอ่านเป็นข้อมูลสุดท้ายไม่ได้ */}
+            {r.status === 'draft' && (
+              <Text style={{ fontSize: 7.5, color: '#b42318', marginBottom: 3 }}>
+                ฉบับร่าง — ยังไม่ได้ยืนยัน เนื้อหายังแก้ไขได้ ไม่ใช้อ้างอิง
+              </Text>
+            )}
+
+            {r.status === 'cancelled' ? (
+              /* ยกเลิกแล้วแต่ยังพิมพ์ออกมา เพราะบันทึกที่เคยมีอยู่ต้องตรวจสอบย้อนหลังได้ */
+              <Text style={{ fontSize: 7.5, color: '#b42318' }}>
+                ยกเลิกแล้ว{r.cancelled_by_name ? ` โดย ${r.cancelled_by_name}` : ''}
+                {r.cancel_reason ? ` — ${r.cancel_reason}` : ''} · คงไว้เพื่อการตรวจสอบย้อนหลัง
+              </Text>
+            ) : (
+              <View style={styles.table}>
+                <View style={styles.tableRow}>
+                  <View style={[styles.tableColHeader, styles.w40]}><Text>กิจกรรมการพยาบาล</Text></View>
+                  <View style={[styles.tableColHeader, styles.flex1]}><Text>ผลการประเมิน</Text></View>
+                </View>
+
+                {sections.map(sec => (
+                  <View key={sec.id}>
+                    <View style={styles.tableRow}>
+                      <View style={[styles.tableCol, styles.flex1, { backgroundColor: '#f2f6f5' }]}>
+                        <Text style={styles.bold}>{sec.title}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.tableRow}>
+                      <View style={[styles.tableCol, styles.w40]}>
+                        {sec.activities.length === 0
+                          ? <Text style={{ color: '#8a8a8a' }}>{BLANK}</Text>
+                          : sec.activities.map((act, i) => (
+                            <Text key={`${sec.id}-a${i}`} style={{ marginBottom: 1 }}>{i + 1}. {act}</Text>
+                          ))}
+                      </View>
+                      <View style={[styles.tableCol, styles.flex1]}>
+                        {sec.evaluations.length === 0
+                          ? <Text style={{ color: '#8a8a8a' }}>{BLANK}</Text>
+                          : sec.evaluations.map(ev => (
+                            <Text key={ev.id} style={{ marginBottom: 1 }}>
+                              <Text style={styles.bold}>{ev.label}: </Text>
+                              {answerText(ev, answers[ev.id])}
+                            </Text>
+                          ))}
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {r.note && (
+              <Text style={{ marginTop: 2 }}>
+                <Text style={styles.bold}>หมายเหตุ: </Text>{r.note}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+    </Page>
+  );
+};
 
 // ===================== Page 5 =====================
 const IORecordPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>5. บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)</Text>
+    <FormHeader title="5. บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
       <View style={styles.tableRow}>
@@ -940,7 +1237,8 @@ const IORecordPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 6 =====================
 const MARPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>6. บันทึกการให้ยา (MAR)</Text>
+    <FormHeader title="6. บันทึกการให้ยา (MAR)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
       <View style={styles.tableRow}>
@@ -968,7 +1266,8 @@ const MARPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 7 =====================
 const SpecialCarePage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>7. บันทึกการดูแลพิเศษ (Special Care Records)</Text>
+    <FormHeader title="7. บันทึกการดูแลพิเศษ (Special Care Records)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     
     <Text style={styles.subHeader}>Pain Assessment & Management</Text>
@@ -992,7 +1291,8 @@ const SpecialCarePage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 8 =====================
 const EducationPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>8. บันทึกการศึกษาและให้ความรู้ (Patient Education)</Text>
+    <FormHeader title="8. บันทึกการศึกษาและให้ความรู้ (Patient Education)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
       <View style={styles.tableRow}>
@@ -1014,7 +1314,8 @@ const EducationPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 9 =====================
 const HandoverPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>9. บันทึกการส่งเวร (Nursing Handover / SBAR)</Text>
+    <FormHeader title="9. บันทึกการส่งเวร (Nursing Handover / SBAR)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     <Text style={styles.subHeader}>เวรเช้า ส่งต่อ เวรบ่าย (วันที่ 26/10/66)</Text>
     <View style={[styles.table, { borderTopWidth: 0, borderLeftWidth: 0 }]}>
@@ -1041,7 +1342,8 @@ const HandoverPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 10 =====================
 const DischargePage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <Text style={styles.header}>10. บันทึกการจำหน่าย (Discharge Record)</Text>
+    <FormHeader title="10. บันทึกการจำหน่าย (Discharge Record)" />
+    <FormFooter />
     <PatientHeader patientData={patientData} />
     
     <Text style={styles.subHeader}>ข้อมูลการจำหน่ายผู้ป่วย</Text>
@@ -1064,17 +1366,18 @@ const DischargePage = ({ patientData }: { patientData: PatientData }) => (
 );
 
 // ===================== Main Document =====================
-const FullMedicalReport = ({ patientData, admit, vitals, vitalMeta }: {
+const FullMedicalReport = ({ patientData, admit, vitals, vitalMeta, plans }: {
   patientData: PatientData;
   admit: AdmitRecord | null;
   vitals: VitalRow[];
   vitalMeta: VitalMeta;
+  plans: FocusRecord[];
 }) => (
   <Document>
     <AdmissionPage patientData={patientData} admit={admit} />
     <VitalSignsPage patientData={patientData} vitals={vitals} vitalMeta={vitalMeta} />
     <ProgressNotesPage patientData={patientData} />
-    <CarePlanPage patientData={patientData} />
+    <CarePlanPage patientData={patientData} plans={plans} />
     <IORecordPage patientData={patientData} />
     <MARPage patientData={patientData} />
     <SpecialCarePage patientData={patientData} />
@@ -1089,6 +1392,7 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
   const [patientData, setPatientData] = useState<PatientData>(() => toPatientData(null, an));
   const [admit, setAdmit] = useState<AdmitRecord | null>(null);
   const [vitals, setVitals] = useState<VitalRow[]>([]);
+  const [plans, setPlans] = useState<FocusRecord[]>([]);
   const [vitalMeta, setVitalMeta] = useState<VitalMeta>({
     age_group: null, age_known: true, news2_applicable: true,
   });
@@ -1131,6 +1435,14 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
         setVitals([]);
       }
 
+      try {
+        const res = await axios.get(`/api/v1/nursing-records/focus/${an}`, { headers });
+        setPlans(res.data?.data ?? []);
+      } catch (error) {
+        console.error('Error fetching care plan records:', error);
+        setPlans([]);
+      }
+
       setLoading(false);
     };
     fetchData();
@@ -1148,7 +1460,10 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
   return (
     <div style={{ width: '100%', height: '100vh' }}>
       <PDFViewer style={{ width: '100%', height: '100%', border: 'none' }}>
-        <FullMedicalReport patientData={patientData} admit={admit} vitals={vitals} vitalMeta={vitalMeta} />
+        <FullMedicalReport
+          patientData={patientData} admit={admit}
+          vitals={vitals} vitalMeta={vitalMeta} plans={plans}
+        />
       </PDFViewer>
     </div>
   );

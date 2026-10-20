@@ -1,206 +1,176 @@
 'use client';
 
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { Card, Tag, Empty } from 'antd';
-import dayjs from 'dayjs';
-import 'dayjs/locale/th';
-import {
-  PiMegaphoneBold,
-  PiPushPinFill,
-  PiCalendarBlankBold,
-  PiUserPlusBold,
-  PiUsersThreeBold,
-  PiBowlFoodBold,
-  PiClipboardTextBold,
-  PiChartBarBold,
-  PiVirusBold,
-  PiArrowRightBold,
-} from 'react-icons/pi';
+import { Skeleton } from 'antd';
+import type { IconType } from 'react-icons';
+import { PiHandWavingBold, PiShieldCheckBold, PiSquaresFourBold } from 'react-icons/pi';
 import Navbar from '../components/Navbar';
-
-dayjs.locale('th');
-
-type AnnouncementCategory = 'ประกาศ' | 'อบรม' | 'กิจกรรม' | 'ระบบ';
-
-interface Announcement {
-  id: number;
-  title: string;
-  detail: string;
-  date: string;            // YYYY-MM-DD
-  category: AnnouncementCategory;
-  pinned?: boolean;
-}
+import { useMenuAccess } from '../lib/useMenuAccess';
+import { MENU_ACCESS_ITEM, type MenuItem } from '../lib/menu';
+import { getUserProfile } from '../lib/auth';
 
 /**
- * เนื้อหาประชาสัมพันธ์
- * ยังไม่มีตารางข่าวในฐานข้อมูล จึงเก็บไว้ในไฟล์นี้ก่อน — แก้ไข/เพิ่มรายการได้ที่นี่โดยตรง
- * โครงสร้างตรงกับที่ API จะคืนในอนาคต ถ้าย้ายไปเก็บใน DB เปลี่ยนแค่ที่มาของ announcements
+ * หน้าหลักหลังเข้าระบบ
+ *
+ * การ์ดทุกใบมาจากสารบัญเมนู (lib/menu.tsx) ผ่านตัวกรองเดียวกับแถบบนและลิ้นชักซ้าย
+ * จึงเห็นตรงกันทุกที่เสมอ ถ้าหน้านี้ถือรายการของตัวเอง วันหนึ่งจะมีการ์ดที่พาไปหน้าที่
+ * แถบบนซ่อนไว้แล้ว หรือมีเมนูใหม่ที่แถบบนมีแต่หน้านี้ไม่มี
+ *
+ * การ์ดที่ซ่อนไว้ไม่ใช่การกันสิทธิ์ คนที่รู้ URL ยังพิมพ์เข้าไปได้
+ * การกันข้อมูลจริงอยู่ที่ endpoint ฝั่งเซิร์ฟเวอร์
  */
-const announcements: Announcement[] = [
-  {
-    id: 1,
-    title: 'เปิดใช้งาน Dashboard ภาระงานพยาบาลแล้ววันนี้',
-    detail:
-      'ดูสถิติผู้ป่วยรายวัน อัตราครองเตียง ชั่วโมงการทำงานรายบุคคล และการเปลี่ยนระดับการดูแลข้ามเวร เลือกหอผู้ป่วยและช่วงเวลาที่ต้องการได้จากเมนู IPD → Dashboard',
-    date: '2026-07-31',
-    category: 'ระบบ',
-    pinned: true,
-  },
-  {
-    id: 2,
-    title: 'ขอความร่วมมือบันทึกระดับการดูแลให้ครบทั้ง 3 เวร',
-    detail:
-      'การบันทึกที่ครบถ้วนทั้งเวรดึก เช้า และบ่าย จะทำให้รายงาน FTE และ Dashboard คำนวณภาระงานได้ตรงกับความเป็นจริง กรุณาบันทึกก่อนสิ้นเวรทุกครั้ง',
-    date: '2026-07-28',
-    category: 'ประกาศ',
-    pinned: true,
-  },
-  {
-    id: 3,
-    title: 'อบรมการใช้งานระบบบันทึกทางการพยาบาล รุ่นที่ 2',
-    detail:
-      'สำหรับพยาบาลวิชาชีพและผู้ช่วยพยาบาลที่ยังไม่ผ่านการอบรมรุ่นที่ 1 ลงทะเบียนได้ที่หัวหน้าหอผู้ป่วยของท่าน',
-    date: '2026-07-20',
-    category: 'อบรม',
-  },
-  {
-    id: 4,
-    title: 'ปรับปรุงเมนูอาหารผู้ป่วยประจำเดือนสิงหาคม',
-    detail:
-      'ฝ่ายโภชนาการปรับรายการอาหารเฉพาะโรคใหม่ กรุณาตรวจสอบรายการก่อนสั่งอาหารให้ผู้ป่วยในเมนู IPD → สั่งอาหาร',
-    date: '2026-07-15',
-    category: 'ประกาศ',
-  },
-];
 
-const categoryColor: Record<AnnouncementCategory, string> = {
-  ประกาศ: 'green',
-  อบรม: 'blue',
-  กิจกรรม: 'purple',
-  ระบบ: 'orange',
+/*
+  สีประจำหมวด [โหมดสว่าง, โหมดมืด] ใช้กับไอคอนเท่านั้น ตัวหนังสือบนการ์ดใช้สีเทาของระบบ
+
+  ต้องมีสองค่า เพราะเฉดเข้มที่อ่านชัดบนพื้นขาว จมหายไปบนพื้นมืด
+  (เขียวเข้มของ IPD กับเทาเข้มของหมวดตั้งค่ามองแทบไม่เห็นตอนลองในโหมดมืด)
+  ค่าเป็นสีคงที่ ไม่ใช่ teal-600 / red-400 เพราะ globals.css พลิกไล่เฉดของ Tailwind ในโหมดมืด
+  ใช้ชื่อคลาสสีจะได้เฉดที่กลับด้านซ้อนเข้าไปอีกชั้น
+*/
+const SECTION_COLOR: Record<string, [light: string, dark: string]> = {
+  base: ['#0891b2', '#22d3ee'],
+  ipd: ['#006b5f', '#2dd4bf'],
+  pharmacy: ['#7c3aed', '#a78bfa'],
+  ic: ['#dc2626', '#f87171'],
+  nutrition: ['#ea580c', '#fb923c'],
+  settings: ['#475569', '#94a3b8'],
+  admin: ['#334155', '#cbd5e1'],
 };
+const DEFAULT_COLOR: [string, string] = ['#006b5f', '#2dd4bf'];
 
-const quickLinks = [
-  { href: '/ipd/register', label: 'รับผู้ป่วย / รับย้าย', icon: <PiUserPlusBold />, color: '#0891b2' },
-  { href: '/ipd/patients', label: 'ทะเบียนผู้ป่วย', icon: <PiUsersThreeBold />, color: '#006b5f' },
-  { href: '/ipd/daily-routine', label: 'ประเมินระดับการดูแลรายเวร', icon: <PiClipboardTextBold />, color: '#7c3aed' },
-  { href: '/ipd/order-food', label: 'สั่งอาหาร', icon: <PiBowlFoodBold />, color: '#ea580c' },
-  { href: '/ipd/dashboard', label: 'Dashboard', icon: <PiChartBarBold />, color: '#0f766e' },
-  { href: '/ic/ipd', label: 'IPD Infection Control', icon: <PiVirusBold />, color: '#dc2626' },
-];
+/** ตัวแปรสีให้คลาส text-(--c) / dark:text-(--cd) อ่าน สีพื้นใต้ไอคอนเป็นสีเดียวกันแบบโปร่ง */
+const colorVars = ([light, dark]: [string, string]) => ({
+  '--c': light, '--cd': dark, '--cb': `${light}1a`, '--cbd': `${dark}24`,
+}) as React.CSSProperties;
+
+interface CardGroup {
+  key: string;
+  heading: string;
+  icon: IconType;
+  items: MenuItem[];
+}
+
+function MenuCard({ item, color }: { item: MenuItem; color: [string, string] }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      className="group bg-white border border-gray-200 rounded-2xl p-4 flex flex-col items-center gap-2.5 text-center
+        transition-all hover:shadow-lg hover:-translate-y-0.5 hover:border-(--brand-text)
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand-text)"
+    >
+      <span
+        className="text-2xl p-3 rounded-xl text-(--c) bg-(--cb) dark:text-(--cd) dark:bg-(--cbd)"
+        style={colorVars(color)}
+        aria-hidden
+      >
+        <Icon />
+      </span>
+      <span className="text-[13px] font-semibold text-gray-700 leading-snug group-hover:text-(--brand-text)">
+        {item.label}
+      </span>
+    </Link>
+  );
+}
 
 const Main = () => {
-  // ปักหมุดขึ้นก่อน แล้วเรียงจากใหม่ไปเก่า
-  const sorted = [...announcements].sort((a, b) => {
-    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-    return dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
-  });
+  const access = useMenuAccess();
+  /*
+    ชื่ออยู่ใน sessionStorage ซึ่งฝั่งเซิร์ฟเวอร์ไม่มี
+    อ่านผ่าน useSyncExternalStore ให้รอบเซิร์ฟเวอร์ได้ค่าว่างแล้วค่อยเติมชื่อตอนอยู่ในเบราว์เซอร์
+    โปรไฟล์ไม่เปลี่ยนระหว่างอยู่หน้านี้ จึงไม่ต้องติดตามการเปลี่ยนแปลง
+  */
+  const name = useSyncExternalStore(
+    () => () => {},
+    () => String(getUserProfile()?.name ?? ''),
+    () => '',
+  );
+
+  /*
+    หมวดของบริษัทผู้รับจ้างไม่ขึ้นที่นี่ แม้แอดมินจะตั้งให้กลุ่มอื่นเห็นก็ตาม
+    หน้าพวกนั้นใช้บัญชีบริษัทซึ่งเป็นคนละคุกกี้กับเจ้าหน้าที่ กดจากตรงนี้ไปจะเปิดไม่ได้
+  */
+  const groups: CardGroup[] = [
+    ...access.sections
+      .filter(({ section }) => section.key !== 'vendor')
+      .map(({ section, items }) => ({ key: section.key, heading: section.heading, icon: section.icon, items })),
+    { key: 'base', heading: 'ทั่วไป', icon: PiSquaresFourBold, items: access.baseLinks },
+    ...(access.isAdmin
+      ? [{ key: 'admin', heading: 'ผู้ดูแลระบบ', icon: PiShieldCheckBold, items: [MENU_ACCESS_ITEM] }]
+      : []),
+  ];
 
   return (
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
 
-      {/* ── Hero ── */}
-      <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00897b] px-4 sm:px-6 py-8 shadow-lg">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
+      {/*
+        สีตัวหนังสือบนแถบเป็นค่าคงที่ แถบนี้เป็นเขียวตายตัวทั้งสองโหมด
+        ถ้าใช้ text-teal-200 โหมดมืดจะพลิกเป็นเฉดเข้มแล้วจมหายไปกับพื้น (ดู globals.css)
+      */}
+      <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] px-4 sm:px-6 py-7 shadow-lg">
+        <div className="max-w-6xl mx-auto flex items-center gap-4">
           <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm shrink-0">
-            <PiMegaphoneBold className="w-7 h-7 text-white" />
+            <PiHandWavingBold className="w-7 h-7 text-white" />
           </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white m-0 leading-tight">ข่าวประชาสัมพันธ์</h1>
-            <p className="text-teal-200 text-sm m-0 mt-1">
-              ข่าวสารและประกาศสำหรับบุคลากรทางการพยาบาล
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white m-0 leading-tight truncate">
+              {name ? `สวัสดี ${name}` : 'ยินดีต้อนรับ'}
+            </h1>
+            <p className="text-[#ccfbf1] text-sm m-0 mt-1">
+              {!access.ready
+                ? 'กำลังโหลดเมนูของคุณ...'
+                : access.groupLabels.length > 0
+                  ? `กลุ่มผู้ใช้: ${access.groupLabels.join(' · ')}`
+                  : access.majorName || 'ยังไม่ได้จัดกลุ่มผู้ใช้'}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
-        {/* ── ทางลัดเมนูที่ใช้บ่อย ── */}
-        <section>
-          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">เมนูที่ใช้บ่อย</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {quickLinks.map(link => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group bg-white rounded-2xl shadow-md p-4 flex flex-col items-center gap-2 text-center transition-all hover:shadow-xl hover:-translate-y-0.5"
-              >
-                <span
-                  className="text-2xl p-2.5 rounded-xl transition-colors"
-                  style={{ color: link.color, backgroundColor: `${link.color}15` }}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
+        {/*
+          ยังไม่รู้กลุ่มของผู้ใช้ ให้วาดโครงไว้ก่อน ไม่วาดการ์ดทุกใบแล้วค่อยซ่อน
+          เพราะการ์ดที่โผล่มาครึ่งวินาทีก่อนหายไปก็ถูกกดได้ แล้วผู้ใช้จะงงว่ามันหายไปไหน
+        */}
+        {!access.ready ? (
+          <Skeleton active paragraph={{ rows: 4 }} />
+        ) : (
+          groups.map(g => {
+            const color = SECTION_COLOR[g.key] ?? DEFAULT_COLOR;
+            const Icon = g.icon;
+            return (
+              <section key={g.key} aria-labelledby={`sec-${g.key}`}>
+                <h2
+                  id={`sec-${g.key}`}
+                  className="flex items-center gap-2 text-sm font-bold text-gray-600 mb-3"
                 >
-                  {link.icon}
-                </span>
-                <span className="text-xs font-semibold text-gray-600 leading-tight group-hover:text-[var(--brand-text)]">
-                  {link.label}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
+                  <span className="text-(--c) dark:text-(--cd)" style={colorVars(color)} aria-hidden>
+                    <Icon className="w-4.5 h-4.5" />
+                  </span>
+                  {g.heading}
+                  <span className="text-xs font-normal text-gray-500">({g.items.length})</span>
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {g.items.map(item => <MenuCard key={item.key} item={item} color={color} />)}
+                </div>
+              </section>
+            );
+          })
+        )}
 
-        {/* ── รายการข่าว ── */}
-        <section>
-          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
-            ประกาศล่าสุด
-          </h2>
-
-          {sorted.length === 0 ? (
-            <Card className="shadow-md rounded-2xl border-none">
-              <Empty description="ยังไม่มีข่าวประชาสัมพันธ์" />
-            </Card>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {sorted.map(item => (
-                <Card
-                  key={item.id}
-                  className={`shadow-md rounded-2xl border-none transition-all hover:shadow-lg ${
-                    item.pinned ? 'ring-1 ring-[#006b5f]/20' : ''
-                  }`}
-                  styles={{ body: { padding: '1rem 1.25rem' } }}
-                >
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    {item.pinned && (
-                      <span className="flex items-center gap-1 text-[var(--brand-text)] text-xs font-bold">
-                        <PiPushPinFill /> ปักหมุด
-                      </span>
-                    )}
-                    <Tag color={categoryColor[item.category]} className="m-0 text-xs">
-                      {item.category}
-                    </Tag>
-                    <span className="flex items-center gap-1 text-gray-400 text-xs ml-auto">
-                      <PiCalendarBlankBold />
-                      {/* dayjs ในโปรเจกต์ยังไม่ได้ลง plugin buddhistEra จึงบวกปี พ.ศ. เอง */}
-                      {dayjs(item.date).format('D MMM')} {dayjs(item.date).year() + 543}
-                    </span>
-                  </div>
-
-                  <h3 className="text-base font-bold text-gray-800 m-0 mb-1 leading-snug">{item.title}</h3>
-                  <p className="text-sm text-gray-500 m-0 leading-relaxed">{item.detail}</p>
-                </Card>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ── ลิงก์ไป Dashboard ── */}
-        <Link
-          href="/ipd/dashboard"
-          className="bg-linear-to-r from-teal-50 to-white dark:from-[#113536] dark:to-[#1f1f1f] border border-teal-100 rounded-2xl p-5 flex items-center gap-4 transition-all hover:shadow-md"
-        >
-          <span className="bg-[#006b5f] text-white p-3 rounded-xl text-xl shrink-0">
-            <PiChartBarBold />
-          </span>
-          <div className="flex-1">
-            <p className="font-bold text-[var(--brand-text)] m-0 text-sm">ดูภาพรวมภาระงานของหอผู้ป่วย</p>
-            <p className="text-gray-500 text-xs m-0 mt-0.5">
-              สถิติผู้ป่วยรายวัน อัตราครองเตียง ชั่วโมงการทำงาน และระดับความรุนแรงแยกตามเวร
-            </p>
-          </div>
-          <PiArrowRightBold className="text-[var(--brand-text)] text-lg shrink-0" />
-        </Link>
+        {/*
+          คนที่ไม่อยู่กลุ่มไหนเลย (แพทย์ การเงิน พัสดุ ฯลฯ) ยังมีหมวดทั่วไปให้ใช้
+          จึงบอกไว้ตรงนี้ว่าทำไมเห็นน้อย จะได้รู้ว่าต้องติดต่อใคร ไม่ใช่คิดว่าระบบพัง
+        */}
+        {access.ready && access.groupLabels.length === 0 && (
+          <p className="text-sm text-gray-500 m-0">
+            บัญชีนี้ยังไม่อยู่ในกลุ่มงานที่ระบบรู้จัก จึงเห็นเฉพาะเมนูทั่วไป
+            ถ้าต้องใช้เมนูอื่น ติดต่อผู้ดูแลระบบ
+          </p>
+        )}
       </div>
     </div>
   );

@@ -27,6 +27,9 @@ interface Patient {
   ward?: string;
   sex?: string;
   birthday?: string;
+  /* รหัสแผนกที่ HIS บันทึกไว้ (ipt.spclty) คนละชุดกับ spclty ของระบบพยาบาล */
+  his_spclty?: string | null;
+  his_spclty_name?: string | null;
 }
 
 interface AdmissionType {
@@ -37,6 +40,8 @@ interface AdmissionType {
 interface Specialty {
   spclty: string;
   name: string;
+  /* รหัสเดียวกับ ipt.spclty ของ HIS ใช้เทียบว่าแผนกที่ HIS ลงไว้ตรงกับตัวเลือกไหน */
+  code?: string | null;
 }
 
 interface Ward {
@@ -105,7 +110,18 @@ export default function RegisterPage() {
         ]);
 
         setAdmissionTypes(admTypeRes.data.data || []);
-        setSpecialties(spcltyRes.data.data || []);
+        /*
+          บังคับให้ spclty เป็นสตริงตั้งแต่ตอนรับเข้ามา
+          ฝั่งฐานข้อมูลเก็บเป็น integer JSON จึงส่งมาเป็นตัวเลข แต่ค่าที่ฟอร์มถือไว้
+          ถูกแปลงเป็นสตริงก่อนเสมอ พอชนิดไม่ตรงกัน Select หาตัวเลือกที่ตรงไม่เจอ
+          แล้วแสดงค่าดิบออกมาเป็นเลข 1 แทนชื่อแผนก ทั้งที่แปลงรหัสถูกแล้ว
+          แปลงที่ขอบทางเข้าที่เดียว ข้างในจะได้เป็นสตริงตรงกับที่ interface ประกาศไว้
+        */
+        setSpecialties((spcltyRes.data.data || []).map((sp: { spclty: string | number; code?: string | number | null; name: string }) => ({
+          spclty: String(sp.spclty),
+          code: sp.code == null ? null : String(sp.code),
+          name: sp.name,
+        })));
         const wardList = Array.isArray(wardRes.data) ? wardRes.data : wardRes.data.data || [];
         setWards(wardList);
         setShiftTypes(shiftRes.data.data || []);
@@ -123,9 +139,9 @@ export default function RegisterPage() {
       { admission_type_id: 2, admission_type_name: 'รับย้ายจากหอผู้ป่วยอื่น' },
     ]);
     setSpecialties([
-      { spclty: '01', name: 'กุมารเวชกรรม' },
-      { spclty: '05', name: 'ศัลยกรรม' },
-      { spclty: '09', name: 'อายุรกรรม' },
+      { spclty: '1', name: 'กุมารเวชกรรม', code: '01' },
+      { spclty: '4', name: 'ศัลยกรรม', code: '05' },
+      { spclty: '10', name: 'อายุรกรรม', code: '09' },
     ]);
     setShiftTypes([
       { admission_change_shift_type_id: 1, shift_name: 'ดึก' },
@@ -229,6 +245,34 @@ export default function RegisterPage() {
   };
 
   // --- Open / Close Drawer ---
+  /**
+   * แปลงรหัสแผนกของ HIS มาเป็นรหัสของระบบพยาบาล
+   *
+   * สองฝั่งใช้คนละชุดรหัส (ฝั่งนี้ 1-12 ฝั่ง HIS 01-43) และเลขที่บังเอิญตรงกัน
+   * ก็คนละแผนก เช่น 10 ที่นี่คืออายุรกรรม แต่ 10 ของ HIS คือแพทย์ทางเลือก
+   * จึงต้องเทียบผ่านคอลัมน์ code เท่านั้น ห้ามเอาเลขมาใช้ตรง ๆ
+   *
+   * คืน undefined เมื่อ HIS ใช้แผนกที่ยังไม่มีในรายการของระบบพยาบาล
+   * (เช่น Stroke Unit, ไตเทียม) ปล่อยให้ว่างไว้ให้พยาบาลเลือกเอง
+   * ดีกว่าเดาให้แล้วบันทึกแผนกผิดโดยไม่มีใครรู้
+   *
+   * หนึ่งรหัสของ HIS ชี้มาได้หลายแถว เพราะ NICU กับกุมารเวชกรรมใช้ 01 เหมือนกัน
+   * (NICU เป็นหอผู้ป่วย ไม่ใช่แผนก ผู้ป่วยอยู่ใต้กุมารเวชกรรม)
+   * ขากลับจึงต้องมีกติกาตัดสิน ใช้ชื่อที่ HIS ส่งมาเทียบก่อน
+   * HIS ส่ง "กุมารเวชกรรม" มา ก็ต้องได้กุมารเวชกรรม ไม่ใช่ NICU
+   * ถ้าเทียบชื่อไม่ได้ค่อยเอาแถวที่เลขน้อยสุด เพื่อให้ผลคงที่ไม่ขึ้นกับลำดับที่โหลดมา
+   */
+  const toLocalSpclty = (hisCode?: string | null, hisName?: string | null): string | undefined => {
+    if (!hisCode) return undefined;
+    const matches = specialties.filter(sp => String(sp.code ?? '') === String(hisCode));
+    if (matches.length === 0) return undefined;
+    if (matches.length === 1) return String(matches[0].spclty);
+
+    const byName = hisName && matches.find(sp => sp.name.trim() === hisName.trim());
+    if (byName) return String(byName.spclty);
+    return String(matches.reduce((a, b) => (Number(a.spclty) <= Number(b.spclty) ? a : b)).spclty);
+  };
+
   const openRegisterDrawer = (patient: Patient) => {
     setSelectedPatient(patient);
     form.resetFields();
@@ -240,6 +284,8 @@ export default function RegisterPage() {
       doctor_name: patient.doctor_name,
       wardId: patient.ward || selectedWard,
       birthDate: patient.birthday ? dayjs(patient.birthday) : undefined,
+      // แผนกตามที่แพทย์ลงไว้ใน HIS ไม่ต้องให้พยาบาลเลือกซ้ำแล้วเสี่ยงไม่ตรงกัน
+      specialtyCode: toLocalSpclty(patient.his_spclty, patient.his_spclty_name),
     });
     setIsDrawerOpen(true);
   };
@@ -464,7 +510,24 @@ export default function RegisterPage() {
             )}
 
             {/* Specialty */}
-            <Form.Item label="แผนกการรักษา" name="specialtyCode" rules={[{ required: true, message: 'กรุณาเลือกแผนก' }]}>
+            <Form.Item
+              label="แผนกการรักษา"
+              name="specialtyCode"
+              rules={[{ required: true, message: 'กรุณาเลือกแผนก' }]}
+              /*
+                บอกที่มาของค่าไว้ใต้ช่อง เพราะค่าที่ถูกเลือกไว้ให้แล้วมักถูกกดผ่านโดยไม่ดู
+                ถ้าวันหนึ่ง HIS ลงผิด จะได้มีจุดให้สังเกตว่าเลขนี้ไม่ได้มาจากคนกรอก
+              */
+              extra={
+                selectedPatient?.his_spclty
+                  ? toLocalSpclty(selectedPatient.his_spclty, selectedPatient.his_spclty_name)
+                    ? <span className="text-xs text-gray-400">เลือกไว้ตามที่ HIS บันทึก ({selectedPatient.his_spclty_name || selectedPatient.his_spclty})</span>
+                    : <span className="text-xs text-orange-500">
+                        HIS ระบุว่า &quot;{selectedPatient.his_spclty_name || selectedPatient.his_spclty}&quot; ซึ่งยังไม่มีในรายการนี้ กรุณาเลือกแผนกที่ใกล้เคียงที่สุด
+                      </span>
+                  : undefined
+              }
+            >
               <Select placeholder="เลือกแผนก" showSearch optionFilterProp="children">
                 {specialties.map(s => <Option key={s.spclty} value={s.spclty}>{s.name}</Option>)}
               </Select>

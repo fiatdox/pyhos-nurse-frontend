@@ -1008,14 +1008,19 @@ export default function DashboardPage() {
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-white m-0 leading-tight">Dashboard ภาระงานพยาบาล</h2>
-              <p className="text-teal-200 text-xs m-0 hidden sm:block">สถิติจำนวนผู้ป่วยและภาระงานตามมาตรฐานการพยาบาล</p>
+              {/*
+                ใช้ขาวโปร่งแทน text-teal-200 เพราะโหมดมืดพลิกไล่โทนสีของ Tailwind กลับด้าน
+                teal-200 เลยกลายเป็น #144848 ซึ่งเข้มกว่าแถบหัวเรื่องที่เป็นเขียวแบรนด์ตายตัว
+                ตัวหนังสือจึงจมหายไปกับพื้น ส่วนขาวไม่ถูกพลิกตามโหมด (ดู globals.css)
+              */}
+              <p className="text-white/75 text-xs m-0 hidden sm:block">สถิติจำนวนผู้ป่วยและภาระงานตามมาตรฐานการพยาบาล</p>
             </div>
           </div>
 
           {/* Filters */}
           <div className="flex flex-wrap items-end gap-2 sm:gap-3 w-full sm:w-auto">
             <div className="flex-1 sm:flex-none">
-              <label className="block text-xs font-semibold text-teal-200 mb-1">หอผู้ป่วย</label>
+              <label className="block text-xs font-semibold text-white/75 mb-1">หอผู้ป่วย</label>
               <Select
                 size="middle"
                 value={selectedWard}
@@ -1028,7 +1033,7 @@ export default function DashboardPage() {
               />
             </div>
             <div className="flex-1 sm:flex-none">
-              <label className="block text-xs font-semibold text-teal-200 mb-1">ช่วงเวลา</label>
+              <label className="block text-xs font-semibold text-white/75 mb-1">ช่วงเวลา</label>
               <RangePicker
                 size="middle"
                 picker="date"

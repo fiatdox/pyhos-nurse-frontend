@@ -15,8 +15,8 @@ import {
 Font.register({
   family: 'Sarabun',
   fonts: [
-    { src: '/fonts/sarabun/Sarabun-Regular.ttf' },
-    { src: '/fonts/sarabun/Sarabun-Bold.ttf', fontWeight: 'bold' },
+    { src: '/fonts/Sarabun/Sarabun-Regular.ttf' },
+    { src: '/fonts/Sarabun/Sarabun-Bold.ttf', fontWeight: 'bold' },
   ],
 });
 

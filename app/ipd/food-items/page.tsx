@@ -49,7 +49,6 @@ interface FoodItem {
     created_by_name: string | null;
     updated_at: string | null;
     updated_by_name: string | null;
-    order_count: number;
 }
 
 export default function FoodItemsPage() {
@@ -131,18 +130,14 @@ export default function FoodItemsPage() {
     };
 
     const handleToggle = async (row: FoodItem, next: boolean) => {
-        /*
-          ปิดเมนูที่เคยมีคนสั่งไปแล้วเป็นเรื่องปกติ (เลิกทำเมนูนั้น) แต่ต้องถามก่อน
-          เพราะเมนูจะหายจากหน้าสั่งอาหารทันที ส่วนรายการเก่ายังอยู่ครบ ไม่มีการลบแถว
-        */
-        if (!next && row.order_count > 0) {
+        // ถามก่อนปิด เพราะเมนูจะหายจากหน้าสั่งอาหารทันที ส่วนรายการที่สั่งไปแล้วยังอยู่ครบ ไม่มีการลบแถว
+        if (!next) {
             const confirm = await Swal.fire({
                 icon: 'question',
                 title: 'ปิดใช้งานเมนูนี้?',
                 html: `<div style="text-align:left">
                         <b>${row.food_name}</b><br/>
-                        เคยถูกสั่งไปแล้ว <b>${row.order_count.toLocaleString('th-TH')}</b> รายการ<br/>
-                        เมนูจะหายจากหน้าสั่งอาหาร แต่รายการเดิมยังอยู่ครบ
+                        เมนูจะหายจากหน้าสั่งอาหาร แต่รายการที่สั่งไปแล้วยังอยู่ครบ
                        </div>`,
                 showCancelButton: true,
                 confirmButtonText: 'ปิดใช้งาน',
@@ -194,13 +189,6 @@ export default function FoodItemsPage() {
             render: (v: string | null) => v
                 ? <Tag color={CLASS_COLOR[v] ?? 'default'}>{v}</Tag>
                 : <span className="text-gray-300">ไม่ระบุ</span>,
-        },
-        {
-            title: 'ยอดสั่งสะสม', dataIndex: 'order_count', key: 'order_count', width: 120, align: 'right',
-            sorter: (a, b) => a.order_count - b.order_count,
-            render: (v: number) => v > 0
-                ? <span className="font-semibold text-[#006b5f]">{v.toLocaleString('th-TH')}</span>
-                : <span className="text-gray-300">0</span>,
         },
         {
             title: 'ผู้เพิ่ม', key: 'created', width: 180,
@@ -301,7 +289,7 @@ export default function FoodItemsPage() {
                                 type="warning"
                                 showIcon
                                 className="mt-3"
-                                message={`มีเมนูนี้อยู่แล้วในประเภท ${dupClasses.join(', ')} — ระบบจะข้ามให้ ไม่สร้างซ้ำ`}
+                                title={`มีเมนูนี้อยู่แล้วในประเภท ${dupClasses.join(', ')} — ระบบจะข้ามให้ ไม่สร้างซ้ำ`}
                             />
                         )}
                     </div>

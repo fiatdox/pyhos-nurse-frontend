@@ -42,10 +42,51 @@ interface InfectionPatient {
   mdr_labno: string | null;
 }
 
+/** คอลัมน์วันที่ของผลเพาะเชื้อทุกตัว ใช้หาว่าผู้ป่วยรายนี้เจอเชื้อครั้งล่าสุดเมื่อไหร่ */
+const INFECTION_DATE_KEYS = ['cre_date', 'vre_date', 'mrsa_date', 'escr_date', 'mdr_date'] as const;
+
+/**
+ * จำนวนวันนับจากวันนี้ย้อนกลับไปถึงวันที่กำหนด
+ *
+ * ตัดเวลาออกทั้งสองฝั่งก่อนลบ เพราะผลแล็บมีเวลาติดมาด้วย
+ * ถ้าไม่ตัด ผลที่ออกเมื่อวานตอนเย็นจะนับเป็น 0 วันในตอนเช้า แล้วเป็น 1 วันในตอนบ่าย
+ * ของวันเดียวกัน ซึ่งทำให้ตัวเลขบนจอเปลี่ยนเองโดยที่ข้อมูลไม่ได้เปลี่ยน
+ */
+const daysAgo = (date: string | null): number | null => {
+    if (!date) return null;
+    const d = dayjs(date);
+    if (!d.isValid()) return null;
+    return dayjs().startOf('day').diff(d.startOf('day'), 'day');
+};
+
+/** ข้อความบอกความห่างจากวันนี้ แยกคำสำหรับวันนี้/เมื่อวานเพราะอ่านแล้วเข้าใจกว่าเลข 0 กับ 1 */
+const agoLabel = (n: number | null): string => {
+    if (n === null) return '-';
+    if (n < 0) return `อีก ${Math.abs(n)} วัน`;   // วันที่ล่วงหน้า = ข้อมูลผิด ต้องเห็นว่าผิด ไม่ใช่ซ่อนเป็นติดลบ
+    if (n === 0) return 'วันนี้';
+    if (n === 1) return 'เมื่อวาน';
+    return `${n} วันที่แล้ว`;
+};
+
+/** วันที่พบเชื้อครั้งล่าสุดของผู้ป่วยหนึ่งราย — null ถ้าไม่มีผลบวกสักตัว */
+const latestInfectionDate = (p: InfectionPatient): string | null => {
+    const found = INFECTION_DATE_KEYS
+        .map(k => p[k])
+        .filter((d): d is string => !!d && dayjs(d).isValid());
+    if (found.length === 0) return null;
+    return found.reduce((a, b) => (dayjs(b).isAfter(dayjs(a)) ? b : a));
+};
+
 const InfectionControlPage = () => {
   const [patients, setPatients] = useState<InfectionPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWard, setSelectedWard] = useState<string | undefined>();
+  /*
+    คุมเลขหน้าเอง เพราะคอลัมน์ลำดับต้องนับต่อจากหน้าก่อนหน้า
+    ถ้าปล่อยให้ตารางคุมเอง จะได้ index ของหน้าปัจจุบัน แล้วหน้า 2 จะเริ่มที่ 1 ใหม่
+  */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
   const router = useRouter();
 
   useEffect(() => {
@@ -71,9 +112,9 @@ const InfectionControlPage = () => {
           setPatients([]);
         }
 
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error fetching infection data:", error);
-        if (error.response?.status === 401) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
           message.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
           router.push('/');
         } else {
@@ -111,8 +152,9 @@ const InfectionControlPage = () => {
           {infectionName}
         </Tag>
         {infectionDate && (
-          <span className="text-xs text-gray-500 mt-1">
+          <span className="text-xs text-gray-500 mt-1 leading-tight whitespace-nowrap">
             {dayjs(infectionDate).format('DD/MM/YY')}
+            <span className="text-gray-400"> · {agoLabel(daysAgo(infectionDate))}</span>
           </span>
         )}
       </div>
@@ -130,6 +172,13 @@ const InfectionControlPage = () => {
   };
 
   const columns: ColumnsType<InfectionPatient> = [
+    {
+      title: 'ลำดับ', key: 'seq', width: 64, align: 'center', fixed: 'left',
+      /* นับตามลำดับที่เห็นบนจอ บวกออฟเซ็ตของหน้า เรียงใหม่แล้วเลขก็ยังไล่ 1..n ตามที่ตาเห็น */
+      render: (_, __, index) => (
+        <span className="text-gray-400">{(page - 1) * pageSize + index + 1}</span>
+      ),
+    },
     { title: 'AN', dataIndex: 'an', key: 'an', width: 90, fixed: 'left' },
     // { title: 'HN', dataIndex: 'hn', key: 'hn', width: 110, fixed: 'left' },
     { 
@@ -156,6 +205,33 @@ const InfectionControlPage = () => {
     { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date, record.mrsa_labno) },
     { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date, record.escr_labno) },
     { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date, record.mdr_labno) },
+    {
+      title: 'พบเชื้อล่าสุด', key: 'latest', width: 190, align: 'center',
+      /*
+        เรียงจากรายที่เพิ่งพบล่าสุดขึ้นก่อน รายที่ไม่มีผลบวกเลยให้ไปอยู่ท้ายเสมอ
+        ไม่ใช่ปนอยู่กลางตารางตามค่าว่าง ซึ่งจะทำให้ดูเหมือนตกสำรวจ
+      */
+      sorter: (a, b) => {
+        const da = daysAgo(latestInfectionDate(a));
+        const db = daysAgo(latestInfectionDate(b));
+        if (da === null) return 1;
+        if (db === null) return -1;
+        return da - db;
+      },
+      render: (_, record) => {
+        const date = latestInfectionDate(record);
+        const n = daysAgo(date);
+        if (n === null) return <span className="text-gray-300">-</span>;
+        /* ยิ่งเพิ่งพบยิ่งต้องสะดุดตา เพราะเป็นรายที่ยังต้องคุมการแพร่กระจายอยู่ */
+        const color = n <= 7 ? 'red' : n <= 30 ? 'orange' : 'default';
+        return (
+          <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+            <Tag color={color} className="m-0! font-semibold">{agoLabel(n)}</Tag>
+            <span className="text-[11px] text-gray-400">{dayjs(date).format('DD/MM/YY')}</span>
+          </div>
+        );
+      },
+    },
   ];
 
   return (
@@ -180,7 +256,8 @@ const InfectionControlPage = () => {
                 showSearch
                 placeholder="ทั้งหมด"
                 optionFilterProp="children"
-                onChange={(value) => setSelectedWard(value)}
+                /* กลับหน้าแรกด้วย ไม่งั้นกรองแล้วเหลือหน้าเดียวแต่ยังค้างอยู่หน้า 3 จะเห็นตารางว่าง */
+                onChange={(value) => { setSelectedWard(value); setPage(1); }}
                 style={{ width: 200 }}
                 value={selectedWard}
               >
@@ -194,7 +271,13 @@ const InfectionControlPage = () => {
             dataSource={filteredPatients} 
             rowKey="an"
             loading={loading}
-            pagination={{ pageSize: 15, showSizeChanger: true }}
+            pagination={{
+              current: page,
+              pageSize,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} จาก ${total} ราย`,
+              onChange: (p, size) => { setPage(p); setPageSize(size); },
+            }}
             size='small'
             scroll={{ x: 'max-content' }}
             className="[&_.ant-table-thead_.ant-table-cell]:bg-emerald-700! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
