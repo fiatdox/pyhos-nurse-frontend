@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Empty, Segmented, Spin } from 'antd';
+import { Alert, Button, Empty, Segmented } from 'antd';
+import { BlockSkeleton } from '@/app/components/Skeletons';
 import { PiClockCounterClockwiseBold } from 'react-icons/pi';
 import { purgedMessage } from '../lib/rxRetention';
 import {
@@ -224,7 +225,7 @@ export default function RxFileViewer({ orderId, files, className = '', retention
                         />
                     </div>
                 ) : !current || loading || (!src && !err) ? (
-                    <div className="h-full grid place-items-center"><Spin /></div>
+                    <div className="h-full p-4"><BlockSkeleton /></div>
                 ) : err ? (
                     <div className="h-full grid place-items-center p-4">
                         <Alert

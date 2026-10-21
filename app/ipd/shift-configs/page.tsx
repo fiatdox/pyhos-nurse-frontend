@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Card, Typography, Modal, DatePicker, Select, message, Spin, Button, Tooltip, Alert } from 'antd';
+import { TableSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import { PiMagicWandBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import axios from 'axios';
 import Navbar from '@/app/components/Navbar';
+import { WardGroupNote, type WardGroupInfo } from '@/app/lib/wardGroup';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -53,19 +55,19 @@ interface DutyState {
   };
 }
 
-interface Ward {
-  his_code: string;
-  ward_name: string;
-}
-
 export default function ShiftMatrix() {
   const [messageApi, contextHolder] = message.useMessage();
   const [currentDate, setCurrentDate] = useState(dayjs());
   const daysInMonth = currentDate.daysInMonth();
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  const [wards, setWards] = useState<Ward[]>([]);
+  /*
+    ตัวเลือกเป็น "หน่วย" ไม่ใช่หอ — หอที่ใช้พยาบาลทีมเดียวกัน (เช่น Nursery + NICU) เป็นตัวเลือกเดียว
+    ค่าที่เลือกคือรหัสหอหลัก เวรจึงลงที่หอหลักที่เดียว ไม่แตกเป็นสองตารางที่ต้องคอยดูไม่ให้ชนกัน
+  */
+  const [wards, setWards] = useState<WardGroupInfo[]>([]);
   const [selectedWard, setSelectedWard] = useState<string | null>(null);
+  const selectedUnit = wards.find(w => w.primary_code === selectedWard) ?? null;
   const [dataSource, setDataSource] = useState<StaffRecord[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
 
@@ -105,7 +107,7 @@ export default function ShiftMatrix() {
           }
         } catch { /* ignore decode error */ }
 
-        const response = await axios.get('/api/v1/system/wardsV1', { headers });
+        const response = await axios.get('/api/v1/system/ward-units', { headers });
         const wardList = Array.isArray(response.data) ? response.data : response.data?.data || [];
         setWards(wardList);
 
@@ -188,7 +190,7 @@ export default function ShiftMatrix() {
     try {
       const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.get(`/api/v1/staffs/ward-staffs/${value}`, { headers });
+      const response = await axios.get(`/api/v1/staffs/ward-staffs/${value}`, { headers, params: { unit: 1 } });
       const resData = Array.isArray(response.data) ? response.data : response.data?.data || [];
 
       const staffRecords: StaffRecord[] = resData.map((s: any) => ({
@@ -813,7 +815,7 @@ export default function ShiftMatrix() {
                 showSearch
                 optionFilterProp="children"
               >
-                {wards.map(w => <Option key={w.his_code} value={w.his_code}>{w.ward_name}</Option>)}
+                {wards.map(w => <Option key={w.primary_code} value={w.primary_code}>{w.label}</Option>)}
               </Select>
               <DatePicker
                 picker="month"
@@ -849,14 +851,18 @@ export default function ShiftMatrix() {
             </div>
           </div>
 
+          <WardGroupNote
+            group={selectedUnit}
+            what="ตารางเวรนี้"
+            detail={`ใช้พยาบาลทีมเดียวกัน รายชื่อรวมคนประจำทุกหอในหน่วย · เวรที่เคยลงไว้ที่ ${selectedUnit?.members.slice(1).map(m => m.ward_name).join(', ')} ก็แสดงและแก้ได้ที่นี่`}
+          />
+
           {!selectedWard ? (
             <div className="text-center py-16 text-gray-400 bg-white rounded-lg border border-dashed border-gray-300">
               กรุณาเลือกหอผู้ป่วยเพื่อแสดงตารางเวร
             </div>
           ) : loadingStaff ? (
-            <div className="flex justify-center items-center py-16">
-              <Spin size="large" />
-            </div>
+            <TableSkeleton rows={10} />
           ) : dataSource.length === 0 ? (
             <div className="text-center py-16 text-gray-400 bg-white rounded-lg border border-dashed border-gray-300">
               ไม่พบรายชื่อเจ้าหน้าที่ในหอผู้ป่วยนี้

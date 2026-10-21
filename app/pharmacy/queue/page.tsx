@@ -10,6 +10,7 @@ import {
     Alert, App, Button, Card, DatePicker, Empty, Input, Modal, Segmented, Select,
     Table, Tag, TimePicker, Tooltip, Typography,
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import type { SortOrder } from 'antd/es/table/interface';
 import {
@@ -1053,7 +1054,22 @@ export default function PharmacyQueuePage() {
                     rowKey="rx_order_id"
                     columns={columns}
                     dataSource={shown}
-                    loading={loading}
+                    {...tableLoading(loading, shown, (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={rows.length > 0
+                                ? priorityView !== 'all'
+                                    ? `ไม่มีใบระดับ “${PRIORITY[priorityView].label}” ที่สถานะ “${statusView}” ในช่วงที่เลือก`
+                                    : `ไม่มีใบที่สถานะ “${statusView}”${hn ? ` ของ HN ${hn}` : ' ในช่วงที่เลือก'}`
+                                : hn
+                                    ? `ไม่พบใบของ HN ${hn} ${priorities.length > 0 || wards.length > 0
+                                        ? '· เครื่องนี้ถูกตั้งให้รับเฉพาะบางใบ ใบของคนนี้อาจอยู่เครื่องอื่น'
+                                        : '· ตรวจเลขอีกครั้ง ค้นด้วยเลขท้ายก็ได้'}`
+                                    : live
+                                    ? (wards.length > 0
+                                        ? 'ยังไม่มีใบสั่งยาในตึกที่เลือก'
+                                        : 'ยังไม่มีใบสั่งยาในช่วงเวลาที่เลือก')
+                                    : 'วันและช่วงเวลาที่เลือกไม่มีใบสั่งยา'} />
+                    ))}
                     size="middle"
                     pagination={false}
                     scroll={{ x: 'max-content' }}
@@ -1083,22 +1099,6 @@ export default function PharmacyQueuePage() {
                                         ? 'border-l-4 border-l-orange-400'
                                         : 'border-l-4 border-l-green-400'
                     }
-                    locale={{
-                        emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={rows.length > 0
-                                ? priorityView !== 'all'
-                                    ? `ไม่มีใบระดับ “${PRIORITY[priorityView].label}” ที่สถานะ “${statusView}” ในช่วงที่เลือก`
-                                    : `ไม่มีใบที่สถานะ “${statusView}”${hn ? ` ของ HN ${hn}` : ' ในช่วงที่เลือก'}`
-                                : hn
-                                    ? `ไม่พบใบของ HN ${hn} ${priorities.length > 0 || wards.length > 0
-                                        ? '· เครื่องนี้ถูกตั้งให้รับเฉพาะบางใบ ใบของคนนี้อาจอยู่เครื่องอื่น'
-                                        : '· ตรวจเลขอีกครั้ง ค้นด้วยเลขท้ายก็ได้'}`
-                                    : live
-                                    ? (wards.length > 0
-                                        ? 'ยังไม่มีใบสั่งยาในตึกที่เลือก'
-                                        : 'ยังไม่มีใบสั่งยาในช่วงเวลาที่เลือก')
-                                    : 'วันและช่วงเวลาที่เลือกไม่มีใบสั่งยา'} />,
-                    }}
                 />
             </Card>
             )}

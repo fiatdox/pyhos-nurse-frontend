@@ -7,8 +7,9 @@ import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import dynamic from 'next/dynamic';
 import {
-    Button, Card, DatePicker, InputNumber, Modal, Radio, Select, Spin, Table, Typography, Alert, Empty,
+    Button, Card, DatePicker, InputNumber, Modal, Radio, Select, Table, Typography, Alert, Empty,
 } from 'antd';
+import { BlockSkeleton, tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import { PiPrinterBold } from 'react-icons/pi';
 import { vendorHeaders } from '../../lib/vendorAuth';
@@ -22,7 +23,7 @@ const { Title, Text } = Typography;
 /* ใช้ใบพิมพ์ตัวเดียวกับที่งานโภชนาการใช้ ฉลากจะได้หน้าตาเดียวกันทั้งสองฝั่ง */
 const LabelPDFViewer = dynamic(
     () => import('../../ipd/nutrition-labels/LabelPDFClient').then(m => m.LabelPDFViewer),
-    { ssr: false, loading: () => <div className="flex items-center justify-center h-full"><Spin /></div> },
+    { ssr: false, loading: () => <BlockSkeleton /> },
 );
 const LabelPDFDownloadBtn = dynamic(
     () => import('../../ipd/nutrition-labels/LabelPDFClient').then(m => m.LabelPDFDownloadBtn),
@@ -149,17 +150,16 @@ export default function VendorLabelsPage() {
                     rowKey="food_order_id"
                     columns={columns}
                     dataSource={ward === ALL_WARDS ? rows : rows.filter(r => r.ward === ward)}
-                    loading={loading}
+                    {...tableLoading(loading, rows, (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={searched
+                                ? `ไม่มีรายการที่อนุมัติแล้ว มื้อ${mealLabel} วันที่ ${date.format('DD/MM/BBBB')} — งานโภชนาการอาจยังไม่ได้กดอนุมัติส่งบริษัท`
+                                : 'เลือกวันที่กับมื้อแล้วกดดึงรายการ'} />
+                    ))}
                     size="small"
                     bordered
                     pagination={false}
                     scroll={{ x: 'max-content' }}
-                    locale={{
-                        emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={searched
-                                ? `ไม่มีรายการที่อนุมัติแล้ว มื้อ${mealLabel} วันที่ ${date.format('DD/MM/BBBB')} — งานโภชนาการอาจยังไม่ได้กดอนุมัติส่งบริษัท`
-                                : 'เลือกวันที่กับมื้อแล้วกดดึงรายการ'} />,
-                    }}
                 />
             </Card>
 

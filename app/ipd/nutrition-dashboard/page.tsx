@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Card, Button, DatePicker, Typography, Spin, Empty, Tag, Segmented, Tooltip } from 'antd';
+import { Card, Button, DatePicker, Typography, Empty, Tag, Segmented, Tooltip } from 'antd';
+import { DashboardSkeleton } from '@/app/components/Skeletons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
@@ -167,9 +168,7 @@ export default function NutritionDashboardPage() {
                 </Card>
 
                 {loading ? (
-                    <Card className="shadow-xl rounded-2xl border-none">
-                        <div className="flex justify-center py-24"><Spin size="large" /></div>
-                    </Card>
+                    <DashboardSkeleton kpis={0} charts={4} />
                 ) : !data || data.summary.total === 0 ? (
                     <Card className="shadow-xl rounded-2xl border-none">
                         <Empty description={`ไม่มีรายการอาหารในช่วง ${range[0].format('DD/MM/BBBB')} - ${range[1].format('DD/MM/BBBB')}`} />

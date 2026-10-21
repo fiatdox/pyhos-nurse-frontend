@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Badge, Drawer, Segmented, Select, Tooltip } from 'antd';
 import {
     PiPillBold, PiListBold, PiCaretLeftBold, PiCaretRightBold, PiMoonBold,
-    PiArrowUUpLeftBold, PiFirstAidKitBold, PiBuildingsBold, PiSirenBold,
+    PiArrowUUpLeftBold, PiFirstAidKitBold, PiBuildingsBold, PiSirenBold, PiChartBarBold,
 } from 'react-icons/pi';
 import type { IconType } from 'react-icons';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
@@ -31,6 +31,10 @@ const NAV: { key: string; href: string; label: string; title: string; icon: Icon
         /* รหัสเดียวกับในสารบัญเมนูกลาง ผู้ดูแลระบบปิดเมนูนี้ที่เดียวแล้วหายทั้งแถบบนและแถบข้าง */
         key: 'pharmacy.queue',
         href: '/pharmacy/queue', label: 'คิวใบสั่งยา', title: 'คิวใบสั่งยาจากหอผู้ป่วย', icon: PiFirstAidKitBold,
+    },
+    {
+        key: 'pharmacy.dashboard',
+        href: '/pharmacy/dashboard', label: 'วิเคราะห์', title: 'วิเคราะห์การรับส่งใบสั่งยา', icon: PiChartBarBold,
     },
 ];
 
@@ -147,6 +151,7 @@ export default function PharmacyShell({ children }: { children: React.ReactNode 
         () => ({ wards, wardList, setWards: pickWards, priorities, setPriorities: pickPriorities, setPending }),
         [wards, wardList, pickWards, priorities, pickPriorities]);
     const current = NAV.find(n => n.href === pathname);
+    const onQueue = pathname === '/pharmacy/queue';
 
     // กันเนื้อหาวาดออกมาก่อนรู้ว่าเครื่องนี้ตั้งให้รับตึกไหน ไม่งั้นจะเห็นคิวของทุกตึกแวบหนึ่ง
     if (!ready) return null;
@@ -334,7 +339,8 @@ export default function PharmacyShell({ children }: { children: React.ReactNode 
             >
                 {brand(collapsed)}
                 {navList(collapsed)}
-                {collapsed ? wardMini : <>{wardPicker}{priorityPicker}</>}
+                {/* ตึก/ความด่วนที่เครื่องรับ เป็นค่าของหน้าคิว หน้าอื่นมีตัวกรองของตัวเอง ไม่แสดงให้สับสน */}
+                {onQueue && (collapsed ? wardMini : <>{wardPicker}{priorityPicker}</>)}
                 {footer(collapsed)}
             </aside>
 
@@ -358,13 +364,15 @@ export default function PharmacyShell({ children }: { children: React.ReactNode 
 
                         <div className="min-w-0 leading-tight">
                             <div className="font-semibold truncate">{current?.title ?? 'ห้องยา'}</div>
-                            <div className="text-white/60 text-[11px] truncate">
-                                {wards.length === 0
-                                    ? 'รับทุกตึก'
-                                    : `รับ ${wards.length} ตึก: ${wardList.filter(w => wards.includes(w.ward)).map(w => w.ward_name).join(', ')}`}
-                                {priorities.length > 0
-                                    && ` · เฉพาะ ${priorities.map(p => PRIORITY[p].label).join(' · ')}`}
-                            </div>
+                            {onQueue && (
+                                <div className="text-white/60 text-[11px] truncate">
+                                    {wards.length === 0
+                                        ? 'รับทุกตึก'
+                                        : `รับ ${wards.length} ตึก: ${wardList.filter(w => wards.includes(w.ward)).map(w => w.ward_name).join(', ')}`}
+                                    {priorities.length > 0
+                                        && ` · เฉพาะ ${priorities.map(p => PRIORITY[p].label).join(' · ')}`}
+                                </div>
+                            )}
                         </div>
 
                         {pending > 0 && (
@@ -391,8 +399,8 @@ export default function PharmacyShell({ children }: { children: React.ReactNode 
                 <div className="text-white flex flex-col h-full">
                     {brand(false)}
                     {navList(false)}
-                    {wardPicker}
-                    {priorityPicker}
+                    {onQueue && wardPicker}
+                    {onQueue && priorityPicker}
                     {footer(false)}
                 </div>
             </Drawer>

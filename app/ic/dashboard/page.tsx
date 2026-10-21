@@ -5,6 +5,8 @@ import Navbar from '../../components/Navbar';
 import NestPie from '@/app/components/ic/NestPie';
 import LineSmooth from '@/app/components/ic/LineSmooth';
 import MdroSankey from '@/app/components/ic/MdroSankey';
+import IcAnalytics from '@/app/components/ic/IcAnalytics';
+import { currentFiscalYear, fiscalYearOptions } from '@/app/lib/fiscalYear';
 import { Card, Select } from 'antd';
 import { PiCalendarBlankBold } from 'react-icons/pi';
 
@@ -13,25 +15,11 @@ const FY_SPAN = 6;
 
 const TH_MONTH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
-/**
- * ปีงบประมาณ พ.ศ. ปัจจุบัน
- * ปีงบเริ่ม 1 ต.ค. ตั้งแต่เดือนตุลาคมจึงขึ้นปีงบใหม่แล้ว (20 ต.ค. 2569 = ปีงบ 2570)
- * ต้องตรงกับ fiscalRange ฝั่งเซิร์ฟเวอร์ ถ้าไม่ตรง ตัวเลือกบนจอจะไม่ตรงกับข้อมูลที่ได้
- */
-const currentFiscalYear = (now = new Date()) =>
-  (now.getMonth() + 1 >= 10 ? now.getFullYear() + 1 : now.getFullYear()) + 543;
-
 const DashboardPage = () => {
   const current = useMemo(() => currentFiscalYear(), []);
   const [fy, setFy] = useState(current);
 
-  const options = useMemo(
-    () => Array.from({ length: FY_SPAN }, (_, i) => current - i).map(y => ({
-      value: y,
-      label: y === current ? `ปีงบประมาณ ${y} (ปัจจุบัน)` : `ปีงบประมาณ ${y}`,
-    })),
-    [current],
-  );
+  const options = useMemo(() => fiscalYearOptions(FY_SPAN, current), [current]);
 
   /* ช่วงวันที่ของปีงบที่เลือก บอกไว้ตรงหัวหน้า ให้รู้ว่าตัวเลขทุกกราฟนับจากช่วงไหน */
   const rangeText = useMemo(() => {
@@ -57,6 +45,9 @@ const DashboardPage = () => {
           <span className="text-sm text-gray-500">{rangeText}</span>
         </div>
 
+        {/* วิเคราะห์เชิงลึก: เทียบปีก่อน อัตราต่อวันนอน ติดในโรงพยาบาล กลุ่มก้อน ใช้ปีงบเดียวกับกราฟด้านล่าง */}
+        <IcAnalytics fy={fy} />
+
         {/* Container สำหรับแบ่ง 50/50 */}
         <div className="flex flex-col lg:flex-row gap-6">
 
@@ -72,11 +63,11 @@ const DashboardPage = () => {
             </Card>
           </div>
 
-          {/* Chart ที่ 2 (50%) - ตัวอย่างโครงสร้างเตรียมไว้ให้ */}
+          {/* Chart ที่ 2 (50%) */}
           <div className="w-full lg:w-1/2">
             <Card
               className="shadow-xl rounded-2xl border-none bg-white"
-              title={<span className="text-lg font-bold text-blue-700">Future Chart</span>}
+              title={<span className="text-lg font-bold text-blue-700">ผลเพาะเชื้อดื้อยาตามหน่วยงานที่ส่งตรวจ</span>}
             >
               <div className="flex items-center justify-center text-gray-400" style={{ width: '100%', height: '450px' }}>
                 <NestPie fy={fy} />

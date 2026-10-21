@@ -2,8 +2,9 @@
 
 import React, { useState, useCallback } from 'react';
 import {
-    Card, Button, Table, Tag, DatePicker, Typography, Spin, Empty, Input, Tooltip, Select,
+    Card, Button, Table, Tag, DatePicker, Typography, Empty, Input, Tooltip, Select,
 } from 'antd';
+import { TableSkeleton } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -308,7 +309,7 @@ export default function AmrReportPage() {
                     )}
 
                     {loading ? (
-                        <div className="flex justify-center py-16"><Spin size="large" /></div>
+                        <TableSkeleton rows={8} />
                     ) : !searched ? (
                         <Empty description="เลือกช่วงวันที่แล้วกดดึงข้อมูล" />
                     ) : rows.length === 0 ? (

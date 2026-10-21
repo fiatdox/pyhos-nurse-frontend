@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as echarts from 'echarts';
 import axios from 'axios';
-import { Spin, Empty, Tag } from 'antd';
+import { Empty, Tag } from 'antd';
+import { BlockSkeleton } from '@/app/components/Skeletons';
 import { useThemeMode } from '../../lib/theme';
 import { registerNurseDark, chartThemeName } from '../../lib/echartsTheme';
 
@@ -155,7 +156,7 @@ const MdroSankey = ({ fy }: { fy?: number }) => {
     }, [data, resolved]);
 
     if (loading) {
-        return <div className="flex items-center justify-center h-full"><Spin size="large" /></div>;
+        return <BlockSkeleton />;
     }
 
     if (!data || data.nodes.length === 0) {

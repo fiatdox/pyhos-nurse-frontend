@@ -3,6 +3,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Card, DatePicker, Table, message, Tag } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -278,7 +279,7 @@ const InfectionControlPage = () => {
             columns={columns} 
             dataSource={patients} 
             rowKey="vn"
-            loading={loading}
+            {...tableLoading(loading, patients)}
             pagination={{
               current: page,
               pageSize,

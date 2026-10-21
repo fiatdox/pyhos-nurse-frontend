@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Card, Button, Typography, Table, Tag, Alert, Spin, DatePicker, Radio, Empty, Tooltip, Modal, Select, App,
+    Card, Button, Typography, Table, Tag, Alert, DatePicker, Radio, Empty, Tooltip, Modal, Select, App,
 } from 'antd';
+import { BlockSkeleton, TableSkeleton } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -31,7 +32,7 @@ const ALL_WARDS = '__all__';
 // @react-pdf/renderer แตะ API ของเบราว์เซอร์ตั้งแต่ตอน import จึงต้องปิด ssr
 const WardPDFViewer = dynamic(() => import('./PDFViewerClient').then(m => m.WardPDFViewer), {
     ssr: false,
-    loading: () => <div className="flex items-center justify-center h-full"><Spin size="large" /></div>,
+    loading: () => <BlockSkeleton />,
 });
 const WardPDFDownloadBtn = dynamic(() => import('./PDFViewerClient').then(m => m.WardPDFDownloadBtn), { ssr: false });
 
@@ -532,7 +533,7 @@ function NutritionSummaryContent() {
                     )}
 
                     {loading ? (
-                        <div className="flex justify-center py-16"><Spin size="large" /></div>
+                        <TableSkeleton rows={8} />
                     ) : grandTotal === 0 ? (
                         <Empty description={
                             `ยังไม่มีรายการอาหารมื้อ${mealMeta.label} ของวันที่ ${date.format('DD/MM/YYYY')}` +

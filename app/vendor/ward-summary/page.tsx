@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import { Button, Card, DatePicker, Segmented, Table, Typography, Empty, Alert } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
 import { PiFileXlsBold } from 'react-icons/pi';
@@ -190,15 +191,14 @@ export default function VendorWardSummaryPage() {
                     rowKey={r => `${r.ward}-${r.meal}`}
                     columns={columns}
                     dataSource={rows}
-                    loading={loading}
+                    {...tableLoading(loading, rows, (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={searched ? 'ช่วงที่เลือกไม่มีรายการอาหารของบริษัท' : 'เลือกวันที่แล้วกดดูยอด'} />
+                    ))}
                     size="small"
                     bordered
                     pagination={false}
                     scroll={{ x: 'max-content' }}
-                    locale={{
-                        emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={searched ? 'ช่วงที่เลือกไม่มีรายการอาหารของบริษัท' : 'เลือกวันที่แล้วกดดูยอด'} />,
-                    }}
                     summary={() => rows.length === 0 ? null : (
                         <Table.Summary fixed>
                             <Table.Summary.Row className="bg-teal-50 dark:bg-[#113536]">

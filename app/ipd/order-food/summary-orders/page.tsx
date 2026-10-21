@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { Button, Spin } from 'antd';
+import { Button } from 'antd';
+import { BlockSkeleton } from '@/app/components/Skeletons';
 import dynamic from 'next/dynamic';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
@@ -14,7 +15,7 @@ dayjs.locale('th');
 
 const PDFViewerClient = dynamic(
   () => import('./PDFViewerClient').then(m => m.PDFViewerClient),
-  { ssr: false, loading: () => <div className="flex items-center justify-center h-full"><Spin size="large" /></div> }
+  { ssr: false, loading: () => <BlockSkeleton /> }
 );
 
 const PDFDownloadBtn = dynamic(
@@ -120,9 +121,7 @@ function SummaryOrderContent() {
       {/* PDF Viewer */}
       <div className="flex-1 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Spin size="large" />
-          </div>
+          <div className="h-full p-4"><BlockSkeleton /></div>
         ) : (
           <PDFViewerClient {...pdfProps} />
         )}
@@ -139,9 +138,7 @@ export default function SummaryOrderPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          <Spin size="large" />
-        </div>
+        <div className="h-screen p-4"><BlockSkeleton /></div>
       }
     >
       <SummaryOrderContent />

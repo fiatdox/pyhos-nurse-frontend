@@ -2,8 +2,9 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-    Card, Button, Table, Tag, Typography, Modal, InputNumber, DatePicker, Input, Alert, Empty, Tooltip, Form, Select, Spin,
+    Card, Button, Table, Tag, Typography, Modal, InputNumber, DatePicker, Input, Alert, Empty, Tooltip, Form, Select,
 } from 'antd';
+import { BlockSkeleton, tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -19,7 +20,7 @@ import { PiMoneyWavyBold, PiPencilSimpleBold, PiTrashBold, PiPlusBold, PiFilePdf
 // @react-pdf/renderer แตะ API ของเบราว์เซอร์ตั้งแต่ตอน import จึงต้องปิด ssr
 const ContractPDFViewer = dynamic(() => import('./PDFViewerClient').then(m => m.ContractPDFViewer), {
     ssr: false,
-    loading: () => <div className="flex items-center justify-center h-full"><Spin size="large" /></div>,
+    loading: () => <BlockSkeleton />,
 });
 const ContractPDFDownloadBtn = dynamic(() => import('./PDFViewerClient').then(m => m.ContractPDFDownloadBtn), { ssr: false });
 
@@ -393,12 +394,11 @@ export default function FoodPricesPage() {
                         rowKey="food_type_price_id"
                         columns={columns}
                         dataSource={contracts}
-                        loading={loading}
+                        {...tableLoading(loading, contracts, <Empty description="ยังไม่มีสัญญาในระบบ" image={Empty.PRESENTED_IMAGE_SIMPLE} />)}
                         size="small"
                         bordered
                         scroll={{ x: 'max-content' }}
                         pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `ทั้งหมด ${t} ฉบับ` }}
-                        locale={{ emptyText: <Empty description="ยังไม่มีสัญญาในระบบ" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
                     />
 
                     <Text type="secondary" className="block mt-3 text-xs">

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Typography, Table, Tag, InputNumber, Alert, Spin, Select } from 'antd';
+import { Card, Button, Typography, Table, Tag, InputNumber, Alert, Select } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import Navbar from '../../components/Navbar';
@@ -347,23 +348,22 @@ export default function WardQuotaPage() {
                             </div>
                         ) : (
                             <>
-                                <Spin spinning={loading}>
-                                    <Table<QuotaRow>
-                                        columns={columns}
-                                        dataSource={rows}
-                                        size="small"
-                                        pagination={false}
-                                        rowKey="key"
-                                        // แถบสีช่วยแยกว่าเวรไหนเป็นชุดเดียวกัน (ปกติ + OT8 + OT4)
-                                        rowClassName={(row) => groupStyle[row.shift.shift_group_id]?.bg ?? ''}
-                                        className="
-                                            [&_.ant-table]:rounded-xl
-                                            [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
-                                            [&_.ant-table-thead_.ant-table-cell]:text-white!
-                                            [&_.ant-table-thead_.ant-table-cell]:font-semibold!
-                                        "
-                                    />
-                                </Spin>
+                                <Table<QuotaRow>
+                                    columns={columns}
+                                    dataSource={rows}
+                                    {...tableLoading(loading, rows)}
+                                    size="small"
+                                    pagination={false}
+                                    rowKey="key"
+                                    // แถบสีช่วยแยกว่าเวรไหนเป็นชุดเดียวกัน (ปกติ + OT8 + OT4)
+                                    rowClassName={(row) => groupStyle[row.shift.shift_group_id]?.bg ?? ''}
+                                    className="
+                                        [&_.ant-table]:rounded-xl
+                                        [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
+                                        [&_.ant-table-thead_.ant-table-cell]:text-white!
+                                        [&_.ant-table-thead_.ant-table-cell]:font-semibold!
+                                    "
+                                />
 
                                 <p className="text-xs text-gray-400 mt-3 mb-0">
                                     ช่องที่เว้นว่างคือยังไม่ได้กำหนดอัตรากำลัง ต่างจากใส่เลข 0 ซึ่งแปลว่าตั้งใจไม่ให้ขึ้นเวรนั้นเลย

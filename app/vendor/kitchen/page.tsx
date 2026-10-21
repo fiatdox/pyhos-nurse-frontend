@@ -7,8 +7,9 @@ import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import dynamic from 'next/dynamic';
 import {
-    Button, Card, DatePicker, Modal, Segmented, Spin, Table, Typography, Alert, Empty,
+    Button, Card, DatePicker, Modal, Segmented, Table, Typography, Alert, Empty,
 } from 'antd';
+import { BlockSkeleton, tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
 import { PiFileXlsBold, PiPrinterBold } from 'react-icons/pi';
@@ -27,7 +28,7 @@ const { RangePicker } = DatePicker;
 */
 const WardOrderPDFViewer = dynamic(
     () => import('../../ipd/nutrition-summary/PDFViewerClient').then(m => m.WardPDFViewer),
-    { ssr: false, loading: () => <div className="flex items-center justify-center h-full"><Spin /></div> },
+    { ssr: false, loading: () => <BlockSkeleton /> },
 );
 const WardOrderPDFDownloadBtn = dynamic(
     () => import('../../ipd/nutrition-summary/PDFViewerClient').then(m => m.WardPDFDownloadBtn),
@@ -268,15 +269,14 @@ export default function VendorKitchenPage() {
                     rowKey={r => `${r.ward}-${r.meal}-${r.food_item_id}`}
                     columns={columns}
                     dataSource={menus}
-                    loading={loading}
+                    {...tableLoading(loading, menus, (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={searched ? 'ช่วงที่เลือกไม่มีรายการอาหารของบริษัท' : 'เลือกวันที่แล้วกดดูรายการ'} />
+                    ))}
                     size="small"
                     bordered
                     pagination={false}
                     scroll={{ x: 'max-content' }}
-                    locale={{
-                        emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={searched ? 'ช่วงที่เลือกไม่มีรายการอาหารของบริษัท' : 'เลือกวันที่แล้วกดดูรายการ'} />,
-                    }}
                     summary={() => menus.length === 0 ? null : (
                         <Table.Summary fixed>
                             <Table.Summary.Row className="bg-teal-50 dark:bg-[#113536]">

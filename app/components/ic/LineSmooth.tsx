@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as echarts from 'echarts';
 import axios from 'axios';
-import { message, Spin } from 'antd';
+import { message } from 'antd';
+import { BlockSkeleton } from '@/app/components/Skeletons';
 import { useThemeMode } from '../../lib/theme';
 import { registerNurseDark, chartThemeName } from '../../lib/echartsTheme';
 
@@ -163,8 +164,8 @@ const LineSmooth = ({ fy }: { fy?: number }) => {
   return (
     <div className="relative w-full h-full min-h-100">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 z-10">
-          <Spin />
+        <div className="absolute inset-0 z-10 bg-white">
+          <BlockSkeleton />
         </div>
       )}
       <div ref={chartRef} style={{ width: '100%', height: '100%', minHeight: '400px' }} />

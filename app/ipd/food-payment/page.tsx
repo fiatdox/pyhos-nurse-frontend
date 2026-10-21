@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { Card, Button, Table, Tag, DatePicker, Typography, Empty, Alert, Tooltip } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -369,19 +370,16 @@ export default function FoodPaymentPage() {
                         rowKey={r => `${r.ward}-${r.food_type_id}-${r.effective_from ?? 'none'}`}
                         columns={columns}
                         dataSource={rows}
-                        loading={loading}
+                        {...tableLoading(loading, rows, (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={searched ? 'ช่วงที่เลือกไม่มีการสั่งอาหาร' : 'เลือกช่วงวันที่แล้วกดคำนวณ'}
+                            />
+                        ))}
                         size="small"
                         bordered
                         pagination={false}
                         scroll={{ x: 'max-content' }}
-                        locale={{
-                            emptyText: (
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description={searched ? 'ช่วงที่เลือกไม่มีการสั่งอาหาร' : 'เลือกช่วงวันที่แล้วกดคำนวณ'}
-                                />
-                            ),
-                        }}
                         summary={() => summary && rows.length > 0 ? (
                             <Table.Summary fixed>
                                 <Table.Summary.Row className="bg-teal-50 dark:bg-[#113536]">

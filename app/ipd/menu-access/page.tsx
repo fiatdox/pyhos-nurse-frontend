@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { Alert, App, Button, Card, Empty, Popconfirm, Spin, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Card, Empty, Popconfirm, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { PageSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import { PiArrowsCounterClockwiseBold, PiFloppyDiskBold, PiSlidersHorizontalBold } from 'react-icons/pi';
 import Navbar from '../../components/Navbar';
@@ -178,7 +179,7 @@ export default function MenuAccessPage() {
         return (
             <>
                 <Navbar />
-                <div className="p-6 grid place-items-center"><Spin /></div>
+                <PageSkeleton />
             </>
         );
     }

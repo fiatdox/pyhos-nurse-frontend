@@ -20,6 +20,7 @@ import {
   Timeline,
   App as AntApp
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
@@ -843,7 +844,7 @@ export default function ShiftPatientPage() {
             rowKey="admission_list_id"
             size="small"
             pagination={{ pageSize: 10 }}
-            loading={loadingPatients}
+            {...tableLoading(loadingPatients, filteredPatients)}
             className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
           />
         </Card>

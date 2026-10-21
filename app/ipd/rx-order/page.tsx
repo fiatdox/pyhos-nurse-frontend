@@ -10,6 +10,7 @@ import {
     Alert, App, Button, Card, Checkbox, DatePicker, Empty, Image, Input, Modal, Radio, Segmented, Select, Spin,
     Table, Tag, TimePicker, Tooltip, Typography, Upload,
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import type { SortOrder } from 'antd/es/table/interface';
 import type { UploadFile } from 'antd/es/upload/interface';
@@ -648,11 +649,31 @@ export default function RxOrderPage() {
         return [...map.values()];
     }, [entries]);
 
-    const unidentified = entries.filter(e => !e.hn.trim()).length;
+    /*
+      ทุกไฟล์ต้องมี HN ก่อนส่ง (เซิร์ฟเวอร์ตรวจซ้ำ)
+      ใบที่ไม่มี HN ห้องยาต้องอ่านเลขจากภาพเอง ซึ่งเป็นจุดที่จ่ายยาผิดคนได้ง่ายที่สุด
+      นับรวมไฟล์ที่ยังอ่าน HN ไม่เสร็จด้วย เลขอาจกำลังจะขึ้นเอง จึงยังไม่ให้กดส่ง
+    */
+    const hnMissing = entries.filter(e => !/^\d{1,9}$/.test(e.hn.trim()));
+    const hnPending = entries.some(e => e.reading || e.looking);
+
+    const focusFirstMissing = () => {
+        const first = hnMissing[0];
+        if (!first) return;
+        const el = document.getElementById(`hn-${first.uid}`) as HTMLInputElement | null;
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el?.focus({ preventScroll: true });
+    };
 
     const send = async () => {
         if (!ward) { message.warning('กรุณาเลือกหอผู้ป่วย'); return; }
         if (entries.length === 0) { message.warning('กรุณาแนบไฟล์ใบสั่งยา'); return; }
+        if (hnMissing.length > 0) {
+            message.warning(`กรุณาระบุ HN ให้ครบทุกไฟล์ (ยังขาด ${hnMissing.length} ไฟล์)`);
+            focusFirstMissing();
+            return;
+        }
+        if (hnPending) { message.info('รอให้อ่าน HN จากไฟล์เสร็จก่อน'); return; }
 
         setSending(true);
         let done = 0;
@@ -890,7 +911,7 @@ export default function RxOrderPage() {
                                 />
                                 {!ward && (
                                     <div className="text-xs text-orange-500 mt-1">
-                                        ต้องเลือกหอก่อนจึงจะส่งได้ · ระบบจะจำหอที่เลือกไว้ให้ครั้งต่อไป
+                                        ต้องเลือกหอก่อนจึงจะส่งได้ · เลือกใหม่ทุกครั้งที่เปิดหน้านี้ เพื่อให้แน่ใจว่าส่งในนามหอที่ถูกต้อง
                                     </div>
                                 )}
                             </div>
@@ -1002,16 +1023,19 @@ export default function RxOrderPage() {
 
                                                     <div className="flex items-center gap-2">
                                                         <Input
+                                                            id={`hn-${e.uid}`}
                                                             size="small"
                                                             value={e.hn}
+                                                            /* HN เป็นตัวเลขล้วนไม่เกิน 9 หลัก ตัดอย่างอื่นทิ้งตั้งแต่พิมพ์ */
                                                             onChange={ev => patchEntry(e.uid, {
-                                                                hn: ev.target.value, source: 'manual', patient: null,
+                                                                hn: ev.target.value.replace(/\D/g, '').slice(0, 9), source: 'manual', patient: null,
                                                             })}
                                                             onBlur={ev => lookupFor(e.uid, ev.target.value)}
                                                             onPressEnter={ev => lookupFor(e.uid, (ev.target as HTMLInputElement).value)}
-                                                            placeholder="HN ของไฟล์นี้"
+                                                            placeholder={e.reading ? 'กำลังอ่าน HN…' : 'ต้องใส่ HN'}
+                                                            inputMode="numeric"
                                                             className="max-w-[170px]"
-                                                            status={e.hn.trim() ? undefined : 'warning'}
+                                                            status={e.hn.trim() || e.reading ? undefined : 'error'}
                                                             allowClear
                                                         />
                                                         {e.looking && <Spin size="small" />}
@@ -1105,7 +1129,7 @@ export default function RxOrderPage() {
 
                                                     {e.hisDown && (
                                                         <span className="text-[11px] text-orange-500">
-                                                            ค้นชื่อจาก HIS ไม่ได้ตอนนี้ — ยังส่งใบได้ ห้องยาจะอ่านจากภาพ
+                                                            ค้นชื่อจาก HIS ไม่ได้ตอนนี้ — ยังส่งได้ ตรวจ HN ให้ตรงกับใบก่อนส่ง
                                                         </span>
                                                     )}
                                                 </div>
@@ -1166,21 +1190,26 @@ export default function RxOrderPage() {
                                     </span>
                                 );
                             })()}
-                            {unidentified > 0 && (
-                                <span className="text-orange-500 text-xs">
-                                    มี {unidentified} ไฟล์ที่ยังไม่ระบุ HN · จะแยกเป็นใบละไฟล์
-                                    และห้องยาต้องอ่านเลขจากภาพเอง
-                                </span>
+                            {hnMissing.length > 0 && (
+                                <button type="button" onClick={focusFirstMissing}
+                                    className="text-red-500 text-xs underline underline-offset-2">
+                                    ยังไม่ระบุ HN {hnMissing.length} ไฟล์ · ต้องใส่ HN ทุกไฟล์ก่อนส่ง
+                                </button>
                             )}
                         </div>
                     )}
 
                     <Button
                         type="primary" size="large" icon={<PiPaperPlaneTiltBold />}
-                        onClick={send} loading={sending} disabled={!ward || entries.length === 0}
+                        onClick={send} loading={sending}
+                        disabled={!ward || entries.length === 0 || hnMissing.length > 0 || hnPending}
                         className="w-full mt-3"
                     >
-                        ส่งให้ห้องยา{entries.length > 0 ? ` (${groups.length} ใบ)` : ''}
+                        {hnPending
+                            ? 'กำลังอ่าน HN จากไฟล์…'
+                            : hnMissing.length > 0
+                                ? `ระบุ HN ให้ครบก่อนส่ง (ขาด ${hnMissing.length} ไฟล์)`
+                                : `ส่งให้ห้องยา${entries.length > 0 ? ` (${groups.length} ใบ)` : ''}`}
                     </Button>
                 </Card>
 
@@ -1373,7 +1402,14 @@ export default function RxOrderPage() {
                         rowKey="rx_order_id"
                         columns={columns}
                         dataSource={rows}
-                        loading={loading}
+                        {...tableLoading(loading, rows, (
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={!ward
+                                    ? 'เลือกหอผู้ป่วยด้านบนเพื่อดูใบที่ส่งไปแล้ว'
+                                    : listIsToday && listShift === 'ทั้งวัน'
+                                        ? 'วันนี้หอนี้ยังไม่ได้ส่งใบสั่งยา'
+                                        : 'ช่วงเวลาที่เลือกไม่มีใบสั่งยาของหอนี้'} />
+                        ))}
                         size="small"
                         bordered
                         pagination={false}
@@ -1386,14 +1422,6 @@ export default function RxOrderPage() {
                             /* ยาพร้อมแล้ว = มีของรออยู่ที่ห้องยา ต้องเห็นจากหางตาโดยไม่ต้องอ่านทีละแถว
                                ใบที่รับมาแล้วหรือปิดแล้วไม่ย้อมสี จะได้เหลือสีไว้ให้ใบที่ยังต้องทำ */
                             : r.status === 'prepared' ? 'bg-green-50 dark:bg-[#162312]' : ''}
-                        locale={{
-                            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                description={!ward
-                                    ? 'เลือกหอผู้ป่วยด้านบนเพื่อดูใบที่ส่งไปแล้ว'
-                                    : listIsToday && listShift === 'ทั้งวัน'
-                                        ? 'วันนี้หอนี้ยังไม่ได้ส่งใบสั่งยา'
-                                        : 'ช่วงเวลาที่เลือกไม่มีใบสั่งยาของหอนี้'} />,
-                        }}
                     />
                     )}
                 </Card>

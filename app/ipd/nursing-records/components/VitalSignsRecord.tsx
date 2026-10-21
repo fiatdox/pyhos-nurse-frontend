@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  Card, Form, Input, InputNumber, Select, DatePicker, Button, Row, Col, Spin, Tag,
+  Card, Form, Input, InputNumber, Select, DatePicker, Button, Row, Col, Tag,
   Table, Popconfirm, Tabs, Segmented, Alert, Tooltip, Empty, Divider,
 } from 'antd';
+import { FormSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -856,7 +857,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20"><Spin size="large" /></div>
+          <FormSkeleton />
         ) : (
           <Row gutter={16}>
             {/* ---------- ฟอร์ม ---------- */}

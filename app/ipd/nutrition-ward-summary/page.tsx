@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Card, Button, Table, DatePicker, Typography, Empty } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -195,19 +196,16 @@ export default function NutritionWardSummaryPage() {
                         rowKey={r => `${r.ward}-${r.meal}`}
                         columns={columns}
                         dataSource={rows}
-                        loading={loading}
+                        {...tableLoading(loading, rows, (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={searched ? 'วันที่เลือกยังไม่มีการสั่งอาหาร' : 'เลือกวันที่แล้วกดแสดงข้อมูล'}
+                            />
+                        ))}
                         size="small"
                         bordered
                         pagination={false}
                         scroll={{ x: 'max-content' }}
-                        locale={{
-                            emptyText: (
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description={searched ? 'วันที่เลือกยังไม่มีการสั่งอาหาร' : 'เลือกวันที่แล้วกดแสดงข้อมูล'}
-                                />
-                            ),
-                        }}
                         summary={() => totals && rows.length > 0 ? (
                             <Table.Summary fixed>
                                 <Table.Summary.Row className="bg-teal-50 dark:bg-[#113536]">

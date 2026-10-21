@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Card, Select, Input, Button, Space, Drawer, Divider, Tag, Radio, DatePicker, message, Avatar, Form, Row, Col, Tabs, Dropdown } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import { VscSearch, VscRefresh, VscSave } from "react-icons/vsc";
@@ -655,8 +656,7 @@ export default function PatientList() {
                       rowKey="admission_list_id"
                       pagination={{ pageSize: 10 }}
                       size="middle"
-                      loading={loading}
-                      locale={{ emptyText: 'ไม่พบข้อมูล หรือยังไม่ได้เลือกหอผู้ป่วย' }}
+                      {...tableLoading(loading, filteredPatients, 'ไม่พบข้อมูล หรือยังไม่ได้เลือกหอผู้ป่วย')}
                       className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
                     />
                 ),
@@ -671,8 +671,7 @@ export default function PatientList() {
                       rowKey="admission_list_id"
                       pagination={{ pageSize: 10 }}
                       size="middle"
-                      loading={dischargedLoading}
-                      locale={{ emptyText: 'ไม่พบข้อมูลผู้ป่วยจำหน่าย' }}
+                      {...tableLoading(dischargedLoading, filteredDischargedPatients, 'ไม่พบข้อมูลผู้ป่วยจำหน่าย')}
                       className="[&_.ant-table-thead_.ant-table-cell]:bg-gray-500! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
                     />
                 ),

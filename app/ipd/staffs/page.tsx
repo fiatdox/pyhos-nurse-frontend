@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import {
     Card, Table, Button, Typography, Modal, Form, Input, Select, Tag, Space, Tooltip, Switch
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
 import Navbar from '@/app/components/Navbar';
@@ -247,7 +248,7 @@ export default function StaffsPage() {
                         columns={columns}
                         dataSource={staffs}
                         rowKey="staff_id"
-                        loading={loading}
+                        {...tableLoading(loading, staffs)}
                         pagination={{ pageSize: 15, showSizeChanger: false }}
                         className="[&_.ant-table-thead_th]:bg-teal-50 [&_.ant-table-thead_th]:text-gray-700"
                         rowClassName={(record) =>

@@ -1,11 +1,13 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import { Table, Card, Select, Typography, DatePicker, Button, Alert, Tooltip } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import Navbar from '../../components/Navbar';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
+import { WardGroupNote, type WardGroupInfo } from '../../lib/wardGroup';
 
 const { Title } = Typography;
 
@@ -270,11 +272,16 @@ const ScheduleTableAntd = () => {
   const [monthlyRows, setMonthlyRows] = useState<TableRow[]>([]);
   const [incomplete, setIncomplete] = useState(0);
   const [loading, setLoading] = useState(false);
+  // หอที่นับรวมเป็นหน่วยเดียวกัน (เช่น Nursery + NICU) — รายงานนี้คิดรวมทั้งหน่วย
+  const [group, setGroup] = useState<WardGroupInfo | null>(null);
+  // ค่าน้ำหนักที่เซิร์ฟเวอร์ใช้คิดจริง หน่วยที่รวมหลายหอใช้ของหอหลัก ไม่ใช่ของหอที่เลือก
+  const [serverParams, setServerParams] = useState<{ general?: number; crisis?: number } | null>(null);
 
   const wardConfig = useMemo(() => {
+    if (serverParams) return serverParams;
     const w = wards.find(x => x.his_code === selectedWard);
     return { general: w?.general, crisis: w?.crisis };
-  }, [wards, selectedWard]);
+  }, [wards, selectedWard, serverParams]);
 
   // 1. ดึงรายชื่อหอผู้ป่วย
   useEffect(() => {
@@ -358,6 +365,8 @@ const ScheduleTableAntd = () => {
 
           setTableData(finalData);
           setHeader(d.header ?? null);
+          setGroup(d.group ?? null);
+          setServerParams(d.params ? { general: d.params.general, crisis: d.params.crisis } : null);
           setIncomplete(Number(d.incomplete_rows ?? 0));
 
           const avg: FteAverage | undefined = d.monthly?.average;
@@ -399,10 +408,14 @@ const ScheduleTableAntd = () => {
           setTableData([]);
           setHeader(null);
           setMonthlyRows([]);
+          setGroup(null);
+          setServerParams(null);
         }
       } catch (error) {
         console.error("Error fetching fte data:", error);
         setTableData([]);
+        setGroup(null);
+        setServerParams(null);
       } finally {
         setLoading(false);
       }
@@ -421,7 +434,7 @@ const ScheduleTableAntd = () => {
 
   const handleExportExcel = () => {
     const wardObj = wards.find(w => w.his_code === selectedWard);
-    const wardName = wardObj?.ward_name || selectedWard || 'ward';
+    const wardName = (group?.combined ? group.label : wardObj?.ward_name) || selectedWard || 'ward';
     const monthStr = selectedMonth.format('YYYY-MM');
 
     const HEADERS = [
@@ -507,6 +520,8 @@ const ScheduleTableAntd = () => {
             </div>
           </div>
 
+          <WardGroupNote group={group} what="FTE ผู้ป่วย และคนขึ้นเวรในรายงานนี้" />
+
           {header && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               <Stat label="พยาบาลที่ขึ้นเวรเดือนนี้" value={`${header.nurses_on_duty}`} unit="คน"
@@ -531,7 +546,7 @@ const ScheduleTableAntd = () => {
               type="warning"
               showIcon
               className="mb-4"
-              message={`มี ${incomplete} เวรที่ลงประเภทผู้ป่วยไม่ครบ`}
+              title={`มี ${incomplete} เวรที่ลงประเภทผู้ป่วยไม่ครบ`}
               description="ยอดผู้ป่วยไม่ตรงกับผลรวมประเภท 1-5 ดูคอลัมน์ตรวจยอดท้ายตาราง — ค่า product ตามประเภทของเวรนั้นจะต่ำกว่าความจริง"
             />
           )}
@@ -557,7 +572,7 @@ const ScheduleTableAntd = () => {
                   </span>
                 </div>
               )}
-              loading={loading}
+              {...tableLoading(loading, tableData)}
               className="
                 [&_.ant-table-title]:bg-[#006b5f]!
                 [&_.ant-table-title]:border-b-0!

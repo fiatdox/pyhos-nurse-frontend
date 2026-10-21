@@ -2,8 +2,9 @@
 
 import React, { useState, useCallback } from 'react';
 import {
-    Card, Button, Table, Tag, DatePicker, Radio, Select, Typography, Spin, Empty, Modal, InputNumber, Alert, Tooltip,
+    Card, Button, Table, Tag, DatePicker, Radio, Select, Typography, Empty, Modal, InputNumber, Alert, Tooltip,
 } from 'antd';
+import { BlockSkeleton, TableSkeleton } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -22,7 +23,7 @@ const { Title, Text } = Typography;
 
 const LabelPDFViewer = dynamic(() => import('./LabelPDFClient').then(m => m.LabelPDFViewer), {
     ssr: false,
-    loading: () => <div className="flex items-center justify-center h-full"><Spin size="large" /></div>,
+    loading: () => <BlockSkeleton />,
 });
 const LabelPDFDownloadBtn = dynamic(() => import('./LabelPDFClient').then(m => m.LabelPDFDownloadBtn), { ssr: false });
 
@@ -274,7 +275,7 @@ export default function NutritionLabelsPage() {
                     )}
 
                     {loading ? (
-                        <div className="flex justify-center py-16"><Spin size="large" /></div>
+                        <TableSkeleton rows={8} />
                     ) : !searched ? (
                         <Empty description="เลือกวันที่ มื้อ และหอผู้ป่วย แล้วกดดึงรายการ" />
                     ) : rows.length === 0 ? (

@@ -2,15 +2,14 @@ import type { IconType } from 'react-icons';
 import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
-    PiClockCounterClockwiseBold,
+    PiClockCounterClockwiseBold, PiChartBarBold, PiGearSixBold, PiHospitalBold, PiUsersThreeBold,
+    PiCalendarCheckBold, PiGaugeBold,
 } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
-import { GrSchedulePlay, GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
+import { GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
 import { SiWikibooks } from 'react-icons/si';
 import { IoFastFoodOutline } from 'react-icons/io5';
 import { TbReportSearch } from 'react-icons/tb';
-import { CgPerformance } from 'react-icons/cg';
-import { LiaHospital } from 'react-icons/lia';
 import { RiShareForwardFill } from 'react-icons/ri';
 
 /**
@@ -82,6 +81,8 @@ export const MENU: MenuSection[] = [
         groups: ['pharmacy', 'admin'],
         items: [
             { key: 'pharmacy.queue', href: '/pharmacy/queue', label: 'คิวใบสั่งยาจากหอผู้ป่วย', icon: PiFirstAidKitBold },
+            /* หัวหน้าห้องยาและผู้ดูแลเห็นโดยค่าเริ่มต้น เปิดให้ฝ่ายการพยาบาลได้ที่หน้าจัดการสิทธิ์ */
+            { key: 'pharmacy.dashboard', href: '/pharmacy/dashboard', label: 'วิเคราะห์การรับส่งใบสั่งยา', icon: PiChartBarBold },
         ],
     },
     {
@@ -117,13 +118,13 @@ export const MENU: MenuSection[] = [
     {
         key: 'settings',
         heading: 'ตั้งค่า',
-        icon: LiaHospital,
+        icon: PiGearSixBold,
         groups: ['nursing', 'admin'],
         items: [
             { key: 'settings.positions', href: '/ipd/positions', label: 'จัดการตำแหน่งบุคลากร', icon: PiIdentificationBadgeBold },
-            { key: 'settings.ward-staffs', href: '/ipd/ward-staffs', label: 'ตั้งค่าหอผู้ป่วยปฏิบัติงาน', icon: LiaHospital },
-            { key: 'settings.ward-quotas', href: '/ipd/ward-quotas', label: 'ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)', icon: LiaHospital },
-            { key: 'settings.shift-configs', href: '/ipd/shift-configs', label: 'ตั้งค่าเวรเจ้าหน้าที่', icon: GrSchedulePlay },
+            { key: 'settings.ward-staffs', href: '/ipd/ward-staffs', label: 'ตั้งค่าหอผู้ป่วยปฏิบัติงาน', icon: PiHospitalBold },
+            { key: 'settings.ward-quotas', href: '/ipd/ward-quotas', label: 'ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)', icon: PiUsersThreeBold },
+            { key: 'settings.shift-configs', href: '/ipd/shift-configs', label: 'ตั้งค่าเวรเจ้าหน้าที่', icon: PiCalendarCheckBold },
             { key: 'settings.shift-rates', href: '/ipd/shift-rates', label: 'ตั้งค่าตอบแทนตามเวร', icon: PiMoneyWavyBold },
         ],
     },
@@ -151,7 +152,7 @@ export const MENU: MenuSection[] = [
  * ถ้าไม่มีอะไรเหลือให้เห็นเลย คนเหล่านี้จะเข้าระบบมาเจอหน้าว่างแล้วโทรหาแอดมินพร้อมกันทั้งโรงพยาบาล
  */
 export const BASE_LINKS: MenuItem[] = [
-    { key: 'base.fte', href: '/ipd/fte', label: 'FTE', icon: CgPerformance },
+    { key: 'base.fte', href: '/ipd/fte', label: 'FTE', icon: PiGaugeBold },
     { key: 'base.dashboard', href: '/ipd/dashboard', label: 'Dashboard', icon: TbReportSearch },
 ];
 

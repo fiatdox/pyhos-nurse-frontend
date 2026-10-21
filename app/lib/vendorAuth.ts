@@ -46,3 +46,17 @@ export function clearVendorSession() {
     document.cookie = `${COOKIE}=; path=/; max-age=0`;
     sessionStorage.removeItem(PROFILE);
 }
+
+/**
+ * ออกจากระบบ — ปิด session ฝั่งเซิร์ฟเวอร์ก่อน แล้วค่อยลบของในเบราว์เซอร์
+ * ถ้าลบแค่คุกกี้ token ที่ถูกคัดลอกไปก่อนหน้าจะยังใช้ได้จนหมดอายุ
+ * เรียกเซิร์ฟเวอร์ไม่สำเร็จก็ยังต้องลบฝั่งเบราว์เซอร์ ผู้ใช้กดออกแล้วต้องออกจริง
+ */
+export async function vendorLogout() {
+    try {
+        await fetch('/api/v1/vendor/logout', { method: 'POST', headers: vendorHeaders() });
+    } catch {
+        /* เครือข่ายล่ม — ยังลบฝั่งเบราว์เซอร์ต่อ */
+    }
+    clearVendorSession();
+}

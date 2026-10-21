@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Alert, App, Card, InputNumber, Segmented, Space, Spin, Statistic, Typography } from 'antd';
+import { Alert, App, Card, InputNumber, Segmented, Space, Statistic, Typography } from 'antd';
+import { FormSkeleton } from '@/app/components/Skeletons';
 import { PiClockCounterClockwiseBold } from 'react-icons/pi';
 import Navbar from '../../components/Navbar';
 import { RX_RETENTION_ITEM } from '../../lib/menu';
@@ -74,7 +75,7 @@ export default function RxRetentionPage() {
     const valid = !!info && !!draft && Number.isInteger(draft) && draft >= info.min && draft <= info.max;
 
     if (!access.ready || !info) {
-        return (<><Navbar /><div className="p-6 grid place-items-center"><Spin /></div></>);
+        return (<><Navbar /><div className="p-6 max-w-2xl"><FormSkeleton rows={4} /></div></>);
     }
 
     const trying = valid && draft !== info.days;

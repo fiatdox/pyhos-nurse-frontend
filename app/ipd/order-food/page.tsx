@@ -15,9 +15,9 @@ import {
   Timeline,
   Modal,
   Input,
-  Spin,
   Tooltip,
 } from 'antd';
+import { FormSkeleton, tableLoading } from '@/app/components/Skeletons';
 import Swal from 'sweetalert2';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -1211,7 +1211,7 @@ export default function OrderFoodPage() {
               columns={addonColumns}
               dataSource={addonData}
               rowKey="food_order_id"
-              loading={loadingAddon}
+              {...tableLoading(loadingAddon, addonData)}
               pagination={false}
               size="middle"
               bordered
@@ -1223,7 +1223,7 @@ export default function OrderFoodPage() {
               columns={columns}
               dataSource={patients}
               rowKey="key"
-              loading={loadingFoodOrders}
+              {...tableLoading(loadingFoodOrders, patients)}
               pagination={false}
               size="middle"
               bordered
@@ -1265,9 +1265,7 @@ export default function OrderFoodPage() {
                 </h4>
 
                 {loadingHistory ? (
-                  <div className="flex justify-center py-10">
-                    <Spin />
-                  </div>
+                  <FormSkeleton rows={5} />
                 ) : historyData.length === 0 ? (
                   <div className="text-center py-10">
                     <p className="text-gray-500 text-sm mb-1">ไม่พบประวัติการสั่งอาหาร</p>
@@ -1402,9 +1400,7 @@ export default function OrderFoodPage() {
           ]}
         >
           {loadingTarget && (
-            <div className="flex justify-center py-10">
-              <Spin />
-            </div>
+            <FormSkeleton rows={3} />
           )}
 
           {confirmData && (() => {

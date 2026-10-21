@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Form, Input, Select, DatePicker, Button, Row, Col, Spin, Tag, Table, Popconfirm, Tabs, Checkbox } from 'antd';
+import { Card, Form, Input, Select, DatePicker, Button, Row, Col, Tag, Table, Popconfirm, Tabs, Checkbox } from 'antd';
+import { FormSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -277,7 +278,7 @@ export default function PatientEducation({ an }: { an: string }) {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20"><Spin size="large" description="กำลังโหลดข้อมูล..." /></div>
+          <FormSkeleton />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"

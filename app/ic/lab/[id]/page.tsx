@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Navbar from '../../../components/Navbar';
 import { Card, message, Spin, Table, Tag } from 'antd';
+import { FormSkeleton } from '@/app/components/Skeletons';
 import axios from 'axios';
 
 // ฟังก์ชันสำหรับทำความสะอาด RTF Tag ให้เหลือแค่ข้อความปกติ
@@ -288,8 +289,10 @@ const LabResultPage = () => {
           className="shadow-xl rounded-2xl border-none"
           title={<span className="text-xl font-bold text-emerald-700">ผลการตรวจ Lab (Order No: {labId})</span>}
         >
-          <Spin spinning={loading}>
+          {/* โหลดครั้งแรกยังไม่มีผลให้อ่าน → โครงร่าง · โหลดซ้ำทั้งที่มีผลอยู่แล้ว → ไอคอนหมุนทับของเดิม */}
+          <Spin spinning={loading && labSections.length > 0}>
             <div className="bg-gray-50 p-4 md:p-6 rounded-xl border border-gray-200 text-sm font-mono text-gray-800 shadow-inner min-h-100">
+              {loading && labSections.length === 0 && <FormSkeleton rows={10} />}
               {!loading && labSections.length === 0 && (
                 <div className="text-center text-gray-400 py-10">ไม่พบข้อมูลผล Lab</div>
               )}

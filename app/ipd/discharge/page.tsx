@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Table, Card, Select, Input, Button, Tag } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import Swal from 'sweetalert2';
 import type { ColumnsType } from 'antd/es/table';
 import { DatePicker } from 'antd';
@@ -215,8 +216,7 @@ export default function DischargePage() {
             rowKey="admission_list_id"
             pagination={{ pageSize: 10 }}
             size="middle"
-            loading={loading}
-            locale={{ emptyText: 'ไม่พบข้อมูล' }}
+            {...tableLoading(loading, filtered, 'ไม่พบข้อมูล')}
             className="[&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"
           />
         </Card>

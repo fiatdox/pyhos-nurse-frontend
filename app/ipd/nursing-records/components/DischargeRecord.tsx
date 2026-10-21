@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Form, Input, Select, DatePicker, Button, Row, Col, Spin, Tag, Checkbox } from 'antd';
+import { Card, Form, Input, Select, DatePicker, Button, Row, Col, Tag, Checkbox } from 'antd';
+import { FormSkeleton } from '@/app/components/Skeletons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import Navbar from '../../../components/Navbar';
@@ -197,7 +198,7 @@ export default function DischargeRecord({ an }: { an: string }) {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20"><Spin size="large" description="กำลังโหลดข้อมูล..." /></div>
+          <FormSkeleton />
         ) : (
           <Form form={form} layout="vertical" onFinish={onFinish} size="small"
             className="[&_.ant-form-item]:mb-3 [&_.ant-form-item-label]:pb-0.5 [&_.ant-form-item-label_label]:text-gray-600 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold"

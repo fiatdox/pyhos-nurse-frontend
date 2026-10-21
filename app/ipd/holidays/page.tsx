@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Card, Button, Typography, Table, Tag, Alert, Spin, Select, Modal, Form, Input, DatePicker, Space,
+    Card, Button, Typography, Table, Tag, Alert, Select, Modal, Form, Input, DatePicker, Space,
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -277,22 +278,20 @@ export default function HolidayPage() {
                             )}
                         </div>
 
-                        <Spin spinning={loading}>
-                            <Table<Holiday>
-                                columns={columns}
-                                dataSource={holidays}
-                                size="small"
-                                rowKey="id"
-                                pagination={false}
-                                locale={{ emptyText: `ยังไม่มีวันหยุดของปี ${year + 543}` }}
-                                className="
-                                    [&_.ant-table]:rounded-xl
-                                    [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
-                                    [&_.ant-table-thead_.ant-table-cell]:text-white!
-                                    [&_.ant-table-thead_.ant-table-cell]:font-semibold!
-                                "
-                            />
-                        </Spin>
+                        <Table<Holiday>
+                            columns={columns}
+                            dataSource={holidays}
+                            {...tableLoading(loading, holidays, `ยังไม่มีวันหยุดของปี ${year + 543}`)}
+                            size="small"
+                            rowKey="id"
+                            pagination={false}
+                            className="
+                                [&_.ant-table]:rounded-xl
+                                [&_.ant-table-thead_.ant-table-cell]:bg-[#006b5f]!
+                                [&_.ant-table-thead_.ant-table-cell]:text-white!
+                                [&_.ant-table-thead_.ant-table-cell]:font-semibold!
+                            "
+                        />
 
                         <p className="text-xs text-gray-400 mt-3 mb-0">
                             วันหยุดทางจันทรคติ (มาฆบูชา วิสาขบูชา อาสาฬหบูชา เข้าพรรษา) เปลี่ยนวันทุกปี

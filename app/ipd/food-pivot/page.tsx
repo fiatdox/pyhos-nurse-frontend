@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Card, Button, Table, DatePicker, Typography, Empty, Select, Segmented, Tag, Modal, Spin } from 'antd';
+import { Card, Button, Table, DatePicker, Typography, Empty, Select, Segmented, Tag, Modal } from 'antd';
+import { BlockSkeleton, tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -18,7 +19,7 @@ import { formatMoney } from '../../lib/money';
 // @react-pdf/renderer แตะ API ของเบราว์เซอร์ตั้งแต่ตอน import จึงต้องปิด ssr
 const PivotPDFViewer = dynamic(() => import('./PDFViewerClient').then(m => m.PivotPDFViewer), {
     ssr: false,
-    loading: () => <div className="flex items-center justify-center h-full"><Spin size="large" /></div>,
+    loading: () => <BlockSkeleton />,
 });
 const PivotPDFDownloadBtn = dynamic(() => import('./PDFViewerClient').then(m => m.PivotPDFDownloadBtn), { ssr: false });
 
@@ -497,19 +498,16 @@ export default function FoodPivotPage() {
                         rowKey="__key"
                         columns={columns}
                         dataSource={pivot.data}
-                        loading={loading}
+                        {...tableLoading(loading, pivot.data, (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={searched ? 'ช่วงที่เลือกไม่มีการสั่งอาหาร' : 'เลือกช่วงวันที่แล้วกดดึงข้อมูล'}
+                            />
+                        ))}
                         size="small"
                         bordered
                         pagination={false}
                         scroll={{ x: 'max-content' }}
-                        locale={{
-                            emptyText: (
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description={searched ? 'ช่วงที่เลือกไม่มีการสั่งอาหาร' : 'เลือกช่วงวันที่แล้วกดดึงข้อมูล'}
-                                />
-                            ),
-                        }}
                         summary={() => pivot.data.length > 0 ? (
                             <Table.Summary fixed>
                                 <Table.Summary.Row className="bg-teal-50 dark:bg-[#113536]">

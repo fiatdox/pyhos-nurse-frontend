@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
@@ -9,11 +8,12 @@ import 'dayjs/locale/th';
 import {
     Button, Card, DatePicker, Table, Tag, Typography, Alert, Empty, Segmented, Tooltip, Tabs,
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import * as XLSX from 'xlsx';
 import { PiFileXlsBold, PiReceiptBold, PiClockCountdownBold, PiWarningBold } from 'react-icons/pi';
 import { formatMoney } from '../../lib/money';
-import { vendorHeaders, getVendorProfile, clearVendorSession, type VendorProfile } from '../../lib/vendorAuth';
+import { vendorHeaders, getVendorProfile, type VendorProfile } from '../../lib/vendorAuth';
 
 dayjs.extend(buddhistEra);
 dayjs.locale('th');
@@ -84,7 +84,6 @@ const rangeOf = (p: Preset, current: Range): Range => {
 };
 
 export default function VendorReportPage() {
-    const router = useRouter();
     const [profile, setProfile] = useState<VendorProfile | null>(null);
     const [preset, setPreset] = useState<Preset>('เดือนนี้');
     const [range, setRange] = useState<Range>([dayjs().startOf('month'), dayjs().endOf('month')]);
@@ -95,11 +94,6 @@ export default function VendorReportPage() {
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
     const [view, setView] = useState('สรุป');
-
-    const signOut = useCallback(() => {
-        clearVendorSession();
-        router.replace('/vendor/login');
-    }, [router]);
 
     /*
       รับช่วงวันที่เข้ามาได้ เพราะปุ่มลัดต้องยิงทันทีในจังหวะเดียวกับที่ตั้งค่า
@@ -128,16 +122,13 @@ export default function VendorReportPage() {
             setContracts(ct.data?.data ?? []);
             setSearched(true);
         } catch (err) {
-            // token หมดอายุหรือถูกปิดบัญชี ต้องเด้งกลับไปเข้าระบบใหม่ ไม่ใช่ค้างหน้าเปล่า
-            if (axios.isAxiosError(err) && err.response?.status === 401) {
-                signOut();
-                return;
-            }
+            // token หมดอายุ ถูกปิดบัญชี หรือเข้าจากเครื่องอื่น — VendorShell พากลับหน้าเข้าระบบพร้อมบอกเหตุผล
+            if (axios.isAxiosError(err) && err.response?.status === 401) return;
             setSearched(true);
         } finally {
             setLoading(false);
         }
-    }, [range, signOut]);
+    }, [range]);
 
     const applyPreset = (p: Preset) => {
         setPreset(p);
@@ -277,15 +268,14 @@ export default function VendorReportPage() {
             rowKey={r => `${r.food_type_id}-${r.effective_from ?? 'none'}`}
             columns={summaryColumns}
             dataSource={rows}
-            loading={loading}
+            {...tableLoading(loading, rows, (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={searched ? 'ช่วงที่เลือกไม่มีรายการอาหาร' : 'เลือกช่วงวันที่แล้วกดดูรายงาน'} />
+            ))}
             size="small"
             bordered
             pagination={false}
             scroll={{ x: 'max-content' }}
-            locale={{
-                emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={searched ? 'ช่วงที่เลือกไม่มีรายการอาหาร' : 'เลือกช่วงวันที่แล้วกดดูรายงาน'} />,
-            }}
             summary={() => rows.length === 0 ? null : (
                 <Table.Summary fixed>
                     <Table.Summary.Row className="bg-teal-50 dark:bg-[#113536]">

@@ -87,9 +87,12 @@ const NestPie = ({ fy }: { fy?: number }) => {
             },
             label: {
               formatter: '{b|{b}:} {c}  {per|{d}%}',
+              // สีป้ายตามโหมด สีเทาเข้มเดิมแทบมองไม่เห็นบนพื้นมืด และไม่เอาขอบตัวอักษรที่ธีมใส่มา
+              color: resolved === 'dark' ? '#d9d9d9' : '#4C5058',
+              textBorderWidth: 0,
               rich: {
                 b: {
-                  color: '#4C5058',
+                  color: resolved === 'dark' ? '#d9d9d9' : '#4C5058',
                   fontSize: 14,
                   fontWeight: 'bold',
                   lineHeight: 24

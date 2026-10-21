@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Select, DatePicker, Table, Radio, InputNumber, Input, Button, Tooltip, Modal, Tag, App, Skeleton, Spin } from 'antd';
+import { Card, Select, DatePicker, Table, Radio, InputNumber, Input, Button, Tooltip, Modal, Tag, App, Skeleton } from 'antd';
+import { FormSkeleton, tableLoading } from '@/app/components/Skeletons';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import Navbar from '../../components/Navbar';
+import { WardGroupNote, type WardGroupInfo } from '../../lib/wardGroup';
 import { PiArrowCounterClockwiseBold, PiTrashBold } from 'react-icons/pi';
 import { BsMoonStarsFill, BsSunriseFill, BsSunFill } from 'react-icons/bs';
 
@@ -181,7 +183,14 @@ function DailyRoutineContent() {
   const [selectedDate, setSelectedDate] = useState<dayjs.Dayjs>(dayjs());
   const [wards, setWards] = useState<{ label: string; value: string }[]>([]);
   const [wardList, setWardList] = useState<{ his_code: string; general: number; crisis: number }[]>([]);
-  const wardConfig = wardList.find(w => String(w.his_code) === String(selectedWard)) ?? { general: 0, crisis: 0 };
+  /*
+    หอที่นับรวมเป็นหน่วยเดียวกัน (เช่น Nursery + NICU) การ์ดสรุปรายเวรคิดรวมทั้งหน่วย
+    ให้ตรงกับรายงาน FTE และตารางเวรที่จัดรวมกัน ค่าน้ำหนักจึงต้องใช้ของหอหลักที่เซิร์ฟเวอร์ส่งมา
+  */
+  const [group, setGroup] = useState<(WardGroupInfo & { general: number; crisis: number }) | null>(null);
+  const wardConfig = group
+    ?? wardList.find(w => String(w.his_code) === String(selectedWard))
+    ?? { general: 0, crisis: 0 };
   const [patients, setPatients] = useState<PatientInfo[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [careLevels, setCareLevels] = useState<CareLevelOption[]>([]);
@@ -259,6 +268,7 @@ function DailyRoutineContent() {
         if (key) map[key] = item;
       });
       setShiftSummary(map);
+      setGroup(res.data?.group ?? null);
     } catch (e) {
       console.error('Error fetching shift summary:', e);
     }
@@ -570,6 +580,7 @@ function DailyRoutineContent() {
   useEffect(() => {
     // เคลียร์ค่าเก่าก่อน fetch ใหม่
     setShiftSummary({});
+    setGroup(null);
     setRadioSelections({});
     setLevelScores({});
     setPatients([]);
@@ -864,6 +875,12 @@ function DailyRoutineContent() {
             </div>
           </div>
 
+          <WardGroupNote
+            group={group}
+            what="การ์ดสรุปรายเวรและ FTE ด้านล่าง"
+            className="mb-3"
+          />
+
           {/* Summary Cards */}
           <div className="grid grid-cols-3 gap-3 mb-4">
             {(['night', 'morning', 'afternoon'] as const).map(shiftKey => {
@@ -1001,7 +1018,7 @@ function DailyRoutineContent() {
             columns={columns}
             dataSource={patients}
             rowKey="admission_list_id"
-            loading={loadingPatients}
+            {...tableLoading(loadingPatients, patients)}
             size="small"
             scroll={{ x: 'max-content' }}
             pagination={false}
@@ -1040,9 +1057,7 @@ function DailyRoutineContent() {
               ใช่หรือไม่?
             </p>
             {modalLoading ? (
-              <div className="flex justify-center py-6">
-                <Spin />
-              </div>
+              <FormSkeleton rows={3} />
             ) : modalPatients.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-4">
                 ไม่มีข้อมูลผู้ป่วยที่บันทึกในเวรดังกล่าว

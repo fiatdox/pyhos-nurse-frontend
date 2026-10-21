@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import { Card, Table, DatePicker, Button, message } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import { SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import axios from 'axios';
@@ -138,7 +139,7 @@ const Page = () => {
             columns={columns} 
             dataSource={data} 
             rowKey="vn"
-            loading={loading}
+            {...tableLoading(loading, data)}
             scroll={{ x: 'max-content' }}
             size="small"
             className="[&_.ant-table-thead_.ant-table-cell]:bg-emerald-700! [&_.ant-table-thead_.ant-table-cell]:text-white! [&_.ant-table-thead_.ant-table-cell]:font-semibold!"

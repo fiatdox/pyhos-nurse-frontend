@@ -4,13 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Drawer, Segmented, Tooltip } from 'antd';
+import axios from 'axios';
 import {
     PiSignOutBold, PiForkKnifeBold, PiMoneyWavyBold, PiBuildingsBold,
     PiTagBold, PiListBold, PiCaretLeftBold, PiCaretRightBold, PiMoonBold,
 } from 'react-icons/pi';
 import type { IconType } from 'react-icons';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
-import { clearVendorSession, getVendorProfile, vendorHeaders, type VendorProfile } from '../lib/vendorAuth';
+import { clearVendorSession, getVendorProfile, vendorHeaders, vendorLogout, type VendorProfile } from '../lib/vendorAuth';
 import { useMenuAccess } from '../lib/useMenuAccess';
 
 /**
@@ -45,9 +46,28 @@ export default function VendorShell({ children }: { children: React.ReactNode })
     /* เมนูที่ผู้ดูแลระบบเปิดให้กลุ่มบริษัท ใช้ token ของบริษัท ไม่ใช่ของเจ้าหน้าที่ */
     const access = useMenuAccess('/api/v1/vendor/menu-access', vendorHeaders, ['vendor']);
 
-    const signOut = useCallback(() => {
-        clearVendorSession();
+    const signOut = useCallback(async () => {
+        await vendorLogout();
         router.replace('/vendor/login');
+    }, [router]);
+
+    /*
+      บัญชีใช้ได้ทีละเครื่อง ถ้ามีคนเข้าบัญชีนี้จากเครื่องอื่น ทุกคำขอของเครื่องนี้จะได้ 401
+      ดักไว้ที่เดียวตรงนี้ ทุกหน้าจะได้พากลับหน้าเข้าระบบพร้อมบอกเหตุผล
+      ไม่ใช่หน้าจอว่างหรือข้อความผิดพลาดที่ไม่บอกอะไร
+    */
+    useEffect(() => {
+        const id = axios.interceptors.response.use(undefined, err => {
+            const url = String(err?.config?.url ?? '');
+            if (axios.isAxiosError(err) && err.response?.status === 401
+                && url.includes('/api/v1/vendor/') && !url.includes('/api/v1/vendor/login')) {
+                const code = err.response.data?.code;
+                clearVendorSession();
+                router.replace(`/vendor/login?reason=${code === 'SESSION_REPLACED' ? 'replaced' : 'ended'}`);
+            }
+            return Promise.reject(err);
+        });
+        return () => axios.interceptors.response.eject(id);
     }, [router]);
 
     useEffect(() => {

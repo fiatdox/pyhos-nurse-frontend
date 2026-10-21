@@ -4,6 +4,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
     Card, Button, Table, Tag, DatePicker, Typography, Empty, Input, Tooltip, Select, Alert,
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -352,21 +353,18 @@ export default function OpdInfectionFollowupPage() {
                         rowKey="id"
                         columns={columns}
                         dataSource={filtered}
-                        loading={loading}
+                        {...tableLoading(loading, filtered, (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={searched
+                                    ? 'วันที่เลือกไม่มีผู้ป่วยที่อยู่ในช่วงเฝ้าระวังมาตามนัด'
+                                    : 'เลือกวันนัดแล้วกดค้นหา'}
+                            />
+                        ))}
                         size="small"
                         bordered
                         scroll={{ x: 'max-content' }}
                         pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `รวม ${t.toLocaleString('th-TH')} นัด` }}
-                        locale={{
-                            emptyText: (
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description={searched
-                                        ? 'วันที่เลือกไม่มีผู้ป่วยที่อยู่ในช่วงเฝ้าระวังมาตามนัด'
-                                        : 'เลือกวันนัดแล้วกดค้นหา'}
-                                />
-                            ),
-                        }}
                     />
                 </Card>
             </div>

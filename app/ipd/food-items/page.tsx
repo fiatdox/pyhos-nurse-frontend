@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
     Card, Button, Table, Tag, Input, Checkbox, Typography, Switch, Empty, Radio, Alert, Tooltip,
 } from 'antd';
+import { tableLoading } from '@/app/components/Skeletons';
 import type { TableColumnsType } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -326,12 +327,11 @@ export default function FoodItemsPage() {
                         rowKey="food_item_id"
                         columns={columns}
                         dataSource={filtered}
-                        loading={loading}
+                        {...tableLoading(loading, filtered, <Empty description="ไม่พบรายการเมนู" image={Empty.PRESENTED_IMAGE_SIMPLE} />)}
                         size="small"
                         bordered
                         scroll={{ x: 'max-content' }}
                         pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `รวม ${t.toLocaleString('th-TH')} รายการ` }}
-                        locale={{ emptyText: <Empty description="ไม่พบรายการเมนู" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
                     />
 
                     <Text type="secondary" className="block mt-3 text-xs">

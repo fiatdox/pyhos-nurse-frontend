@@ -3,18 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Drawer, Menu, ConfigProvider, Checkbox, Alert, Spin, Typography, Segmented } from 'antd';
+import type { IconType } from 'react-icons';
 import {
-    PiSparkleBold, PiListChecksBold, PiMoonBold, PiIdentificationBadgeBold,
-    PiMoneyWavyBold, PiCalendarXBold, PiBuildingsBold, PiSlidersHorizontalBold,
+    PiSparkleBold, PiListChecksBold, PiMoonBold, PiUserCircleBold, PiSignOutBold,
+    PiMoneyWavyBold, PiCalendarXBold, PiBuildingsBold,
 } from 'react-icons/pi';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
-import { VscSignOut, VscAccount } from 'react-icons/vsc';
-import { GrSchedulePlay } from 'react-icons/gr';
 import Link from 'next/link';
-import { CgPerformance } from 'react-icons/cg';
-import { LiaHospital } from 'react-icons/lia';
-import { MENU, MENU_ACCESS_ITEM, RX_RETENTION_ITEM } from '../lib/menu';
+import { MENU, BASE_LINKS, MENU_ACCESS_ITEM, RX_RETENTION_ITEM } from '../lib/menu';
 import { useMenuAccess } from '../lib/useMenuAccess';
+import { FormSkeleton } from './Skeletons';
 
 interface AiSetting {
     enabled: boolean;
@@ -31,9 +29,49 @@ interface AiSetting {
  * เส้นคั่นอยู่บนหัวข้อ ไม่ใช่ใต้ เพราะหัวข้อควรติดกับรายการที่มันคุมอยู่
  */
 const DrawerSection = ({ label }: { label: string }) => (
-    <div className="mt-4 mb-1 pt-3 px-2 border-t border-white/15 text-[11px] font-semibold tracking-wide text-white/55">
+    <div className="mt-4 mb-1 pt-3 px-2 border-t border-white/15 text-[11px] font-semibold tracking-wide text-white/70">
         {label}
     </div>
+);
+
+/*
+  ลิ้นชักทั้งสองข้างเป็นพื้นเขียวเข้มเสมอ ไม่ว่าจะโหมดสว่างหรือมืด สีข้างในจึงต้องเป็นค่าตายตัว
+  (ขาว ขาวโปร่ง หรือ hex) ห้ามใช้สเกลสีของ Tailwind เพราะโหมดมืดพลิกสเกลพวกนั้นทั้งชุด (globals.css)
+  เดิม text-red-100 ของปุ่มออกจากระบบกลายเป็นแดงเข้มเกือบมองไม่เห็นในโหมดมืด
+
+  ตัวที่ชนกับ antd ต้องมี ! เพราะ CSS ของ antd ไม่ได้อยู่ใน layer จึงชนะคลาส Tailwind ธรรมดา
+  เดิมปุ่มปิด (X) จึงเป็นสีเทาเข้มบนพื้นเขียวในโหมดสว่าง
+
+  ปลายล่างของพื้นไล่สีเข้มขึ้นจาก #008f7f เป็น #00786b ตัวหนังสือขาวบนสีเดิมได้แค่ 4:1
+  เมนูกลุ่มผู้ดูแลระบบที่อยู่ล่างสุดจึงอ่านยากกว่าข้างบน
+*/
+const DRAWER_CLASS = '[&_.ant-drawer-body]:p-0 [&_.ant-drawer-content]:bg-transparent [&_.ant-drawer-header]:bg-[#005a50] [&_.ant-drawer-header]:border-b-white/10! [&_.ant-drawer-close]:text-white!';
+const DRAWER_STYLES = { body: { padding: 0 }, mask: { backgroundColor: 'rgba(0, 0, 0, 0.2)' }, wrapper: { boxShadow: 'none' } };
+const DRAWER_PANEL = 'flex flex-col h-full bg-linear-to-b from-[#005a50] to-[#00786b] p-4 text-white';
+
+/** ตัวเลือกบนพื้นเขียว — ค่าเริ่มต้นของ antd เป็นแถบขาว (สว่าง) หรือแถบดำ (มืด) ซึ่งดูหลุดออกจากลิ้นชัก */
+const DRAWER_THEME = {
+    components: {
+        Segmented: {
+            trackBg: 'rgba(255, 255, 255, 0.12)',
+            itemColor: 'rgba(255, 255, 255, 0.85)',
+            itemHoverColor: '#ffffff',
+            itemHoverBg: 'rgba(255, 255, 255, 0.10)',
+            itemActiveBg: 'rgba(255, 255, 255, 0.18)',
+            itemSelectedBg: '#ffffff',
+            itemSelectedColor: '#005a50',
+        },
+    },
+};
+
+/** แถวลิงก์ในลิ้นชักตั้งค่า — ไอคอนชุดเดียวกัน (Phosphor Bold) ทุกแถว ไอคอนเส้นบางจะดูเป็นสีเทาทั้งที่เป็นสีขาว */
+const DrawerLink = ({ href, icon: Icon, label, onClick }: { href: string; icon: IconType; label: string; onClick: () => void }) => (
+    <Link href={href} onClick={onClick}>
+        <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
+            <Icon className="w-5 h-5 shrink-0" />
+            <span>{label}</span>
+        </div>
+    </Link>
 );
 
 const Navbar = () => {
@@ -90,6 +128,8 @@ const Navbar = () => {
       ตอนนี้ทุกหมวดใช้กลไกเดียวกัน และผู้ดูแลระบบเปิด/ปิดรายหมวดได้เอง
     */
     const access = useMenuAccess();
+    const settingsItems = access.sections.find(s => s.section.key === 'settings')?.items ?? [];
+    const fteLink = BASE_LINKS.find(l => l.key === 'base.fte')!;
 
     const toggleAi = async (enabled: boolean) => {
         setAiSaving(true);
@@ -258,10 +298,10 @@ const Navbar = () => {
                 placement="left"
                 onClose={onCloseLeft}
                 open={openLeft}
-                className="[&_.ant-drawer-body]:p-0 [&_.ant-drawer-content]:bg-transparent [&_.ant-drawer-header]:bg-[#005a50] [&_.ant-drawer-header]:border-b-white/10 [&_.ant-drawer-close]:text-white"
-                styles={{ body: { padding: 0 }, mask: { backgroundColor: 'rgba(0, 0, 0, 0.2)' }, wrapper: { boxShadow: 'none' } }}
+                className={DRAWER_CLASS}
+                styles={DRAWER_STYLES}
             >
-                <div className="flex flex-col h-full bg-linear-to-b from-[#005a50] to-[#008f7f] p-4 text-white">
+                <div className={DRAWER_PANEL}>
                     <div className="flex-1">
                         <ConfigProvider
                             theme={{
@@ -324,92 +364,57 @@ const Navbar = () => {
                 placement="right"
                 onClose={onCloseRight}
                 open={openRight}
-                className="[&_.ant-drawer-body]:p-0 [&_.ant-drawer-content]:bg-transparent [&_.ant-drawer-header]:bg-[#005a50] [&_.ant-drawer-header]:border-b-white/10 [&_.ant-drawer-close]:text-white"
-                styles={{ body: { padding: 0 }, mask: { backgroundColor: 'rgba(0, 0, 0, 0.2)' }, wrapper: { boxShadow: 'none' } }}
+                className={DRAWER_CLASS}
+                styles={DRAWER_STYLES}
             >
-                <div className="flex flex-col h-full bg-linear-to-b from-[#005a50] to-[#008f7f] p-4 text-white">
+                <div className={DRAWER_PANEL}>
                     <div className="flex-1">
                         <div className="flex items-center gap-3 p-2 font-bold border-b border-white/10 mb-2">
-                            <VscAccount className="w-5 h-5" />
+                            <PiUserCircleBold className="w-5 h-5" />
                             <span>Setting Information</span>
                         </div>
                         {/* เห็นเมนูไม่เท่ากันเพราะอยู่คนละกลุ่ม บอกไว้ตรงนี้จะได้ไม่ต้องเดา */}
                         {access.ready && (
-                            <div className="px-2 pb-2 text-xs text-white/60 leading-snug">
+                            <div className="px-2 pb-2 text-xs text-white/70 leading-snug">
                                 กลุ่มผู้ใช้: {access.groupLabels.length > 0 ? access.groupLabels.join(' · ') : 'ยังไม่ได้จัดกลุ่ม'}
-                                {access.majorName && <div className="text-white/60">{access.majorName}</div>}
+                                {access.majorName && <div>{access.majorName}</div>}
                             </div>
                         )}
                         {/* เรียงตามลำดับที่ต้องตั้งค่าจริง — ตำแหน่งต้องมาก่อน
-                            เพราะหน้าหอผู้ป่วยดึงรายชื่อจากตำแหน่งที่จับคู่ไว้ */}
-                        {/* เมนูตั้งค่าใช้สิทธิ์ชุดเดียวกับหมวด "ตั้งค่า" บนแถบบน จะได้ไม่ขัดกันเอง */}
-                        {access.can('settings.positions') && <DrawerSection label="บุคลากรและเวร" />}
-                        {access.can('settings.positions') && <Link href="/ipd/positions" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <PiIdentificationBadgeBold className="w-5 h-5 text-white" />
-                            <span>จัดการตำแหน่งบุคลากร</span>
-                           </div>
-                        </Link>}
-                        {access.can('settings.ward-staffs') && <Link href="/ipd/ward-staffs" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <LiaHospital    className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าหอผู้ป่วยปฏิบัติงาน</span>
-                           </div>
-                        </Link>}
-                        {access.can('settings.ward-quotas') && <Link href="/ipd/ward-quotas" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <LiaHospital    className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าหอผู้ป่วย (อัตรากำลังต่อเวร)</span>
-                           </div>
-                        </Link>}
-                        {access.can('settings.shift-configs') && <Link href="/ipd/shift-configs" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <GrSchedulePlay    className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าเวรเจ้าหน้าที่</span>
-                           </div>
-                        </Link>}
-                        {access.can('settings.shift-rates') && <Link href="/ipd/shift-rates" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <PiMoneyWavyBold className="w-5 h-5 text-white" />
-                            <span>ตั้งค่าตอบแทนตามเวร</span>
-                           </div>
-                        </Link>}
+                            เพราะหน้าหอผู้ป่วยดึงรายชื่อจากตำแหน่งที่จับคู่ไว้
+                            รายการ ไอคอน และสิทธิ์มาจากหมวด "ตั้งค่า" ในสารบัญเดียวกับแถบบน จะได้ไม่ขัดกันเอง
+                            (เดิมพิมพ์ซ้ำไว้ที่นี่ ไอคอนเลยคนละชุดกับแถบบน) */}
+                        {settingsItems.length > 0 && <DrawerSection label="บุคลากรและเวร" />}
+                        {settingsItems.map(item => (
+                            <DrawerLink key={item.key} href={item.href} icon={item.icon} label={item.label} onClick={onCloseRight} />
+                        ))}
 
                         <DrawerSection label="รายงานภาระงาน" />
-                        {/* <Link href="#" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <CgPerformance    className="w-5 h-5 text-white" />
-                            <span>Performance ของฉัน</span>
-                           </div>
-                        </Link> */}
-                        <Link href="/ipd/fte" onClick={onCloseLeft}>
-                           <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                            <CgPerformance    className="w-5 h-5 text-white" />
-                            <span>Full-Time Equivalent (FTE)</span>
-                           </div>
-                        </Link>
+                        <DrawerLink href={fteLink.href} icon={fteLink.icon} label="Full-Time Equivalent (FTE)" onClick={onCloseRight} />
 
                         <DrawerSection label="การแสดงผล" />
                         {/* โหมดสว่าง/มืด — ทุกคนตั้งได้ เป็นความชอบส่วนตัวรายเครื่อง
                             ไม่ใช่นโยบายระดับระบบแบบสวิตช์ผู้ช่วย AI */}
                         <div className="p-2 text-white">
                             <div className="flex items-center gap-3 mb-2">
-                                <PiMoonBold className="w-5 h-5 text-white" />
+                                <PiMoonBold className="w-5 h-5" />
                                 <span>โหมดการแสดงผล</span>
                             </div>
-                            <Segmented
-                                block
-                                size="small"
-                                value={mode}
-                                onChange={v => setMode(v as ThemeMode)}
-                                options={[
-                                    { value: 'light', label: 'สว่าง' },
-                                    { value: 'dark', label: 'มืด' },
-                                    { value: 'system', label: 'ตามเครื่อง' },
-                                ]}
-                            />
+                            <ConfigProvider theme={DRAWER_THEME}>
+                                <Segmented
+                                    block
+                                    size="small"
+                                    value={mode}
+                                    onChange={v => setMode(v as ThemeMode)}
+                                    options={[
+                                        { value: 'light', label: 'สว่าง' },
+                                        { value: 'dark', label: 'มืด' },
+                                        { value: 'system', label: 'ตามเครื่อง' },
+                                    ]}
+                                />
+                            </ConfigProvider>
                             {mode === 'system' && (
-                                <div className="text-xs text-white/60 mt-1">
+                                <div className="text-xs text-white/70 mt-1">
                                     ตอนนี้เครื่องตั้งเป็นโหมด{resolved === 'dark' ? 'มืด' : 'สว่าง'}
                                 </div>
                             )}
@@ -421,51 +426,22 @@ const Navbar = () => {
                         {aiSetting?.can_manage && (
                             <>
                                 <DrawerSection label="งานวิชาการการพยาบาล" />
-                                <Link href="/ipd/care-plan-templates" onClick={onCloseRight}>
-                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                        <PiListChecksBold className="w-5 h-5 text-white" />
-                                        <span>ออกแบบแม่แบบแผนการพยาบาล</span>
-                                    </div>
-                                </Link>
+                                <DrawerLink href="/ipd/care-plan-templates" icon={PiListChecksBold} label="ออกแบบแม่แบบแผนการพยาบาล" onClick={onCloseRight} />
 
                                 <DrawerSection label="ผู้ดูแลระบบ" />
-                                <Link href={MENU_ACCESS_ITEM.href} onClick={onCloseRight}>
-                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                        <PiSlidersHorizontalBold className="w-5 h-5 text-white" />
-                                        <span>{MENU_ACCESS_ITEM.label}</span>
-                                    </div>
-                                </Link>
-                                <Link href={RX_RETENTION_ITEM.href} onClick={onCloseRight}>
-                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                        <RX_RETENTION_ITEM.icon className="w-5 h-5 text-white" />
-                                        <span>{RX_RETENTION_ITEM.label}</span>
-                                    </div>
-                                </Link>
-                                <Link href="/ipd/holidays" onClick={onCloseRight}>
-                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                        <PiCalendarXBold className="w-5 h-5 text-white" />
-                                        <span>จัดการวันหยุด</span>
-                                    </div>
-                                </Link>
-                                <Link href="/ipd/food-prices" onClick={onCloseRight}>
-                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                        <PiMoneyWavyBold className="w-5 h-5 text-white" />
-                                        <span>ตั้งราคาอาหารตามประเภท</span>
-                                    </div>
-                                </Link>
-                                <Link href="/ipd/vendors" onClick={onCloseRight}>
-                                    <div className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white">
-                                        <PiBuildingsBold className="w-5 h-5 text-white" />
-                                        <span>บัญชีบริษัทผู้รับจ้างทำอาหาร</span>
-                                    </div>
-                                </Link>
+                                <DrawerLink href={MENU_ACCESS_ITEM.href} icon={MENU_ACCESS_ITEM.icon} label={MENU_ACCESS_ITEM.label} onClick={onCloseRight} />
+                                <DrawerLink href={RX_RETENTION_ITEM.href} icon={RX_RETENTION_ITEM.icon} label={RX_RETENTION_ITEM.label} onClick={onCloseRight} />
+                                <DrawerLink href="/ipd/holidays" icon={PiCalendarXBold} label="จัดการวันหยุด" onClick={onCloseRight} />
+                                <DrawerLink href="/ipd/food-prices" icon={PiMoneyWavyBold} label="ตั้งราคาอาหารตามประเภท" onClick={onCloseRight} />
+                                <DrawerLink href="/ipd/vendors" icon={PiBuildingsBold} label="บัญชีบริษัทผู้รับจ้างทำอาหาร" onClick={onCloseRight} />
                                 <button
                                     onClick={() => setAiDrawerOpen(true)}
                                     className="flex items-center gap-3 p-2 hover:bg-white/10 rounded cursor-pointer transition-colors text-white w-full text-left"
                                 >
-                                    <PiSparkleBold className="w-5 h-5 text-white" />
+                                    <PiSparkleBold className="w-5 h-5 shrink-0" />
                                     <span className="flex-1">ผู้ช่วย AI</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded ${aiSetting.enabled ? 'bg-emerald-400/30 text-emerald-50' : 'bg-white/10 text-white/60'}`}>
+                                    {/* ป้ายสถานะใช้ขาวตายตัว (bg-[#ffffff] ไม่ใช่ bg-white ซึ่ง globals.css เปลี่ยนเป็นพื้นมืดในโหมดมืด) ไม่ใช่ emerald ที่โหมดมืดพลิกเป็นเขียวเข้มจนกลืนกับพื้น */}
+                                    <span className={`text-xs px-2 py-0.5 rounded ${aiSetting.enabled ? 'bg-[#ffffff] text-[#005a50] font-semibold' : 'bg-white/10 text-white/70'}`}>
                                         {aiSetting.enabled ? 'เปิด' : 'ปิด'}
                                     </span>
                                 </button>
@@ -473,8 +449,8 @@ const Navbar = () => {
                         )}
 
                     </div>
-                    <button onClick={handleLogout} className="flex items-center gap-3 p-2 mt-auto pt-3 border-t border-white/15 hover:bg-white/10 rounded-b text-red-100 hover:text-white transition-colors w-full text-left">
-                        <VscSignOut className="w-5 h-5" />
+                    <button onClick={handleLogout} className="flex items-center gap-3 p-2 mt-auto pt-3 border-t border-white/15 hover:bg-white/10 rounded-b text-[#ffd9d6] hover:text-white transition-colors w-full text-left">
+                        <PiSignOutBold className="w-5 h-5 shrink-0" />
                         <span>ออกจากระบบ</span>
                     </button>
                 </div>
@@ -489,7 +465,7 @@ const Navbar = () => {
                 open={aiDrawerOpen}
             >
                 {!aiSetting ? (
-                    <Spin />
+                    <FormSkeleton rows={4} />
                 ) : (
                     <div className="flex flex-col gap-4">
                         <Checkbox
