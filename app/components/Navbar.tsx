@@ -44,10 +44,16 @@ const DrawerSection = ({ label }: { label: string }) => (
 
   ปลายล่างของพื้นไล่สีเข้มขึ้นจาก #008f7f เป็น #00786b ตัวหนังสือขาวบนสีเดิมได้แค่ 4:1
   เมนูกลุ่มผู้ดูแลระบบที่อยู่ล่างสุดจึงอ่านยากกว่าข้างบน
+
+  พื้นเขียวต้องยืดตามเนื้อหา (min-h-full ไม่ใช่ h-full) — จอเตี้ยหรือเมนูยาวจนต้องเลื่อน
+  แถวที่ล้นจะหลุดออกนอกพื้นเขียวไปอยู่บนพื้นของลิ้นชักซึ่งเป็นสีขาว
+  เดิมปุ่มออกจากระบบ (ชมพูอ่อน) จึงแทบมองไม่เห็นตอนเลื่อนลงไปสุด
+  พื้นของส่วนที่เลื่อนได้ก็ตั้งเป็นเขียวไว้อีกชั้น เผื่อเลื่อนเกินขอบ (overscroll บนจอสัมผัส)
+  แถบเลื่อนเป็นขาวโปร่งบนพื้นใส แทนแถบเทาอ่อนของเบราว์เซอร์ที่ดูหลุดจากพื้นเขียว
 */
-const DRAWER_CLASS = '[&_.ant-drawer-body]:p-0 [&_.ant-drawer-content]:bg-transparent [&_.ant-drawer-header]:bg-[#005a50] [&_.ant-drawer-header]:border-b-white/10! [&_.ant-drawer-close]:text-white!';
+const DRAWER_CLASS = '[&_.ant-drawer-body]:p-0 [&_.ant-drawer-body]:bg-[#00786b]! [&_.ant-drawer-body]:[scrollbar-color:rgba(255,255,255,0.35)_transparent] [&_.ant-drawer-body]:[scrollbar-width:thin] [&_.ant-drawer-content]:bg-transparent [&_.ant-drawer-header]:bg-[#005a50] [&_.ant-drawer-header]:border-b-white/10! [&_.ant-drawer-close]:text-white!';
 const DRAWER_STYLES = { body: { padding: 0 }, mask: { backgroundColor: 'rgba(0, 0, 0, 0.2)' }, wrapper: { boxShadow: 'none' } };
-const DRAWER_PANEL = 'flex flex-col h-full bg-linear-to-b from-[#005a50] to-[#00786b] p-4 text-white';
+const DRAWER_PANEL = 'flex flex-col min-h-full bg-linear-to-b from-[#005a50] to-[#00786b] p-4 text-white';
 
 /** ตัวเลือกบนพื้นเขียว — ค่าเริ่มต้นของ antd เป็นแถบขาว (สว่าง) หรือแถบดำ (มืด) ซึ่งดูหลุดออกจากลิ้นชัก */
 const DRAWER_THEME = {
@@ -189,7 +195,7 @@ const Navbar = () => {
 
                         <div className="shrink-0 flex items-center">
 
-                            <span className="ml-2 text-xl font-bold text-white">PYHOS x Nurse</span>
+                            <span className="ml-2 text-xl font-bold text-white" title="ระบบสารสนเทศทางการพยาบาล (Nursing Information System)">PYHOS x NIS</span>
 
                         </div>
                         <div className="hidden sm:block sm:ml-6">

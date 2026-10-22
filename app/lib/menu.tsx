@@ -3,14 +3,13 @@ import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
     PiClockCounterClockwiseBold, PiChartBarBold, PiGearSixBold, PiHospitalBold, PiUsersThreeBold,
-    PiCalendarCheckBold, PiGaugeBold,
+    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold,
 } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
 import { GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
 import { SiWikibooks } from 'react-icons/si';
 import { IoFastFoodOutline } from 'react-icons/io5';
 import { TbReportSearch } from 'react-icons/tb';
-import { RiShareForwardFill } from 'react-icons/ri';
 
 /**
  * สารบัญเมนูของทั้งระบบ
@@ -69,7 +68,6 @@ export const MENU: MenuSection[] = [
             { key: 'ipd.patients', href: '/ipd/patients', label: 'ทะเบียนผู้ป่วย', icon: SiWikibooks },
             { key: 'ipd.discharge', href: '/ipd/discharge', label: 'จำหน่าย / ย้ายออก', icon: GrWheelchairActive },
             { key: 'ipd.daily-routine', href: '/ipd/daily-routine', label: 'ประเมินระดับการดูแลรายเวร', icon: VscChecklist },
-            { key: 'ipd.shift-patient', href: '/ipd/shift-patient', label: 'สรุปยอดผู้ป่วยรายเวร', icon: RiShareForwardFill },
             { key: 'ipd.order-food', href: '/ipd/order-food', label: 'สั่งอาหาร', icon: IoFastFoodOutline },
             { key: 'ipd.rx-order', href: '/ipd/rx-order', label: 'ส่งใบสั่งยาให้ห้องยา', icon: PiPaperPlaneTiltBold },
         ],
@@ -153,6 +151,7 @@ export const MENU: MenuSection[] = [
  */
 export const BASE_LINKS: MenuItem[] = [
     { key: 'base.fte', href: '/ipd/fte', label: 'FTE', icon: PiGaugeBold },
+    { key: 'base.work-product', href: '/ipd/work-product', label: 'FTE หน่วยงาน', icon: PiTrendUpBold },
     { key: 'base.dashboard', href: '/ipd/dashboard', label: 'Dashboard', icon: TbReportSearch },
 ];
 

@@ -1,6 +1,6 @@
-# Phayao Hospital Nurse System
+# PYHOS x NIS — ระบบสารสนเทศทางการพยาบาล
 
-This is a Next.js project designed for the nurse management system at Phayao Hospital. It utilizes modern web technologies to provide a responsive and efficient user interface.
+Frontend of PYHOS x NIS, the Nursing Information System of Phayao Hospital: inpatient ward work, nursing records, staffing and FTE, plus the pharmacy, nutrition and infection-control services around the wards. It utilizes modern web technologies to provide a responsive and efficient user interface.
 
 ## Tech Stack
 

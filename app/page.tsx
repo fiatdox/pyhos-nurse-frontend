@@ -204,13 +204,15 @@ export default function Home() {
           <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white">
             <IconCross />
           </div>
-          <span className="text-white font-bold text-lg tracking-wide">PYHOS-NURSE</span>
+          <span className="text-white font-bold text-lg tracking-wide">PYHOS x NIS</span>
         </div>
 
         {/* center quote */}
         <div className="relative z-10">
           <h1 className="text-5xl font-bold text-white leading-tight mb-4">
-            ระบบบริหารจัดการพยาบาล
+            {/* ตัดบรรทัดเองตามความหมาย ปล่อยเบราว์เซอร์ตัดจะได้ "...ทางการ / พยาบาล" ซึ่งอ่านเป็นคำว่า "ทางการ" */}
+            <span className="block whitespace-nowrap">ระบบสารสนเทศ</span>
+            <span className="block whitespace-nowrap">ทางการพยาบาล</span>
           </h1>
           <p className="text-xl text-[#ccfbf1] mb-6">โรงพยาบาลพะเยา</p>
           <div className="h-1 w-16 rounded-full bg-[#2dd4bf]" />
@@ -218,7 +220,7 @@ export default function Home() {
 
         {/* bottom caption */}
         <div className="relative z-10">
-          <p className="text-white/75 text-sm">Phayao Hospital · Nursing Management System</p>
+          <p className="text-white/75 text-sm">Phayao Hospital · Nursing Information System</p>
         </div>
       </div>
 
@@ -249,7 +251,7 @@ export default function Home() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0d9488]/30 border border-[#14b8a6]/40 backdrop-blur-sm mb-4">
               <IconCross />
             </div>
-            <h1 className="text-3xl font-bold text-white">PYHOS-NURSE</h1>
+            <h1 className="text-3xl font-bold text-white">PYHOS x NIS</h1>
             <p className="text-[#99f6e4] mt-1 text-sm">
               {mode === "staff" ? "โรงพยาบาลพะเยา" : activeMode.label}
             </p>
@@ -390,7 +392,7 @@ export default function Home() {
           </div>
 
           <p className="text-center text-white/55 text-xs mt-6">
-            Phayao Hospital · Nursing Management System
+            Phayao Hospital · Nursing Information System
           </p>
         </div>
       </div>

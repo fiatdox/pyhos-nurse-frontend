@@ -13,8 +13,8 @@ const sarabun = Sarabun({
 });
 
 export const metadata: Metadata = {
-  title: "PYHOS x Nurse | Phayao Hospital Nurse System",
-  description: "A nurse management system for Phayao Hospital.",
+  title: "PYHOS x NIS | ระบบสารสนเทศทางการพยาบาล",
+  description: "ระบบสารสนเทศทางการพยาบาล (Nursing Information System) โรงพยาบาลพะเยา",
 };
 
 export default function RootLayout({
