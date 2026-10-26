@@ -10,7 +10,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import Navbar from '../../components/Navbar';
 import { PiVirusBold } from 'react-icons/pi';
-import Link from 'next/link';
+import { LabResultModal } from '@/app/components/ic/LabResult';
 
 const { Option } = Select;
 
@@ -88,6 +88,8 @@ const InfectionControlPage = () => {
   */
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  /* ผลแล็บที่เปิดดูอยู่ null = ปิด */
+  const [lab, setLab] = useState<{ labNo: string; subtitle: string } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -142,7 +144,7 @@ const InfectionControlPage = () => {
     ? patients.filter(p => p.wname === selectedWard)
     : patients;
 
-  const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null, labNo: string | null) => {
+  const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null, labNo: string | null, ptname: string) => {
     if (!infectionName) {
       return <span className="text-gray-400">-</span>;
     }
@@ -162,10 +164,13 @@ const InfectionControlPage = () => {
     );
 
     if (labNo) {
+      /* เปิดผลเป็นหน้าต่างบนหน้าเดิม ไม่ต้องสลับแท็บไปมาระหว่างไล่ดูหลายราย */
+      const subtitle = [ptname, infectionName, infectionDate && `ผลวันที่ ${dayjs(infectionDate).format('DD/MM/YY')}`].filter(Boolean).join(' · ');
       return (
-        <Link href={`/ic/lab/${labNo}`} target="_blank" className="block w-full h-full">
+        <button type="button" onClick={() => setLab({ labNo, subtitle })}
+          className="block w-full h-full text-left rounded focus-visible:outline-2 focus-visible:outline-emerald-600">
           {content}
-        </Link>
+        </button>
       );
     }
 
@@ -201,11 +206,11 @@ const InfectionControlPage = () => {
       align: 'center',
       render: (ds) => `${ds}`
     },
-    { title: 'CRE', key: 'cre', width: 180, render: (_, record) => renderInfectionInfo(record.cre, record.cre_date, record.cre_labno) },
-    { title: 'VRE', key: 'vre', width: 180, render: (_, record) => renderInfectionInfo(record.vre, record.vre_date, record.vre_labno) },
-    { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date, record.mrsa_labno) },
-    { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date, record.escr_labno) },
-    { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date, record.mdr_labno) },
+    { title: 'CRE', key: 'cre', width: 180, render: (_, record) => renderInfectionInfo(record.cre, record.cre_date, record.cre_labno, record.ptname) },
+    { title: 'VRE', key: 'vre', width: 180, render: (_, record) => renderInfectionInfo(record.vre, record.vre_date, record.vre_labno, record.ptname) },
+    { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date, record.mrsa_labno, record.ptname) },
+    { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date, record.escr_labno, record.ptname) },
+    { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date, record.mdr_labno, record.ptname) },
     {
       title: 'พบเชื้อล่าสุด', key: 'latest', width: 190, align: 'center',
       /*
@@ -285,6 +290,7 @@ const InfectionControlPage = () => {
           />
         </Card>
       </div>
+      <LabResultModal labNo={lab?.labNo ?? null} subtitle={lab?.subtitle} onClose={() => setLab(null)} />
     </div>
   );
 };

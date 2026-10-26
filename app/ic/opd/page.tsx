@@ -11,7 +11,7 @@ import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import Navbar from '../../components/Navbar';
 import { PiVirusBold } from 'react-icons/pi';
-import Link from 'next/link';
+import { LabResultModal } from '@/app/components/ic/LabResult';
 
 // Set locale to Thai
 dayjs.extend(buddhistEra);
@@ -95,6 +95,8 @@ const InfectionControlPage = () => {
   */
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  /* ผลแล็บที่เปิดดูอยู่ null = ปิด */
+  const [lab, setLab] = useState<{ labNo: string; subtitle: string } | null>(null);
   const router = useRouter();
 
   const fetchData = useCallback(async (d: dayjs.Dayjs) => {
@@ -142,7 +144,7 @@ const InfectionControlPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null, labNo: string | null, visitDate: string | null) => {
+  const renderInfectionInfo = (infectionName: string | null, infectionDate: string | null, labNo: string | null, visitDate: string | null, ptname: string) => {
     if (!infectionName) {
       return <span className="text-gray-400">-</span>;
     }
@@ -162,10 +164,13 @@ const InfectionControlPage = () => {
     );
 
     if (labNo) {
+      /* เปิดผลเป็นหน้าต่างบนหน้าเดิม ไม่ต้องสลับแท็บไปมาระหว่างไล่ดูหลายราย */
+      const subtitle = [ptname, infectionName, infectionDate && `ผลวันที่ ${dayjs(infectionDate).format('DD/MM/BB')}`].filter(Boolean).join(' · ');
       return (
-        <Link href={`/ic/lab/${labNo}`} target="_blank" className="block w-full h-full">
+        <button type="button" onClick={() => setLab({ labNo, subtitle })}
+          className="block w-full h-full text-left rounded focus-visible:outline-2 focus-visible:outline-emerald-600">
           {content}
-        </Link>
+        </button>
       );
     }
 
@@ -199,11 +204,11 @@ const InfectionControlPage = () => {
     },
     { title: 'แผนก', dataIndex: 'department', key: 'department', width: 200 },
     { title: 'แผนกที่ตรวจ', dataIndex: 'spcname', key: 'spcname', width: 150 },
-    { title: 'CRE', key: 'cre', width: 180, render: (_, record) => renderInfectionInfo(record.cre, record.cre_date, record.labno_cre, record.vstdate) },
-    { title: 'VRE', key: 'vre', width: 180, render: (_, record) => renderInfectionInfo(record.vre, record.vre_date, record.labno_vre, record.vstdate) },
-    { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date, record.labno_mrsa, record.vstdate) },
-    { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date, record.labno_escr, record.vstdate) },
-    { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date, record.labno_mdr, record.vstdate) },
+    { title: 'CRE', key: 'cre', width: 180, render: (_, record) => renderInfectionInfo(record.cre, record.cre_date, record.labno_cre, record.vstdate, record.ptname) },
+    { title: 'VRE', key: 'vre', width: 180, render: (_, record) => renderInfectionInfo(record.vre, record.vre_date, record.labno_vre, record.vstdate, record.ptname) },
+    { title: 'MRSA', key: 'mrsa', width: 180, render: (_, record) => renderInfectionInfo(record.mrsa, record.mrsa_date, record.labno_mrsa, record.vstdate, record.ptname) },
+    { title: 'ESCR', key: 'escr', width: 180, render: (_, record) => renderInfectionInfo(record.escr, record.escr_date, record.labno_escr, record.vstdate, record.ptname) },
+    { title: 'MDR', key: 'mdr', width: 180, render: (_, record) => renderInfectionInfo(record.mdr, record.mdr_date, record.labno_mdr, record.vstdate, record.ptname) },
     {
       title: 'ตรวจพบล่าสุด', key: 'latest', width: 190, align: 'center',
       /*
@@ -293,6 +298,7 @@ const InfectionControlPage = () => {
           />
         </Card>
       </div>
+      <LabResultModal labNo={lab?.labNo ?? null} subtitle={lab?.subtitle} onClose={() => setLab(null)} />
     </div>
   );
 };
