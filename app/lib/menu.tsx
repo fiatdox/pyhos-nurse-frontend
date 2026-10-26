@@ -70,6 +70,7 @@ export const MENU: MenuSection[] = [
             { key: 'ipd.daily-routine', href: '/ipd/daily-routine', label: 'ประเมินระดับการดูแลรายเวร', icon: VscChecklist },
             { key: 'ipd.order-food', href: '/ipd/order-food', label: 'สั่งอาหาร', icon: IoFastFoodOutline },
             { key: 'ipd.rx-order', href: '/ipd/rx-order', label: 'ส่งใบสั่งยาให้ห้องยา', icon: PiPaperPlaneTiltBold },
+            { key: 'ipd.mar-dashboard', href: '/ipd/mar-dashboard', label: 'วิเคราะห์การให้ยา (MAR)', icon: PiChartBarBold },
         ],
     },
     {

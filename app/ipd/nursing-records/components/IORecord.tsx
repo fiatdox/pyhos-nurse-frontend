@@ -25,6 +25,7 @@ interface PatientInfo {
   bedno?: string;
   admitDateTimeIso?: string;
   reg_datetime?: string;
+  regdate?: string;
   doctorName?: string;
   incharge_doctor?: string;
   ward?: string;
@@ -112,7 +113,7 @@ export default function IORecord({ an }: { an: string }) {
       setLoading(true);
       try {
         const headers = getHeaders();
-        const patientRes = await axios.post('/api/v1/patients/by-an', { an }, { headers });
+        const patientRes = await axios.post('/api/v1/patients/patient-by-an', { an }, { headers });
         if (patientRes.data?.success && patientRes.data.data) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
@@ -228,7 +229,7 @@ export default function IORecord({ an }: { an: string }) {
   ];
 
   const patientName = patient?.ptname || patient?.name || patient?.patient_name || '-';
-  const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime;
+  const admitDate = patient?.admitDateTimeIso || patient?.reg_datetime || patient?.regdate;
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
   return (
