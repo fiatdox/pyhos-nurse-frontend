@@ -34,6 +34,8 @@ interface Options {
     onNew?: (e: RxOrderEvent) => void;
     /** เรียกเมื่อสถานะใบเปลี่ยน */
     onStatus?: (e: RxOrderEvent) => void;
+    /** เรียกเมื่อหอแก้ HN ของใบที่ส่งแล้ว — reason คือหมายเหตุของการแก้ */
+    onHn?: (e: RxOrderEvent) => void;
     /** เรียกทุกครั้งที่ต่อติด เพื่อให้หน้าจอไปดึงรายการใหม่ ปิดช่องว่างระหว่างที่หลุด */
     onReconnect?: () => void;
 }
@@ -60,14 +62,14 @@ const socketUrl = (): string => {
     return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws/rx';
 };
 
-export const useRxSocket = ({ room, onNew, onStatus, onReconnect }: Options) => {
+export const useRxSocket = ({ room, onNew, onStatus, onHn, onReconnect }: Options) => {
     const [connected, setConnected] = useState(false);
     /*
       เก็บ callback ไว้ใน ref เพราะหน้าจอสร้างฟังก์ชันใหม่ทุกรอบที่วาด
       ถ้าผูกเข้ากับ useEffect ตรง ๆ จะตัดแล้วต่อใหม่ทุกครั้งที่ state เปลี่ยน
     */
-    const cb = useRef({ onNew, onStatus, onReconnect });
-    cb.current = { onNew, onStatus, onReconnect };
+    const cb = useRef({ onNew, onStatus, onHn, onReconnect });
+    cb.current = { onNew, onStatus, onHn, onReconnect };
 
     const roomKey = room.kind === 'pharmacy' ? 'pharmacy' : `ward:${room.ward ?? ''}`;
 
@@ -115,6 +117,9 @@ export const useRxSocket = ({ room, onNew, onStatus, onReconnect }: Options) => 
                         break;
                     case 'order:status':
                         cb.current.onStatus?.(msg as RxOrderEvent);
+                        break;
+                    case 'order:hn':
+                        cb.current.onHn?.(msg as RxOrderEvent);
                         break;
                     default:
                         break;

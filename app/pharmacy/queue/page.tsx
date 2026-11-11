@@ -66,7 +66,13 @@ interface RxOrder {
     waiting_seconds: number;
 }
 
-interface RxEvent { action: string; actor_name: string | null; at: string }
+interface RxEvent {
+    action: string;
+    actor_name: string | null;
+    at: string;
+    /** edit_hn มี from/to/note · set_hn มี hn/note */
+    detail?: { from?: string | null; to?: string; hn?: string; note?: string } | null;
+}
 
 /** ข้อมูลเพิ่มที่มากับรายละเอียดใบ ไม่มีในรายการคิว */
 interface RxDetail { prev_reject_reason: string | null; prev_rejected_at: string | null }
@@ -116,6 +122,7 @@ const ACTION_LABEL: Record<string, string> = {
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     resend: 'หอส่งฉบับแก้',
     reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
+    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN',
 };
 
 /** ปิดเสียงเป็นการตั้งค่าประจำเครื่อง เครื่องหลังเคาน์เตอร์กับเครื่องในห้องประชุมไม่เหมือนกัน */
@@ -389,6 +396,50 @@ export default function PharmacyQueuePage() {
         });
     }, [notification, openOrder]);
 
+    /** แจ้งเตือนเมื่อหอแก้ HN — ดึงเลขเดิม/เลขใหม่จากประวัติผ่าน REST ไม่ได้มากับสัญญาณ */
+    const notifyHn = useCallback(async (e: RxOrderEvent) => {
+        let info: Partial<RxOrder> & { events?: RxEvent[] } = {};
+        try {
+            const res = await axios.get(`/api/v1/rx/orders/${e.rx_order_id}`, { headers: authHeaders() });
+            info = res.data?.data ?? {};
+        } catch { /* ดึงไม่ได้ก็ยังต้องเตือน */ }
+        const last = [...(info.events ?? [])].reverse().find(x => x.action === 'edit_hn');
+        notification.open({
+            key: `rx-hn-${e.rx_order_id}`,
+            placement: 'topRight',
+            type: 'warning',
+            title: <span className="font-semibold">หอแก้ HN ใบสั่งยา</span>,
+            description: (
+                <div className="leading-snug">
+                    <div className="font-semibold">
+                        {info.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
+                    </div>
+                    <div className="text-xs tabular-nums">
+                        HN {last?.detail?.from || '(ว่าง)'} → {last?.detail?.to ?? info.hn ?? '-'}
+                    </div>
+                    <div className="text-xs mt-1">หมายเหตุ: {e.reason || '-'}</div>
+                    <div className="text-xs text-gray-500">
+                        จาก {info.ward_name || `ตึก ${e.ward}`} · แก้โดย {e.by_name}
+                    </div>
+                    {['acknowledged', 'completed', 'prepared'].includes(e.status) && (
+                        <div className="text-xs text-red-500 font-semibold mt-1">
+                            ใบนี้ห้องยารับไปแล้ว ถ้าคีย์ลง HIS แล้วต้องตรวจว่าคีย์ถูกคน
+                        </div>
+                    )}
+                </div>
+            ),
+            actions: info.rx_order_id ? (
+                <Button size="small" type="primary" onClick={() => {
+                    notification.destroy(`rx-hn-${e.rx_order_id}`);
+                    void openOrder(info as RxOrder);
+                }}>
+                    เปิดดู
+                </Button>
+            ) : undefined,
+            duration: 0,
+        });
+    }, [notification, openOrder]);
+
     /*
       ใบที่เครื่องนี้ไม่ได้รับ ไม่ต้องส่งเสียงหรือรีเฟรช ไม่งั้นจะดังทั้งวันเพราะใบของคนอื่น
       กรองสองแกนเหมือนที่ส่งไปให้เซิร์ฟเวอร์: ตึกที่รับ และความด่วนที่รับ
@@ -413,6 +464,17 @@ export default function PharmacyQueuePage() {
             if (live) fetchRows(); else setMissed(n => n + 1);
         },
         onStatus: e => { if (mine(e) && live) fetchRows(); },
+        /*
+          หอแก้ HN = ใบที่อาจคีย์ไปแล้วในชื่อคนผิด มีเสียงและค้างจนกดปิดเสมอ ไม่ขึ้นกับความด่วน
+          ไม่กรองด้วยความด่วนที่เครื่องนี้รับ เพราะเครื่องที่รับใบนี้ไปแล้วต้องรู้แน่ ๆ
+        */
+        onHn: e => {
+            if (wards.length > 0 && !wards.includes(e.ward)) return;
+            if (sound) beeper.current.chime('reject');
+            void notifyHn(e);
+            if (live) fetchRows();
+            if (open?.rx_order_id === e.rx_order_id) void openOrder(open);
+        },
     });
 
     /*
@@ -1194,6 +1256,18 @@ export default function PharmacyQueuePage() {
                                                 <span>{ACTION_LABEL[e.action] ?? e.action}</span>
                                                 <span className="text-gray-500 truncate">{e.actor_name}</span>
                                             </div>
+                                        ))}
+                                        {events.filter(e => e.action === 'edit_hn' || e.action === 'set_hn').map((e, i) => (
+                                            <Alert
+                                                key={`hn-${i}`}
+                                                type="warning" showIcon
+                                                title={e.action === 'edit_hn'
+                                                    ? `หอแก้ HN ${e.detail?.from || '(ว่าง)'} → ${e.detail?.to ?? '-'}`
+                                                    : `แอดมินใส่ HN ${e.detail?.hn ?? '-'}`}
+                                                description={<span className="text-xs">
+                                                    {e.detail?.note ? `หมายเหตุ: ${e.detail.note} · ` : ''}{e.actor_name} · {e.at}
+                                                </span>}
+                                            />
                                         ))}
                                         {events.length === 0 && <Text className="text-xs text-gray-500">กำลังโหลด...</Text>}
                                     </div>

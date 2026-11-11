@@ -10,7 +10,7 @@ import {
 } from 'react-icons/pi';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import Link from 'next/link';
-import { MENU, BASE_LINKS, MENU_ACCESS_ITEM, RX_RETENTION_ITEM } from '../lib/menu';
+import { MENU, BASE_LINKS, MENU_ACCESS_ITEM, RX_RETENTION_ITEM, RX_MISSING_HN_ITEM } from '../lib/menu';
 import { useMenuAccess } from '../lib/useMenuAccess';
 import { FormSkeleton } from './Skeletons';
 
@@ -437,6 +437,7 @@ const Navbar = () => {
                                 <DrawerSection label="ผู้ดูแลระบบ" />
                                 <DrawerLink href={MENU_ACCESS_ITEM.href} icon={MENU_ACCESS_ITEM.icon} label={MENU_ACCESS_ITEM.label} onClick={onCloseRight} />
                                 <DrawerLink href={RX_RETENTION_ITEM.href} icon={RX_RETENTION_ITEM.icon} label={RX_RETENTION_ITEM.label} onClick={onCloseRight} />
+                                <DrawerLink href={RX_MISSING_HN_ITEM.href} icon={RX_MISSING_HN_ITEM.icon} label={RX_MISSING_HN_ITEM.label} onClick={onCloseRight} />
                                 <DrawerLink href="/ipd/holidays" icon={PiCalendarXBold} label="จัดการวันหยุด" onClick={onCloseRight} />
                                 <DrawerLink href="/ipd/food-prices" icon={PiMoneyWavyBold} label="ตั้งราคาอาหารตามประเภท" onClick={onCloseRight} />
                                 <DrawerLink href="/ipd/vendors" icon={PiBuildingsBold} label="บัญชีบริษัทผู้รับจ้างทำอาหาร" onClick={onCloseRight} />

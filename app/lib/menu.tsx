@@ -3,7 +3,7 @@ import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
     PiClockCounterClockwiseBold, PiChartBarBold, PiGearSixBold, PiHospitalBold, PiUsersThreeBold,
-    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold,
+    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold,
 } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
 import { GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
@@ -171,6 +171,15 @@ export const RX_RETENTION_ITEM: MenuItem = {
     href: '/ipd/rx-retention',
     label: 'ระยะเวลาจัดเก็บไฟล์ใบสั่งยา',
     icon: PiClockCounterClockwiseBold,
+    groups: ['admin'],
+};
+
+/** ใส่ HN ให้ใบสั่งยาที่ส่งมาโดยไม่มี HN แอดมินเท่านั้น เซิร์ฟเวอร์ตรวจสิทธิ์เองอีกชั้น */
+export const RX_MISSING_HN_ITEM: MenuItem = {
+    key: 'admin.rx-missing-hn',
+    href: '/ipd/rx-missing-hn',
+    label: 'ใส่ HN ใบสั่งยาที่ขาด HN',
+    icon: PiIdentificationCardBold,
     groups: ['admin'],
 };
 

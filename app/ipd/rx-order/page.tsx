@@ -125,7 +125,16 @@ interface Entry {
  */
 const MAX_ENTRIES = 10;
 
-interface RxEvent { action: string; actor_name: string | null; at: string }
+interface RxEvent {
+    action: string;
+    actor_name: string | null;
+    at: string;
+    /** edit_hn มี from/to/note · set_hn มี hn/note */
+    detail?: { from?: string | null; to?: string; hn?: string; note?: string } | null;
+}
+
+/** สถานะที่หอยังแก้ HN ได้ ต้องตรงกับ HN_EDITABLE ฝั่งเซิร์ฟเวอร์ */
+const HN_EDITABLE = ['submitted', 'acknowledged', 'completed', 'prepared'];
 
 /** ชื่อไทยของเหตุการณ์ในประวัติ ให้หอเห็นว่าห้องยาทำอะไรกับใบไปแล้วบ้าง */
 const ACTION_LABEL: Record<string, string> = {
@@ -133,6 +142,7 @@ const ACTION_LABEL: Record<string, string> = {
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     /* ชื่อผู้ทำอยู่ข้างหลังอยู่แล้ว ไม่ระบุว่าเป็นห้องยา เพราะตอนนี้หอก็เปิดดูได้ */
     reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
+    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN',
 };
 
 const SOURCE_LABEL: Record<HnSource, string> = {
@@ -355,6 +365,11 @@ export default function RxOrderPage() {
                     onClick: () => message.destroy(),
                 });
             }
+        },
+        /* อีกเครื่องในหอเดียวกันแก้ HN — key เดียวกับข้อความตอนบันทึก เครื่องที่แก้เองจะไม่เห็นซ้ำสองอัน */
+        onHn: e => {
+            fetchOrders(ward);
+            message.info({ key: `hn-${e.rx_order_id}`, content: `แก้ HN ใบสั่งยาแล้ว · ${e.by_name}` });
         },
     });
 
@@ -629,6 +644,14 @@ export default function RxOrderPage() {
             setViewFiles(res.data?.data?.files ?? []);
             setViewEvents(res.data?.data?.events ?? []);
         } catch { message.error('เปิดไฟล์ไม่สำเร็จ'); }
+    };
+
+    /** ดึงเฉพาะประวัติใหม่หลังแก้ HN ไม่โหลดไฟล์ซ้ำ ภาพที่เปิดค้างอยู่จะได้ไม่กระพริบ */
+    const openEvents = async (id: string) => {
+        try {
+            const res = await axios.get(`/api/v1/rx/orders/${id}`, { headers: authHeaders() });
+            setViewEvents(res.data?.data?.events ?? []);
+        } catch { /* ประวัติไม่ขึ้นไม่ใช่เหตุให้การแก้ที่สำเร็จแล้วกลายเป็นล้มเหลว */ }
     };
 
     const removeEntry = (uid: string) => setEntries(prev => prev.filter(e => e.uid !== uid));
@@ -1529,6 +1552,18 @@ export default function RxOrderPage() {
                                 />
                             )}
 
+                            {HN_EDITABLE.includes(viewing.status) && (
+                                <EditHnPanel
+                                    key={viewing.rx_order_id}
+                                    order={viewing}
+                                    onSaved={d => {
+                                        setViewing(v => v && { ...v, ...d });
+                                        fetchOrders(ward);
+                                        void openEvents(viewing.rx_order_id);
+                                    }}
+                                />
+                            )}
+
                             <div>
                                 <Text className="text-xs text-gray-500">ประวัติการดำเนินการ</Text>
                                 <div className="flex flex-col gap-1 mt-1">
@@ -1541,6 +1576,7 @@ export default function RxOrderPage() {
                                                 {ACTION_LABEL[ev.action] ?? ev.action}
                                             </span>
                                             {ev.actor_name ? <span className="text-gray-500"> · {ev.actor_name}</span> : null}
+                                            <HnEventDetail ev={ev} />
                                         </div>
                                     ))}
                                 </div>
@@ -1549,6 +1585,149 @@ export default function RxOrderPage() {
                     </div>
                 )}
             </Modal>
+        </div>
+    );
+}
+
+/** รายละเอียดของการแก้/ใส่ HN ในประวัติ ให้ทั้งหอและห้องยาเห็นว่าเปลี่ยนจากเลขไหนเป็นเลขไหน เพราะอะไร */
+function HnEventDetail({ ev }: { ev: RxEvent }) {
+    if (ev.action !== 'edit_hn' && ev.action !== 'set_hn') return null;
+    const d = ev.detail ?? {};
+    const to = d.to ?? d.hn;
+    return (
+        <div className="text-gray-500 pl-2">
+            {ev.action === 'edit_hn' ? `HN ${d.from || '(ว่าง)'} → ${to ?? '-'}` : `HN ${to ?? '-'}`}
+            {d.note ? <span className="block text-orange-600 dark:text-orange-400">หมายเหตุ: {d.note}</span> : null}
+        </div>
+    );
+}
+
+interface LookupResult {
+    found: boolean;
+    his_down?: boolean;
+    data: { hn: string; ptname: string; an: string | null; ward_name: string | null;
+        admission: Admission; discharged_at: string | null } | null;
+}
+
+/**
+ * แก้ HN ของใบที่ส่งไปแล้ว
+ *
+ * ต้องค้นชื่อก่อนถึงจะกดบันทึกได้ และต้องเขียนหมายเหตุทุกครั้ง
+ * ห้องยาอาจคีย์ลง HIS ไปแล้วในชื่อคนเดิม หมายเหตุคือสิ่งที่บอกเขาว่าต้องไปตามแก้อะไร
+ * HIS ล่มยังบันทึกได้ (ห้องยาจะเห็นว่ายังไม่ได้ยืนยัน) เหมือนตอนส่งใบ
+ */
+function EditHnPanel({ order, onSaved }: {
+    order: RxOrder;
+    onSaved: (d: Pick<RxOrder, 'hn' | 'an' | 'patient_name' | 'his_verified'>) => void;
+}) {
+    const { message } = App.useApp();
+    const [open, setOpen] = useState(!order.hn);
+    const [hn, setHn] = useState('');
+    const [lookup, setLookup] = useState<LookupResult | null>(null);
+    const [looking, setLooking] = useState(false);
+    const [note, setNote] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const padded = hn ? hn.padStart(9, '0') : '';
+    const same = !!order.hn && padded === order.hn;
+
+    const doLookup = async () => {
+        if (!hn || /^0+$/.test(hn)) { message.warning('กรุณาพิมพ์ HN'); return; }
+        setLooking(true);
+        setLookup(null);
+        try {
+            const res = await axios.get('/api/v1/rx/patient-lookup', {
+                headers: authHeaders(), params: { hn, ward: order.ward },
+            });
+            setLookup(res.data as LookupResult);
+        } catch {
+            message.error('ค้น HN ไม่สำเร็จ');
+        } finally {
+            setLooking(false);
+        }
+    };
+
+    const canSave = !!lookup && (lookup.found || !!lookup.his_down) && !same && note.trim().length >= 3;
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            const res = await axios.post(`/api/v1/rx/orders/${order.rx_order_id}/edit-hn`,
+                { hn, note: note.trim() }, { headers: authHeaders() });
+            const d = res.data?.data ?? {};
+            message.success({ key: `hn-${order.rx_order_id}`, content: 'แก้ HN แล้ว แจ้งห้องยาพร้อมหมายเหตุแล้ว' });
+            onSaved({ hn: d.hn, an: d.an ?? null, patient_name: d.patient_name ?? null, his_verified: !!d.his_verified });
+            setOpen(false);
+            setHn('');
+            setLookup(null);
+            setNote('');
+        } catch (err) {
+            const r = axios.isAxiosError(err) ? err.response : undefined;
+            message.error((r?.data as { message?: string } | undefined)?.message ?? 'แก้ HN ไม่สำเร็จ');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!open) {
+        return (
+            <Button block icon={<PiNotePencilBold />} onClick={() => setOpen(true)}>
+                {order.hn ? 'แก้ HN' : 'ใส่ HN'}
+            </Button>
+        );
+    }
+
+    const tag = lookup?.data
+        ? admissionTag(lookup.data.admission, lookup.data.ward_name, lookup.data.discharged_at)
+        : null;
+
+    return (
+        <div className="flex flex-col gap-2 rounded border border-orange-300 dark:border-orange-700 p-2">
+            <Text className="text-xs font-semibold">
+                {order.hn ? `แก้ HN (เดิม ${order.hn})` : 'ใส่ HN ที่ลืมใส่'}
+            </Text>
+            <Input.Search
+                id="edit-hn-input"
+                value={hn}
+                maxLength={9}
+                inputMode="numeric"
+                placeholder="HN ตามใบสั่งยา"
+                enterButton="ค้น"
+                loading={looking}
+                onChange={e => { setHn(e.target.value.replace(/\D/g, '')); setLookup(null); }}
+                onSearch={doLookup}
+            />
+            {same && <Text type="warning" className="text-xs">เป็นเลขเดียวกับ HN เดิม</Text>}
+            {lookup && !lookup.found && !lookup.his_down && (
+                <Alert type="error" showIcon title={`ไม่พบ HN ${padded} ใน HIS`} />
+            )}
+            {lookup?.his_down && (
+                <Alert type="warning" showIcon title="ติดต่อ HIS ไม่ได้"
+                    description={<span className="text-xs">บันทึกได้ แต่ห้องยาจะเห็นว่า HN ยังไม่ได้ยืนยัน</span>} />
+            )}
+            {lookup?.found && lookup.data && (
+                <div className="rounded bg-emerald-50 dark:bg-[#162312] p-2 text-xs">
+                    <div className="font-semibold text-sm">{lookup.data.ptname || 'ไม่มีชื่อใน HIS'}</div>
+                    <div className="tabular-nums">HN {lookup.data.hn}{lookup.data.an ? ` · AN ${lookup.data.an}` : ''}</div>
+                    {tag && <Tag color={tag.color} className="m-0! mt-1">{tag.text}</Tag>}
+                </div>
+            )}
+            <TextArea
+                id="edit-hn-note"
+                rows={2}
+                maxLength={300}
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="หมายเหตุถึงห้องยา (จำเป็น) เช่น ลืมใส่ HN / ใส่ HN ผิดคน"
+            />
+            <div className="flex gap-2">
+                <Button size="small" onClick={() => { setOpen(false); setHn(''); setLookup(null); setNote(''); }}>
+                    ยกเลิก
+                </Button>
+                <Button size="small" type="primary" className="flex-1" disabled={!canSave} loading={saving} onClick={save}>
+                    บันทึก HN
+                </Button>
+            </div>
         </div>
     );
 }
