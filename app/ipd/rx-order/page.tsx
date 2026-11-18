@@ -29,6 +29,7 @@ import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
+import RxWardPatientPicker, { type WardPatient } from '../../components/RxWardPatientPicker';
 
 dayjs.extend(buddhistEra);
 dayjs.locale('th');
@@ -53,6 +54,8 @@ interface HnMatch {
     admission: Admission;
     /** วันจำหน่าย YYYY-MM-DD มีเฉพาะ discharged */
     discharged_at: string | null;
+    /** ส่งจากตึกที่เลือกได้ไหม (นอนอยู่ตึกนี้ หรือเพิ่งจำหน่ายจากตึกนี้) — เซิร์ฟเวอร์ใช้กฎเดียวกัน */
+    in_ward?: boolean;
     source: HnSource;
 }
 
@@ -113,6 +116,8 @@ interface Entry {
         admission?: Admission;
         ward_name?: string | null;
         discharged_at?: string | null;
+        /** ว่าง = ไม่รู้ (โหมดส่งซ้ำ) ให้เซิร์ฟเวอร์ตัดสิน */
+        in_ward?: boolean;
     } | null;
     source: 'manual' | HnSource;
     looking: boolean;
@@ -383,6 +388,13 @@ export default function RxOrderPage() {
 
     const pickWard = (w: number) => {
         setWard(w);
+        /*
+          สิทธิ์ส่งขึ้นกับตึก เปลี่ยนตึกแล้วผลตรวจเดิมใช้ไม่ได้ ค้นทุกไฟล์ใหม่กับตึกที่เพิ่งเลือก
+          โหมดส่งซ้ำไม่ต้อง HN ล็อกไว้กับใบเดิม เซิร์ฟเวอร์ตรวจเองตอนส่ง
+        */
+        if (!resendLock.current) {
+            for (const e of entries) if (e.hn.trim()) void lookupFor(e.uid, e.hn, w);
+        }
         /* ไม่ต้องดึงตารางตรงนี้ ตัวที่เฝ้า ward อยู่จะดึงให้เอง ยิงสองรอบได้ผลเท่ากันแต่ช้ากว่า */
     };
 
@@ -448,6 +460,7 @@ export default function RxOrderPage() {
             patient: {
                 ptname: m.ptname, an: m.an,
                 admission: m.admission, ward_name: m.ward_name, discharged_at: m.discharged_at,
+                in_ward: m.in_ward,
             },
             source: m.source,
             hisDown: false,
@@ -455,13 +468,13 @@ export default function RxOrderPage() {
     };
 
     /** ค้นชื่อจาก HN ที่พิมพ์เอง เซิร์ฟเวอร์เติมศูนย์ให้ครบเก้าหลักแล้วคืนเลขเต็มกลับมา */
-    const lookupFor = useCallback(async (uid: string, value: string) => {
+    const lookupFor = useCallback(async (uid: string, value: string, forWard?: number) => {
         const v = value.trim();
         patchEntry(uid, { patient: null, hisDown: false });
         if (!/^\d{1,20}$/.test(v)) return;
         patchEntry(uid, { looking: true });
         try {
-            const res = await axios.get('/api/v1/rx/patient-lookup', { headers: authHeaders(), params: { hn: v, ward } });
+            const res = await axios.get('/api/v1/rx/patient-lookup', { headers: authHeaders(), params: { hn: v, ward: forWard ?? ward } });
             if (res.data?.his_down) patchEntry(uid, { hisDown: true });
             else if (res.data?.found) {
                 /*
@@ -654,6 +667,33 @@ export default function RxOrderPage() {
         } catch { /* ประวัติไม่ขึ้นไม่ใช่เหตุให้การแก้ที่สำเร็จแล้วกลายเป็นล้มเหลว */ }
     };
 
+    /*
+      เลือกผู้ป่วยจากรายชื่อในตึก — uid ของไฟล์ที่กำลังเลือกให้
+      ref ใช้กัน onBlur ของช่อง HN ไปค้นเลขเดิมซ้ำตอน modal เปิดแล้วเขียนทับคนที่เพิ่งเลือก
+    */
+    const [pickFor, setPickFor] = useState<string | null>(null);
+    const picking = useRef(false);
+    const openPicker = (uid: string) => {
+        if (resendLock.current) return;
+        if (!ward) { message.warning('กรุณาเลือกหอผู้ป่วยก่อน'); return; }
+        picking.current = true;
+        setPickFor(uid);
+    };
+    const closePicker = () => { picking.current = false; setPickFor(null); };
+    const pickPatient = (p: WardPatient) => {
+        if (!pickFor) return;
+        patchEntry(pickFor, {
+            hn: p.hn,
+            patient: {
+                ptname: p.ptname, an: p.an, admission: p.admission,
+                ward_name: p.ward_name, discharged_at: p.discharged_at, in_ward: p.in_ward,
+            },
+            source: 'manual',
+            hisDown: false,
+        });
+        closePicker();
+    };
+
     const removeEntry = (uid: string) => setEntries(prev => prev.filter(e => e.uid !== uid));
 
     /**
@@ -679,6 +719,13 @@ export default function RxOrderPage() {
     */
     const hnMissing = entries.filter(e => !/^\d{1,9}$/.test(e.hn.trim()));
     const hnPending = entries.some(e => e.reading || e.looking);
+    /*
+      ผู้ป่วยต้องอยู่ตึกที่เลือก (เซิร์ฟเวอร์ปฏิเสธอยู่แล้ว ตรงนี้แค่บอกก่อนกดส่ง)
+      ค้นไม่เจอเลยก็นับด้วย ยกเว้น HIS ล่ม ซึ่งเซิร์ฟเวอร์ยอมให้ส่ง และโหมดส่งซ้ำที่ HN ล็อกไว้กับใบเดิม
+    */
+    const notInWard = resendOf ? [] : entries.filter(e =>
+        /^\d{1,9}$/.test(e.hn.trim()) && !e.reading && !e.looking && !e.hisDown
+        && (!e.patient || e.patient.in_ward === false));
 
     const focusFirstMissing = () => {
         const first = hnMissing[0];
@@ -697,6 +744,10 @@ export default function RxOrderPage() {
             return;
         }
         if (hnPending) { message.info('รอให้อ่าน HN จากไฟล์เสร็จก่อน'); return; }
+        if (notInWard.length > 0) {
+            message.warning(`มี ${notInWard.length} ไฟล์ที่ HN ไม่ใช่ผู้ป่วยของตึกที่เลือก กรุณาแก้ HN`);
+            return;
+        }
 
         setSending(true);
         let done = 0;
@@ -1053,11 +1104,12 @@ export default function RxOrderPage() {
                                                             onChange={ev => patchEntry(e.uid, {
                                                                 hn: ev.target.value.replace(/\D/g, '').slice(0, 9), source: 'manual', patient: null,
                                                             })}
-                                                            onBlur={ev => lookupFor(e.uid, ev.target.value)}
+                                                            onClick={() => { if (!e.reading) openPicker(e.uid); }}
+                                                            onBlur={ev => { if (!picking.current) void lookupFor(e.uid, ev.target.value); }}
                                                             onPressEnter={ev => lookupFor(e.uid, (ev.target as HTMLInputElement).value)}
-                                                            placeholder={e.reading ? 'กำลังอ่าน HN…' : 'ต้องใส่ HN'}
+                                                            placeholder={e.reading ? 'กำลังอ่าน HN…' : 'คลิกเลือกผู้ป่วย / พิมพ์ HN'}
                                                             inputMode="numeric"
-                                                            className="max-w-[170px]"
+                                                            className="max-w-55"
                                                             status={e.hn.trim() || e.reading ? undefined : 'error'}
                                                             allowClear
                                                         />
@@ -1085,6 +1137,11 @@ export default function RxOrderPage() {
                                                                 </span>
                                                             );
                                                         })()}
+                                                        {notInWard.includes(e) && (
+                                                            <Tag color="red" className="m-0! text-[11px]! shrink-0">
+                                                                {e.patient ? 'ไม่ได้นอนตึกนี้ ส่งไม่ได้' : 'ไม่พบ HN นี้ ส่งไม่ได้'}
+                                                            </Tag>
+                                                        )}
                                                         {e.hn.trim() && e.source !== 'manual' && (
                                                             <Tag color="blue" className="m-0! text-[11px]!">
                                                                 {SOURCE_LABEL[e.source as HnSource]}
@@ -1225,13 +1282,15 @@ export default function RxOrderPage() {
                     <Button
                         type="primary" size="large" icon={<PiPaperPlaneTiltBold />}
                         onClick={send} loading={sending}
-                        disabled={!ward || entries.length === 0 || hnMissing.length > 0 || hnPending}
+                        disabled={!ward || entries.length === 0 || hnMissing.length > 0 || hnPending || notInWard.length > 0}
                         className="w-full mt-3"
                     >
                         {hnPending
                             ? 'กำลังอ่าน HN จากไฟล์…'
                             : hnMissing.length > 0
                                 ? `ระบุ HN ให้ครบก่อนส่ง (ขาด ${hnMissing.length} ไฟล์)`
+                                : notInWard.length > 0
+                                    ? `HN ไม่ใช่ผู้ป่วยของตึกนี้ ${notInWard.length} ไฟล์ — แก้ก่อนส่ง`
                                 : `ส่งให้ห้องยา${entries.length > 0 ? ` (${groups.length} ใบ)` : ''}`}
                     </Button>
                 </Card>
@@ -1450,6 +1509,15 @@ export default function RxOrderPage() {
                 </Card>
             </div>
 
+            <RxWardPatientPicker
+                open={!!pickFor}
+                ward={ward}
+                wardName={wards.find(w => w.ward === ward)?.ward_name}
+                thumb={entries.find(x => x.uid === pickFor)?.thumb || undefined}
+                onPick={pickPatient}
+                onClose={closePicker}
+            />
+
             <Modal
                 open={!!viewing}
                 onCancel={() => setViewing(null)}
@@ -1606,7 +1674,7 @@ interface LookupResult {
     found: boolean;
     his_down?: boolean;
     data: { hn: string; ptname: string; an: string | null; ward_name: string | null;
-        admission: Admission; discharged_at: string | null } | null;
+        admission: Admission; discharged_at: string | null; in_ward?: boolean } | null;
 }
 
 /**
@@ -1647,7 +1715,9 @@ function EditHnPanel({ order, onSaved }: {
         }
     };
 
-    const canSave = !!lookup && (lookup.found || !!lookup.his_down) && !same && note.trim().length >= 3;
+    /* กฎเดียวกับตอนส่งใบ: ต้องเป็นผู้ป่วยของตึกที่ใบนี้ส่งมา */
+    const outside = !!lookup?.found && lookup.data?.in_ward === false;
+    const canSave = !!lookup && (lookup.found || !!lookup.his_down) && !outside && !same && note.trim().length >= 3;
 
     const save = async () => {
         setSaving(true);
@@ -1711,6 +1781,10 @@ function EditHnPanel({ order, onSaved }: {
                     <div className="tabular-nums">HN {lookup.data.hn}{lookup.data.an ? ` · AN ${lookup.data.an}` : ''}</div>
                     {tag && <Tag color={tag.color} className="m-0! mt-1">{tag.text}</Tag>}
                 </div>
+            )}
+            {outside && (
+                <Alert type="error" showIcon title="ไม่ได้นอนตึกนี้ แก้เป็น HN นี้ไม่ได้"
+                    description={<span className="text-xs">ใส่ได้เฉพาะผู้ป่วยที่นอนอยู่ตึกของใบนี้</span>} />
             )}
             <TextArea
                 id="edit-hn-note"

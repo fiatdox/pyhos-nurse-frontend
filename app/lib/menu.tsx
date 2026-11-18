@@ -3,7 +3,7 @@ import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
     PiClockCounterClockwiseBold, PiChartBarBold, PiGearSixBold, PiHospitalBold, PiUsersThreeBold,
-    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold,
+    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold, PiScanBold,
 } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
 import { GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
@@ -180,6 +180,14 @@ export const RX_MISSING_HN_ITEM: MenuItem = {
     href: '/ipd/rx-missing-hn',
     label: 'ใส่ HN ใบสั่งยาที่ขาด HN',
     icon: PiIdentificationCardBold,
+    groups: ['admin'],
+};
+
+export const RX_OCR_ITEM: MenuItem = {
+    key: 'admin.rx-ocr',
+    href: '/ipd/rx-ocr',
+    label: 'ตั้งค่า OCR อ่าน HN ใบสั่งยา',
+    icon: PiScanBold,
     groups: ['admin'],
 };
 

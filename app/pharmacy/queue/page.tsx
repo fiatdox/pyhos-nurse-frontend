@@ -21,6 +21,7 @@ import {
 } from 'react-icons/pi';
 import { getUserProfile } from '../../lib/auth';
 import { usePharmacy } from '../PharmacyShell';
+import RxRenalCard from '../../components/RxRenalCard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
 import { useRxSocket, createBeeper, type RxOrderEvent } from '../../lib/rxSocket';
 import { SHIFTS, shiftRange, type ShiftKey } from '../../lib/rxShifts';
@@ -1246,6 +1247,9 @@ export default function PharmacyQueuePage() {
                                         description="ตอนที่หอส่งใบ ระบบค้น HN นี้ใน HIS ไม่พบ หรือติดต่อ HIS ไม่ได้ กรุณาตรวจเลขกับภาพต้นฉบับก่อนคีย์"
                                     />
                                 )}
+
+                                {/* ค่าไตประกอบการปรับขนาดยา — ใบยากลับบ้านคือใบที่ผู้ป่วยจะเอายาไปกินเองต่อหลายวัน */}
+                                {open.hn && <RxRenalCard key={open.rx_order_id} orderId={open.rx_order_id} />}
 
                                 <div>
                                     <Text className="text-xs text-gray-500 block mb-1">ประวัติการดำเนินการ</Text>
