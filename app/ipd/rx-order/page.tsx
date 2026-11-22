@@ -27,8 +27,10 @@ import { PRIORITY, PriorityDot, type RxPriority } from '../../lib/rxPriority';
 import { TubeFeedTag } from '../../lib/rxTubeFeed';
 import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
+import { PickupSlotTag, slotRange } from '../../lib/rxPickupSlot';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
+import RxConsultBox, { ConsultTag } from '../../components/RxConsultBox';
 import RxWardPatientPicker, { type WardPatient } from '../../components/RxWardPatientPicker';
 
 dayjs.extend(buddhistEra);
@@ -135,7 +137,7 @@ interface RxEvent {
     actor_name: string | null;
     at: string;
     /** edit_hn มี from/to/note · set_hn มี hn/note */
-    detail?: { from?: string | null; to?: string; hn?: string; note?: string } | null;
+    detail?: { from?: string | null; to?: string; hn?: string; note?: string; consulted_at?: string } | null;
 }
 
 /** สถานะที่หอยังแก้ HN ได้ ต้องตรงกับ HN_EDITABLE ฝั่งเซิร์ฟเวอร์ */
@@ -147,7 +149,8 @@ const ACTION_LABEL: Record<string, string> = {
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     /* ชื่อผู้ทำอยู่ข้างหลังอยู่แล้ว ไม่ระบุว่าเป็นห้องยา เพราะตอนนี้หอก็เปิดดูได้ */
     reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
-    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN',
+    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN', consult: 'ปรึกษาแพทย์',
+    set_pickup_slot: 'ห้องยาเปลี่ยนรอบรับยา',
 };
 
 const SOURCE_LABEL: Record<HnSource, string> = {
@@ -175,6 +178,9 @@ interface RxOrder {
     ack_by_name: string | null;
     completed_by_name: string | null;
     prepared_by_name: string | null;
+    /** รอบรับยาที่ห้องยากำหนด 'YYYY-MM-DD HH:mm' */
+    pickup_from?: string | null;
+    pickup_to?: string | null;
     closed_by_name: string | null;
     /** ใบนี้เป็นฉบับแก้ของใบเลขไหน (ใบเดิมถูกห้องยาส่งกลับ) */
     resend_of: string | null;
@@ -185,6 +191,11 @@ interface RxOrder {
     /** ไฟล์ภาพทุกไฟล์ของใบนี้ถูกลบตามระยะเวลาจัดเก็บแล้ว */
     files_purged: boolean;
     waiting_seconds: number;
+    /** การปรึกษาแพทย์ครั้งล่าสุด (ว่าง = ยังไม่มีใครบันทึก) */
+    consult_at: string | null;
+    consult_note: string | null;
+    consult_by_name: string | null;
+    consult_count: number;
 }
 
 /** เกินเท่านี้ถือว่าห้องยายังไม่รับนานผิดปกติ ต่างกันตามความด่วน */
@@ -264,6 +275,9 @@ export default function RxOrderPage() {
       "ตัวที่สามเขียนว่าอะไร" คนที่หอต้องเปิดภาพเดียวกันดูพร้อมกันได้
     */
     const [viewing, setViewing] = useState<RxOrder | null>(null);
+    /* เลขใบที่เปิดอยู่ ให้ตัวรับสัญญาณ (ผูกไว้ครั้งเดียว) รู้ว่าต้องดึงประวัติใหม่ไหม */
+    const viewingRef = useRef<string | null>(null);
+    useEffect(() => { viewingRef.current = viewing?.rx_order_id ?? null; }, [viewing]);
     const [viewFiles, setViewFiles] = useState<RxFile[]>([]);
     const retention = useRxRetention();
     const [viewEvents, setViewEvents] = useState<RxEvent[]>([]);
@@ -349,13 +363,25 @@ export default function RxOrderPage() {
                 message.info(`ห้องยารับใบแล้ว · ${e.by_name}`);
             } else if (e.status === 'completed') {
                 message.success(`ห้องยาคีย์ลง HIS แล้ว · ${e.by_name}`);
+            } else if (e.status === 'prepared' && e.slot_changed) {
+                message.info({
+                    content: e.pickup_from
+                        ? `ห้องยาเปลี่ยนรอบรับยาเป็น ${slotRange(e.pickup_from, e.pickup_to)} น. · ${e.by_name}`
+                        : `ห้องยายกเลิกรอบรับยา (ยาพร้อม ไปรับได้) · ${e.by_name}`,
+                    duration: 15,
+                });
             } else if (e.status === 'prepared') {
                 /*
                   ข้อความนี้แปลว่ามีคนต้องเดินไปห้องยา จึงค้างนานกว่าข้อความอื่น
                   แต่ยังไม่มีเสียง เสียงที่เคาน์เตอร์สงวนไว้ให้ใบที่ถูกส่งกลับเท่านั้น
                   ถ้าทุกใบมีเสียง เสียงจะกลายเป็นเสียงพื้นหลังที่ไม่มีใครหันไปมอง
                 */
-                message.success({ content: `ยาพร้อมให้มารับแล้ว · ${e.by_name}`, duration: 15 });
+                message.success({
+                    content: e.pickup_from
+                        ? `ยาพร้อมแล้ว มารับรอบ ${slotRange(e.pickup_from, e.pickup_to)} น. · ${e.by_name}`
+                        : `ยาพร้อมให้มารับแล้ว · ${e.by_name}`,
+                    duration: 15,
+                });
             } else if (e.status === 'picked_up') {
                 message.success(`บันทึกแล้วว่ารับยาไปแล้ว · ${e.by_name}`);
             } else if (e.status === 'rejected') {
@@ -375,6 +401,16 @@ export default function RxOrderPage() {
         onHn: e => {
             fetchOrders(ward);
             message.info({ key: `hn-${e.rx_order_id}`, content: `แก้ HN ใบสั่งยาแล้ว · ${e.by_name}` });
+        },
+        /* ห้องยา (หรืออีกเครื่องในหอ) บันทึกว่าโทรปรึกษาแพทย์แล้ว — key เดียวกับตอนบันทึกเอง ไม่ขึ้นซ้ำ */
+        onConsult: e => {
+            fetchOrders(ward);
+            message.info({
+                key: `consult-${e.rx_order_id}`,
+                content: `โทรปรึกษาแพทย์แล้ว: ${e.reason ?? '-'} (${e.by_name})`,
+                duration: 10,
+            });
+            if (viewingRef.current === e.rx_order_id) void openEvents(e.rx_order_id);
         },
     });
 
@@ -832,15 +868,24 @@ export default function RxOrderPage() {
         },
         {
             title: 'เวลาส่ง', dataIndex: 'submitted_at', key: 't', width: 86,
-            render: (v: string) => (
-                <div className="text-sm font-semibold tabular-nums">{dayjs(v).format('HH:mm')}</div>
+            render: (v: string, r) => (
+                <div className="leading-tight">
+                    <div className="text-sm font-semibold tabular-nums">{dayjs(v).format('HH:mm')}</div>
+                    {/* โทรศัพท์ใต้เวลา = มีคนโทรปรึกษาแพทย์เรื่องใบนี้แล้ว ชี้ค้างดูรายละเอียด */}
+                    <ConsultTag at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
+                    {r.status === 'prepared' && (
+                        <PickupSlotTag from={r.pickup_from} to={r.pickup_to} className="mt-1 text-[11px]! leading-4! px-1!" />
+                    )}
+                </div>
             ),
         },
         {
             title: 'ผู้ป่วย', key: 'p', width: 210,
             render: (_, r) => (
                 <div className="leading-tight">
-                    <div className="font-semibold">{r.patient_name || <span className="text-gray-500">ไม่ระบุชื่อ</span>}</div>
+                    <div className="font-semibold">
+                        {r.patient_name || <span className="text-gray-500">ไม่ระบุชื่อ</span>}
+                    </div>
                     {(r.tube_feed || r.files_purged) && (
                         <div className="flex flex-wrap gap-1 mt-0.5">
                             {r.tube_feed && <TubeFeedTag compact />}
@@ -883,8 +928,7 @@ export default function RxOrderPage() {
                             icon={r.status === 'prepared' ? <PiPackageBold className="inline mr-1" /> : undefined}
                         >
                             {STATUS[r.status].label}
-                        </Tag>
-                        {r.ack_by_name && r.status !== 'rejected' && (
+                        </Tag>                        {r.ack_by_name && r.status !== 'rejected' && (
                             <div className="text-xs text-gray-500 mt-1">รับโดย {r.ack_by_name}</div>
                         )}
                         {r.completed_by_name && (
@@ -1438,13 +1482,20 @@ export default function RxOrderPage() {
                                                     {PRIORITY[r.priority].short}
                                                 </Tag>
                                             )}
-                                            <span className="ml-auto tabular-nums text-gray-500">
-                                                {dayjs(r.submitted_at).format('D MMM HH:mm')}
+                                            <span className="ml-auto flex flex-col items-end gap-0.5">
+                                                <span className="tabular-nums text-gray-500">{dayjs(r.submitted_at).format('D MMM HH:mm')}</span>
+                                                {/* รอบรับยาที่ห้องยากำหนด อยู่ใต้เวลาส่ง */}
+                                                {r.status === 'prepared' && (
+                                                    <PickupSlotTag from={r.pickup_from} to={r.pickup_to} className="text-[11px]! leading-4! px-1!" />
+                                                )}
                                             </span>
                                         </div>
 
-                                        <div className="font-semibold mt-1 leading-tight">
-                                            {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
+                                        <div className="font-semibold mt-1 leading-tight flex items-start gap-1">
+                                            <span className="min-w-0">
+                                                {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
+                                            </span>
+                                            <ConsultTag className="ml-auto shrink-0" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
                                         </div>
                                         {r.tube_feed && <TubeFeedTag compact className="mt-1" />}
                                         <div className="text-xs text-gray-500 tabular-nums">
@@ -1455,7 +1506,8 @@ export default function RxOrderPage() {
                                             {r.files_purged
                                                 ? <PurgedTag />
                                                 : <Tag className="m-0! text-[11px]">{r.file_count} ไฟล์</Tag>}
-                                            {r.prepared_by_name && (
+                                            {/* ใบเก่าก่อนมีรอบรับยา ยังติดป้ายแบบเดิม */}
+                                            {r.status === 'prepared' && !r.pickup_from && (
                                                 <Tag color="green" className="m-0! text-[11px]">
                                                     <PiPackageBold className="inline mr-1" />ไปรับได้
                                                 </Tag>
@@ -1619,6 +1671,12 @@ export default function RxOrderPage() {
                                     description={<span className="text-xs">ห้องยาต้องอ่านเลขจากภาพเอง</span>}
                                 />
                             )}
+
+                            <RxConsultBox
+                                orderId={viewing.rx_order_id}
+                                events={viewEvents}
+                                onSaved={() => { fetchOrders(ward); void openEvents(viewing.rx_order_id); }}
+                            />
 
                             {HN_EDITABLE.includes(viewing.status) && (
                                 <EditHnPanel

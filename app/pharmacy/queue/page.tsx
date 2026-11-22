@@ -7,7 +7,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import {
-    Alert, App, Button, Card, DatePicker, Empty, Input, Modal, Segmented, Select,
+    Alert, App, Button, Card, DatePicker, Empty, Input, Modal, Radio, Segmented, Select,
     Table, Tag, TimePicker, Tooltip, Typography,
 } from 'antd';
 import { tableLoading } from '@/app/components/Skeletons';
@@ -18,10 +18,13 @@ import {
     PiWarningBold, PiSpeakerHighBold, PiSpeakerSlashBold, PiBroadcastBold, PiPlugsBold,
     PiClockCountdownBold, PiPackageBold, PiMagnifyingGlassBold, PiSquaresFourBold, PiRowsBold,
     PiQuestionBold, PiShieldCheckBold,
+    PiClockBold, PiPencilSimpleBold,
 } from 'react-icons/pi';
 import { getUserProfile } from '../../lib/auth';
 import { usePharmacy } from '../PharmacyShell';
+import RxConsultBox, { ConsultTag } from '../../components/RxConsultBox';
 import RxRenalCard from '../../components/RxRenalCard';
+import RxInrCard from '../../components/RxInrCard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
 import { useRxSocket, createBeeper, type RxOrderEvent } from '../../lib/rxSocket';
 import { SHIFTS, shiftRange, type ShiftKey } from '../../lib/rxShifts';
@@ -30,6 +33,7 @@ import { TubeFeedTag } from '../../lib/rxTubeFeed';
 import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
+import { PICKUP_SLOT_COUNT, PickupSlotTag, SLOT_FORMAT, defaultPickupSlot, pickupSlotOptions } from '../../lib/rxPickupSlot';
 
 dayjs.extend(buddhistEra);
 dayjs.locale('th');
@@ -56,6 +60,9 @@ interface RxOrder {
     ack_by_name: string | null;
     completed_by_name: string | null;
     prepared_by_name: string | null;
+    /** รอบรับยา 'YYYY-MM-DD HH:mm' ที่ห้องยากำหนดตอนจัดยาเสร็จ */
+    pickup_from?: string | null;
+    pickup_to?: string | null;
     closed_by_name: string | null;
     /** ใบนี้เป็นฉบับแก้ของใบเลขไหน ว่าง = ใบส่งครั้งแรก */
     resend_of: string | null;
@@ -65,6 +72,11 @@ interface RxOrder {
     /** ไฟล์ภาพทุกไฟล์ของใบนี้ถูกลบตามระยะเวลาจัดเก็บแล้ว */
     files_purged: boolean;
     waiting_seconds: number;
+    /** การปรึกษาแพทย์ครั้งล่าสุด (ว่าง = ยังไม่มีใครบันทึก) */
+    consult_at: string | null;
+    consult_note: string | null;
+    consult_by_name: string | null;
+    consult_count: number;
 }
 
 interface RxEvent {
@@ -72,7 +84,7 @@ interface RxEvent {
     actor_name: string | null;
     at: string;
     /** edit_hn มี from/to/note · set_hn มี hn/note */
-    detail?: { from?: string | null; to?: string; hn?: string; note?: string } | null;
+    detail?: { from?: string | null; to?: string; hn?: string; note?: string; consulted_at?: string } | null;
 }
 
 /** ข้อมูลเพิ่มที่มากับรายละเอียดใบ ไม่มีในรายการคิว */
@@ -104,7 +116,7 @@ const STATUS: Record<RxOrder['status'], { label: string; color: string }> = {
     submitted: { label: 'รอรับ', color: 'gold' },
     acknowledged: { label: 'รับแล้ว กำลังคีย์', color: 'blue' },
     completed: { label: 'คีย์แล้ว รอจัดยา', color: 'purple' },
-    prepared: { label: 'จัดยาเสร็จ รอมารับ', color: 'green' },
+    prepared: { label: 'รอบรับยา รอมารับ', color: 'green' },
     picked_up: { label: 'ตึกรับยาแล้ว', color: 'default' },
     rejected: { label: 'ส่งกลับแล้ว', color: 'red' },
     closed: { label: 'ปิดเรื่องแล้ว', color: 'default' },
@@ -123,7 +135,8 @@ const ACTION_LABEL: Record<string, string> = {
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     resend: 'หอส่งฉบับแก้',
     reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
-    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN',
+    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN', consult: 'ปรึกษาแพทย์',
+    set_pickup_slot: 'เปลี่ยนรอบรับยา',
 };
 
 /** ปิดเสียงเป็นการตั้งค่าประจำเครื่อง เครื่องหลังเคาน์เตอร์กับเครื่องในห้องประชุมไม่เหมือนกัน */
@@ -159,7 +172,29 @@ const ACT_DONE: Record<string, string> = {
     pickup: 'บันทึกว่าตึกรับยาไปแล้ว ใบออกจากคิว',
     close: 'ปิดเรื่องแล้ว ใบออกจากคิว',
     reject: 'ส่งกลับให้หอแล้ว',
+    'pickup-slot': 'บันทึกรอบรับยาแล้ว แจ้งตึกแล้ว',
 };
+
+/**
+ * รอบรับยาบนการ์ด/แถว + ไอคอนดินสอกดเปลี่ยนรอบ (ไม่เปิดหน้าต่างใบ)
+ * ยังไม่มีรอบ = ข้อความจาง "ยังไม่กำหนดรอบ" + ไอคอนเดียวกัน
+ */
+function SlotWithEdit({ order, onEdit, className = '' }: { order: RxOrder; onEdit: () => void; className?: string }) {
+    return (
+        <span className={`inline-flex items-center gap-1 ${className}`}>
+            {order.pickup_from
+                ? <PickupSlotTag from={order.pickup_from} to={order.pickup_to} className="text-[11px]! leading-4! px-1!" />
+                : <span className="text-[11px] text-gray-500 leading-4">ยังไม่กำหนดรอบ</span>}
+            <Tooltip title={order.pickup_from ? 'เปลี่ยนรอบรับยา' : 'เลือกรอบรับยา'}>
+                <button type="button" aria-label={order.pickup_from ? 'เปลี่ยนรอบรับยา' : 'เลือกรอบรับยา'}
+                    className="inline-flex items-center justify-center w-6 h-6 rounded border border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-400 bg-white cursor-pointer"
+                    onClick={e => { e.stopPropagation(); onEdit(); }}>
+                    <PiPencilSimpleBold className="text-xs" />
+                </button>
+            </Tooltip>
+        </span>
+    );
+}
 
 const authHeaders = (): Record<string, string> => {
     const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
@@ -336,6 +371,14 @@ export default function PharmacyQueuePage() {
         } catch { message.error('เปิดรายละเอียดไม่สำเร็จ'); }
     }, [message]);
 
+    /** ดึงเฉพาะประวัติใหม่ ไม่โหลดไฟล์ซ้ำ ภาพที่เปิดค้างอยู่จะได้ไม่กระพริบ */
+    const reloadEvents = useCallback(async (id: string) => {
+        try {
+            const res = await axios.get(`/api/v1/rx/orders/${id}`, { headers: authHeaders() });
+            setEvents(res.data?.data?.events ?? []);
+        } catch { /* ประวัติไม่ขึ้นไม่ใช่เหตุให้หน้าพัง */ }
+    }, []);
+
     /**
      * แจ้งเตือนมุมขวาบนเมื่อมีใบใหม่
      *
@@ -476,6 +519,25 @@ export default function PharmacyQueuePage() {
             if (live) fetchRows();
             if (open?.rx_order_id === e.rx_order_id) void openOrder(open);
         },
+        /* หอหรือห้องยาอีกเครื่องบันทึกว่าโทรปรึกษาแพทย์แล้ว — เตือนแบบไม่มีเสียง ไม่ใช่งานที่ต้องลงมือทันที */
+        onConsult: e => {
+            if (wards.length > 0 && !wards.includes(e.ward)) return;
+            notification.open({
+                key: `consult-${e.rx_order_id}`,
+                placement: 'topRight',
+                type: 'info',
+                title: <span className="font-semibold">โทรปรึกษาแพทย์แล้ว</span>,
+                description: (
+                    <div className="text-xs leading-snug">
+                        <div className="whitespace-pre-wrap">{e.reason || '-'}</div>
+                        <div className="text-gray-500 mt-1">ใบเลขที่ {e.rx_order_id} · บันทึกโดย {e.by_name}</div>
+                    </div>
+                ),
+                duration: 15,
+            });
+            if (live) fetchRows();
+            if (open?.rx_order_id === e.rx_order_id) void reloadEvents(e.rx_order_id);
+        },
     });
 
     /*
@@ -496,10 +558,28 @@ export default function PharmacyQueuePage() {
     */
     const [cardBusy, setCardBusy] = useState<string | null>(null);
 
-    const quickAct = async (r: RxOrder, path: 'ack' | 'complete' | 'prepare' | 'pickup' | 'close') => {
+    /*
+      จัดยาเสร็จ = ต้องบอกตึกว่ามารับรอบไหน (ช่วงละ 1 ชม.) ทั้งปุ่มบนการ์ดและในหน้าต่างผ่านหน้าต่างเลือกรอบเดียวกัน
+      from: 'card' ยิงกับใบบนการ์ด · 'open' ยิงกับใบที่เปิดอยู่
+    */
+    /* mode 'change' = ใบที่จัดเสร็จแล้ว (รอบรับยา รอมารับ) กำหนด/เปลี่ยนรอบใหม่ */
+    const [slotFor, setSlotFor] = useState<{ order: RxOrder; from: 'card' | 'open'; mode: 'prepare' | 'change' } | null>(null);
+    const [slot, setSlot] = useState('');
+    /** ค่าพิเศษในตัวเลือกรอบ = ยังไม่เลือกรอบ */
+    const NO_SLOT = 'none';
+    const askSlot = (order: RxOrder, from: 'card' | 'open', mode: 'prepare' | 'change' = 'prepare') => {
+        /* เปลี่ยนรอบ: เริ่มที่รอบเดิมถ้ายังเลือกได้ · ใบที่ยังไม่มีรอบเริ่มที่ชั่วโมงถัดไป */
+        const cur = order.pickup_from ? dayjs(order.pickup_from).format(SLOT_FORMAT) : null;
+        const still = cur && pickupSlotOptions(order.submitted_at).some(o => o.value === cur && !o.disabled);
+        setSlot(mode === 'change' && still ? cur : defaultPickupSlot(order.submitted_at));
+        setSlotFor({ order, from, mode });
+    };
+
+    const quickAct = async (r: RxOrder, path: 'ack' | 'complete' | 'prepare' | 'pickup' | 'close' | 'pickup-slot', body?: Record<string, unknown>) => {
+        if (path === 'prepare' && !body) { askSlot(r, 'card'); return; }
         setCardBusy(r.rx_order_id);
         try {
-            await axios.post(`/api/v1/rx/orders/${r.rx_order_id}/${path}`, {}, { headers: authHeaders() });
+            await axios.post(`/api/v1/rx/orders/${r.rx_order_id}/${path}`, body ?? {}, { headers: authHeaders() });
             message.success(ACT_DONE[path] ?? 'บันทึกแล้ว');
             fetchRows();
         } catch (err) {
@@ -514,6 +594,7 @@ export default function PharmacyQueuePage() {
 
     const act = async (path: string, body?: Record<string, unknown>) => {
         if (!open) return;
+        if (path === 'prepare' && !body) { askSlot(open, 'open'); return; }
         setBusy(true);
         try {
             await axios.post(`/api/v1/rx/orders/${open.rx_order_id}/${path}`, body ?? {}, { headers: authHeaders() });
@@ -524,6 +605,11 @@ export default function PharmacyQueuePage() {
             */
             if (path === 'ack') setOpen({ ...open, status: 'acknowledged' });
             else if (path === 'complete') setOpen({ ...open, status: 'completed' });
+            /* เปลี่ยนรอบแล้วยังอยู่ในใบเดิม ใบยังรอตึกมารับ */
+            else if (path === 'pickup-slot') {
+                const f = (body?.pickup_from as string | null) ?? null;
+                setOpen({ ...open, pickup_from: f, pickup_to: f ? dayjs(f).add(1, 'hour').format('YYYY-MM-DD HH:mm') : null });
+            }
             else setOpen(null);
             fetchRows();
         } catch (err) {
@@ -587,6 +673,11 @@ export default function PharmacyQueuePage() {
                         <div className="text-base font-semibold tabular-nums">
                             {dayjs(r.submitted_at).format('HH:mm')}
                         </div>
+                        {/* โทรศัพท์ใต้เวลา = มีคนโทรปรึกษาแพทย์เรื่องใบนี้แล้ว ชี้ค้างดูรายละเอียด */}
+                        <ConsultTag at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
+                        {r.status === 'prepared' && (
+                            <SlotWithEdit className="mt-1" order={r} onEdit={() => askSlot(r, 'card', 'change')} />
+                        )}
                         {/* นับเวลารอเฉพาะใบที่ยังไม่ปิด ใบเก่าที่ปิดไปแล้วตัวเลขนี้ไม่มีความหมาย */}
                         {open && (
                             <div className={`text-xs ${stale ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
@@ -644,8 +735,7 @@ export default function PharmacyQueuePage() {
                 <div className="leading-tight">
                     <Tag color={STATUS[r.status].color} className="m-0! font-semibold">
                         {STATUS[r.status].label}
-                    </Tag>
-                    {/* ใครถืองานอยู่ สำคัญพอ ๆ กับสถานะ เวลามีหลายเครื่องช่วยกันรับ */}
+                    </Tag>                    {/* ใครถืองานอยู่ สำคัญพอ ๆ กับสถานะ เวลามีหลายเครื่องช่วยกันรับ */}
                     {(r.ack_by_name || r.completed_by_name || r.prepared_by_name || r.closed_by_name) && (
                         <div className="text-xs text-gray-500 mt-1 truncate">
                             {r.closed_by_name || r.prepared_by_name || r.completed_by_name || r.ack_by_name}
@@ -1049,16 +1139,23 @@ export default function PharmacyQueuePage() {
                                     <span className={r.priority === 'routine' ? 'text-gray-500' : 'font-semibold'}>
                                         {PRIORITY[r.priority].short}
                                     </span>
-                                    <span className="ml-auto tabular-nums text-gray-500">
-                                        {dayjs(r.submitted_at).format('HH:mm')}
+                                    <span className="ml-auto flex flex-col items-end gap-0.5">
+                                        <span className="tabular-nums text-gray-500">{dayjs(r.submitted_at).format('HH:mm')}</span>
+                                        {/* รอบรับยาที่กำหนดตอนกดจัดยาเสร็จ (จากคอลัมน์ คีย์แล้ว รอจัดยา) อยู่ใต้เวลาส่ง */}
+                                        {r.status === 'prepared' && (
+                                            <SlotWithEdit order={r} onEdit={() => askSlot(r, 'card', 'change')} />
+                                        )}
                                     </span>
                                 </div>
 
-                                <div className="font-semibold mt-1 leading-tight">
-                                    {r.resend_of && (
-                                        <Tag color="purple" className="m-0! mr-1.5 text-[11px] font-semibold">ฉบับแก้</Tag>
-                                    )}
-                                    {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
+                                <div className="font-semibold mt-1 leading-tight flex items-start gap-1">
+                                    <span className="min-w-0">
+                                        {r.resend_of && (
+                                            <Tag color="purple" className="m-0! mr-1.5 text-[11px] font-semibold">ฉบับแก้</Tag>
+                                        )}
+                                        {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
+                                    </span>
+                                    <ConsultTag className="ml-auto shrink-0" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
                                 </div>
                                 {r.tube_feed && <TubeFeedTag compact className="mt-1" />}
                                 <div className="text-xs text-gray-500 tabular-nums">
@@ -1203,7 +1300,8 @@ export default function PharmacyQueuePage() {
 
                         {/* ขวา: ข้อมูลและปุ่มดำเนินการ */}
                         <div className="w-80 shrink-0 border-l border-gray-200 flex flex-col">
-                            <div className="p-3 flex flex-col gap-3 overflow-auto flex-1">
+                            {/* เส้นคั่นระหว่างแต่ละส่วน: ส่งโดย · คำเตือน · ค่าไต · INR · ปรึกษา · ประวัติ */}
+                            <div className="p-3 flex flex-col gap-3 overflow-auto flex-1 [&>*+*]:border-t [&>*+*]:border-gray-200 [&>*+*]:pt-3">
                                 <div>
                                     <Text className="text-xs text-gray-500">ส่งโดย</Text>
                                     <div className="text-sm">{open.submitted_by_name}</div>
@@ -1212,44 +1310,56 @@ export default function PharmacyQueuePage() {
                                     </div>
                                 </div>
 
-                                {/* บอกว่าใบก่อนหน้าถูกตีกลับเพราะอะไร จะได้ตรวจจุดนั้นก่อนเป็นอันดับแรก */}
-                                {open.resend_of && (
-                                    <Alert
-                                        type="info" showIcon
-                                        title="ใบนี้คือฉบับแก้ที่หอส่งมาใหม่"
-                                        description={
-                                            <span>
-                                                ใบเดิมถูกส่งกลับ{detail?.prev_rejected_at ? ` เมื่อ ${detail.prev_rejected_at}` : ''}
-                                                {detail?.prev_reject_reason
-                                                    ? <> เพราะ <b>{detail.prev_reject_reason}</b></>
-                                                    : ''} · ใบเดิมปิดเรื่องไปแล้ว ไม่ต้องจ่ายซ้ำ
-                                            </span>
-                                        }
-                                    />
-                                )}
+                                {/* คำเตือนรวมเป็นส่วนเดียว ไม่ขีดเส้นคั่นระหว่างกล่องเตือนด้วยกัน */}
+                                {(open.resend_of || open.tube_feed || open.note || !open.his_verified) && (
+                                    <div className="flex flex-col gap-2">
+                                    {/* บอกว่าใบก่อนหน้าถูกตีกลับเพราะอะไร จะได้ตรวจจุดนั้นก่อนเป็นอันดับแรก */}
+                                    {open.resend_of && (
+                                        <Alert
+                                            type="info" showIcon
+                                            title="ใบนี้คือฉบับแก้ที่หอส่งมาใหม่"
+                                            description={
+                                                <span>
+                                                    ใบเดิมถูกส่งกลับ{detail?.prev_rejected_at ? ` เมื่อ ${detail.prev_rejected_at}` : ''}
+                                                    {detail?.prev_reject_reason
+                                                        ? <> เพราะ <b>{detail.prev_reject_reason}</b></>
+                                                        : ''} · ใบเดิมปิดเรื่องไปแล้ว ไม่ต้องจ่ายซ้ำ
+                                                </span>
+                                            }
+                                        />
+                                    )}
 
-                                {open.tube_feed && (
-                                    <Alert
-                                        type="info" showIcon
-                                        title="ผู้ป่วยได้รับอาหารทางสายยาง"
-                                        description="เตรียมยาให้ใช้ทางสายได้ · ยาเม็ดเคลือบหรือออกฤทธิ์นานบดไม่ได้ ต้องเปลี่ยนรูปแบบยา"
-                                    />
-                                )}
+                                    {open.tube_feed && (
+                                        <Alert
+                                            type="info" showIcon
+                                            title="ผู้ป่วยได้รับอาหารทางสายยาง"
+                                            description="เตรียมยาให้ใช้ทางสายได้ · ยาเม็ดเคลือบหรือออกฤทธิ์นานบดไม่ได้ ต้องเปลี่ยนรูปแบบยา"
+                                        />
+                                    )}
 
-                                {open.note && (
-                                    <Alert type="warning" showIcon title="หมายเหตุจากหอผู้ป่วย" description={open.note} />
-                                )}
+                                    {open.note && (
+                                        <Alert type="warning" showIcon title="หมายเหตุจากหอผู้ป่วย" description={open.note} />
+                                    )}
 
-                                {!open.his_verified && (
-                                    <Alert
-                                        type="error" showIcon
-                                        title="HN นี้ยังไม่ได้ยืนยันกับ HIS"
-                                        description="ตอนที่หอส่งใบ ระบบค้น HN นี้ใน HIS ไม่พบ หรือติดต่อ HIS ไม่ได้ กรุณาตรวจเลขกับภาพต้นฉบับก่อนคีย์"
-                                    />
+                                    {!open.his_verified && (
+                                        <Alert
+                                            type="error" showIcon
+                                            title="HN นี้ยังไม่ได้ยืนยันกับ HIS"
+                                            description="ตอนที่หอส่งใบ ระบบค้น HN นี้ใน HIS ไม่พบ หรือติดต่อ HIS ไม่ได้ กรุณาตรวจเลขกับภาพต้นฉบับก่อนคีย์"
+                                        />
+                                    )}
+                                    </div>
                                 )}
 
                                 {/* ค่าไตประกอบการปรับขนาดยา — ใบยากลับบ้านคือใบที่ผู้ป่วยจะเอายาไปกินเองต่อหลายวัน */}
                                 {open.hn && <RxRenalCard key={open.rx_order_id} orderId={open.rx_order_id} />}
+                                {open.hn && <RxInrCard key={`inr-${open.rx_order_id}`} orderId={open.rx_order_id} />}
+
+                                <RxConsultBox
+                                    orderId={open.rx_order_id}
+                                    events={events}
+                                    onSaved={() => { void reloadEvents(open.rx_order_id); if (live) fetchRows(); }}
+                                />
 
                                 <div>
                                     <Text className="text-xs text-gray-500 block mb-1">ประวัติการดำเนินการ</Text>
@@ -1333,6 +1443,14 @@ export default function PharmacyQueuePage() {
                                             </Button>
                                         )}
                                         {/* ขั้นสุดท้าย กดแล้วใบออกจากคิวทั้งของห้องยาและของหอ */}
+                                        {open.status === 'prepared' && open.pickup_from && (
+                                            <PickupSlotTag from={open.pickup_from} to={open.pickup_to} className="justify-center py-1" />
+                                        )}
+                                        {open.status === 'prepared' && (
+                                            <Button icon={<PiClockBold />} disabled={busy} onClick={() => askSlot(open, 'open', 'change')}>
+                                                {open.pickup_from ? 'เปลี่ยนรอบรับยา' : 'เลือกรอบรับยา'}
+                                            </Button>
+                                        )}
                                         {open.status === 'prepared' && (
                                             <Button type="primary" size="large" icon={<PiHandGrabbingBold />}
                                                 loading={busy} onClick={() => act('pickup')}>
@@ -1355,6 +1473,51 @@ export default function PharmacyQueuePage() {
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            {/* เลือกรอบรับยา (ช่วงละ 1 ชม.) ก่อนบันทึกว่าจัดยาเสร็จ */}
+            <Modal
+                open={!!slotFor}
+                title={<span className="inline-flex items-center gap-2"><PiPackageBold />
+                    {slotFor?.mode === 'change' ? 'เปลี่ยนรอบรับยา · ใบที่จัดยาเสร็จแล้ว' : 'จัดยาเสร็จ · เลือกรอบให้ตึกมารับยา'}</span>}
+                okText="บันทึก แจ้งตึก"
+                cancelText="ยกเลิก"
+                okButtonProps={{ disabled: !slot, style: { background: '#15803d' } }}
+                onCancel={() => setSlotFor(null)}
+                onOk={() => {
+                    if (!slotFor || !slot) return;
+                    /* null = ยังไม่เลือกรอบ ตึกเห็นแค่ว่ายาพร้อมแล้ว */
+                    const body = { pickup_from: slot === NO_SLOT ? null : slot };
+                    const { order, from, mode } = slotFor;
+                    const path = mode === 'change' ? 'pickup-slot' : 'prepare';
+                    setSlotFor(null);
+                    if (from === 'open') void act(path, body);
+                    else void quickAct(order, path, body);
+                }}
+                destroyOnHidden
+                centered
+                width={640}
+            >
+                {slotFor && (
+                    <div className="text-sm text-gray-500 mb-2">
+                        {slotFor.order.patient_name || 'ไม่ระบุชื่อ'} · {slotFor.order.ward_name ?? '-'}
+                        {' · '}หอส่งใบ {dayjs(slotFor.order.submitted_at).format('D MMM HH:mm')} น.
+                        <div className="text-xs">รอบละ 1 ชม. ทั้งหมด {PICKUP_SLOT_COUNT} รอบ นับจากเวลาที่หอส่งใบ · รอบที่ผ่านไปแล้วเลือกไม่ได้</div>
+                    </div>
+                )}
+                <Radio.Group value={slot} onChange={e => setSlot(e.target.value)} className="w-full">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <Radio.Button value={NO_SLOT} className="text-center rounded! col-span-2 sm:col-span-4">
+                            ยังไม่เลือกรอบ (แจ้งตึกว่ายาพร้อมแล้ว ไม่ระบุเวลา)
+                        </Radio.Button>
+                        {slotFor && pickupSlotOptions(slotFor.order.submitted_at).map(o => (
+                            <Radio.Button key={o.value} value={o.value} disabled={o.disabled} className="text-center tabular-nums rounded! px-1!">
+                                {o.label}
+                            </Radio.Button>
+                        ))}
+                    </div>
+                </Radio.Group>
+                <div className="text-xs text-gray-500 mt-3">ตึกจะเห็นรอบนี้ทันทีในหน้าใบสั่งยาของหอ</div>
             </Modal>
         </div>
     );

@@ -124,7 +124,23 @@ function RenalChart({ data, kind, height, compact = false }: {
             legend: kind === 'clearance' ? { top: 0, left: 'center', itemWidth: 14, textStyle: { fontSize: 11 } } : undefined,
             tooltip: {
                 trigger: 'axis',
-                valueFormatter: (v: unknown) => (v === null || v === undefined ? '-' : `${v}${kind === 'scr' ? ' mg/dL' : ' mL/min'}`),
+                /* ทุกกราฟโชว์ครบชุดของจุดนั้น: อายุ ณ วันตรวจ · Cr · eGFR · CrCl */
+                formatter: (raw: unknown) => {
+                    const list = (Array.isArray(raw) ? raw : [raw]) as { dataIndex: number }[];
+                    const p = pts[list[0]?.dataIndex ?? -1];
+                    if (!p) return '';
+                    const dot = (c: string) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:6px"></span>`;
+                    const row = (c: string | null, label: string, v: number | null, unit: string) =>
+                        `<div style="display:flex;justify-content:space-between;gap:16px">`
+                        + `<span>${c ? dot(c) : ''}${label}</span><b>${v ?? '-'}${v === null ? '' : ` ${unit}`}</b></div>`;
+                    return `<div style="font-size:12px;min-width:160px">`
+                        + `<div style="margin-bottom:4px">${thDate(p.date)}${p.time ? ` ${p.time}` : ''}</div>`
+                        + row(null, 'อายุ', p.age, 'ปี')
+                        + row(C_SCR, 'Cr', p.scr, 'mg/dL')
+                        + row(C_EGFR, 'eGFR', p.egfr, '')
+                        + row(C_CRCL, 'CrCl', p.crcl, 'mL/min')
+                        + `</div>`;
+                },
             },
             xAxis: {
                 type: 'time',
@@ -158,7 +174,7 @@ function Stat({ label, unit, value, prev, flag, higherIsBetter }: {
     const diff = value !== null && prev !== null ? value - prev : null;
     const worse = diff !== null && Math.abs(diff) > 0.001 && (higherIsBetter ? diff < 0 : diff > 0);
     return (
-        <div className="rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5">
+        <div className="rounded border border-gray-200 px-2 py-1.5">
             <div className="text-[11px] text-gray-500">{label}</div>
             <div className="flex items-baseline gap-1">
                 <span className="text-lg font-semibold tabular-nums">{value ?? '-'}</span>
@@ -209,13 +225,20 @@ export default function RxRenalCard({ orderId }: { orderId: string }) {
     return (
         <div>
             {title}
-            <div className="text-[11px] text-gray-500 mb-1.5">
-                {prev ? 'ลูกศร = เทียบผลครั้งก่อน · ' : ''}ผลล่าสุด {thDate(last.date)}{last.time ? ` ${last.time}` : ''}
-                {' · '}<span className={daysAgo > 7 ? 'text-orange-600 font-semibold' : ''}>
-                    {daysAgo === 0 ? 'วันนี้' : `${daysAgo} วันก่อน`}
+            {/* วันที่ผลล่าสุดต้องเห็นชัด เภสัชจะรู้ทันทีว่าค่าที่ดูอยู่เก่าแค่ไหน · เกิน 7 วันเป็นสีส้ม */}
+            <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-1.5">
+                <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${daysAgo > 7
+                    ? 'bg-orange-100 text-orange-800'
+                    : 'bg-blue-100 text-blue-900'}`}>
+                    ผลล่าสุด {thDate(last.date)}{last.time ? ` ${last.time}` : ''}
+                    <span className="font-normal">· {daysAgo === 0 ? 'วันนี้' : `${daysAgo} วันก่อน`}</span>
                 </span>
-                {last.age !== null ? ` · อายุ ${last.age} ปี` : ''}
+                {prev && <span className="text-[11px] text-gray-500">ลูกศร = เทียบผลครั้งก่อน</span>}
             </div>
+            <div className="text-xs mb-1.5">
+                <span className="text-gray-500">อายุ</span>{' '}
+                <b className="tabular-nums">{last.age !== null ? `${last.age} ปี` : '-'}</b>
+                <span className="text-gray-500"> · เพศ{data.sex === '2' ? 'หญิง' : 'ชาย'}</span>            </div>
             <div className="grid grid-cols-3 gap-1.5">
                 <Stat label="Cr" unit="mg/dL" value={last.scr} prev={prev?.scr ?? null}
                     flag={flagScr(last.scr, data.sex)} higherIsBetter={false} />
@@ -229,7 +252,16 @@ export default function RxRenalCard({ orderId }: { orderId: string }) {
                     title={`CrCl < ${CRCL_DOSE_ADJUST_BELOW} mL/min`}
                     description={<span className="text-xs">ตรวจสอบการปรับขนาดยาตามการทำงานของไตก่อนจ่าย</span>} />
             )}
-            {data.points.length > 1 && <div className="mt-1"><RenalChart data={data} kind="clearance" height={150} compact /></div>}
+            {data.points.length > 1 && (
+                <div className="mt-1">
+                    <RenalChart data={data} kind="clearance" height={150} compact />
+                    {/* Cr คนละหน่วย (mg/dL) แยกกราฟ ใช้แกนวันเดียวกัน ไม่รวมสองแกน */}
+                    <div className="text-[10px] mt-1 flex items-center gap-1" style={{ color: C_SCR }}>
+                        <span className="inline-block w-3 h-0.5" style={{ background: C_SCR }} /> Cr (mg/dL)
+                    </div>
+                    <RenalChart data={data} kind="scr" height={100} compact />
+                </div>
+            )}
             <div className="flex items-center justify-between mt-1">
                 <Text className="text-[10px] text-gray-500 leading-tight">
                     {data.weight ? `CrCl ใช้น้ำหนัก ${data.weight} kg${data.weight_date ? ` (ชั่ง ${thDate(data.weight_date)})` : ''}` : 'ไม่มีน้ำหนัก คำนวณ CrCl ไม่ได้'}

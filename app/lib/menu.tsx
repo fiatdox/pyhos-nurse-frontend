@@ -3,7 +3,7 @@ import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
     PiClockCounterClockwiseBold, PiChartBarBold, PiGearSixBold, PiHospitalBold, PiUsersThreeBold,
-    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold, PiScanBold,
+    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold, PiScanBold, PiDeviceMobileCameraBold,
 } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
 import { GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
@@ -188,6 +188,15 @@ export const RX_OCR_ITEM: MenuItem = {
     href: '/ipd/rx-ocr',
     label: 'ตั้งค่า OCR อ่าน HN ใบสั่งยา',
     icon: PiScanBold,
+    groups: ['admin'],
+};
+
+/** เปิด/ปิด OTP ทาง LINE หมอพร้อม ตอนเข้าระบบ (MFA) แอดมินเท่านั้น เซิร์ฟเวอร์ตรวจสิทธิ์เองอีกชั้น */
+export const LOGIN_OTP_ITEM: MenuItem = {
+    key: 'admin.login-otp',
+    href: '/ipd/login-otp',
+    label: 'ยืนยันตัวตน OTP (หมอพร้อม)',
+    icon: PiDeviceMobileCameraBold,
     groups: ['admin'],
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Swal from "sweetalert2";
@@ -32,9 +32,29 @@ interface UserProfile {
 
 interface LoginResponse {
   success: boolean;
-  token: string;
-  data: UserProfile;
+  token?: string;
+  data?: UserProfile;
+  /* โหมด OTP เปิดอยู่: รหัสผ่านถูกแล้ว ต้องกรอก OTP จาก LINE หมอพร้อมก่อนถึงจะได้ token */
+  otp_required?: boolean;
+  otp_token?: string;
+  destination?: string;
+  expires_in?: number;
+  resend_after?: number;
 }
+
+/** ขั้นที่สองของการเข้าระบบเจ้าหน้าที่ (MFA) */
+interface OtpStep {
+  token: string;
+  destination: string;
+  /** เวลาที่ OTP ตัวล่าสุดหมดอายุ / ขอใหม่ได้ (ms) */
+  expiresAt: number;
+  resendAt: number;
+}
+
+const finishStaffLogin = (token: string, profile: UserProfile | undefined) => {
+  document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 8}`;
+  sessionStorage.setItem("user_profile", JSON.stringify(profile ?? {}));
+};
 
 const IconUser = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -90,6 +110,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [mode, setMode] = useState<LoginMode>("staff");
+  const [otp, setOtp] = useState<OtpStep | null>(null);
 
   const router = useRouter();
 
@@ -106,6 +127,7 @@ export default function Home() {
     setError("");
     setUsername("");
     setPassword("");
+    setOtp(null);
   };
 
   const activeMode = MODES.find(m => m.key === mode)!;
@@ -135,9 +157,18 @@ export default function Home() {
 
       const { success, token, data: userProfile } = response.data;
 
-      if (success) {
-        document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 8}`;
-        sessionStorage.setItem("user_profile", JSON.stringify(userProfile));
+      if (success && response.data.otp_required && response.data.otp_token) {
+        /* รหัสผ่านถูก แต่โหมด OTP เปิดอยู่ — ล้างรหัสผ่านออกจากหน้าจอ แล้วไปขั้นกรอก OTP */
+        const now = Date.now();
+        setPassword("");
+        setOtp({
+          token: response.data.otp_token,
+          destination: response.data.destination ?? "LINE OA หมอพร้อม",
+          expiresAt: now + (response.data.expires_in ?? 300) * 1000,
+          resendAt: now + (response.data.resend_after ?? 60) * 1000,
+        });
+      } else if (success && token) {
+        finishStaffLogin(token, userProfile);
         router.push("/main");
       } else {
         setError("Login Failed: Invalid response from server.");
@@ -150,7 +181,13 @@ export default function Home() {
         setError("เกิดข้อผิดพลาดในการส่งคำขอ");
       } else if (err.response) {
         const data = err.response.data as { message?: string } | undefined;
-        if (err.response.status === 423) {
+        if (mode === "staff" && data && "code" in data && typeof (data as { code?: unknown }).code === "string"
+          && String((data as { code: string }).code).startsWith("OTP_")) {
+          /* ส่ง OTP ไม่ได้ / ไม่มีเลขบัตร / ขอถี่เกิน — ข้อความจากเซิร์ฟเวอร์บอกสาเหตุครบแล้ว */
+          const msg = data.message ?? "ส่งรหัส OTP ไม่สำเร็จ";
+          setError(msg);
+          Swal.fire({ icon: "warning", title: "ยืนยันตัวตนด้วย OTP ไม่สำเร็จ", text: msg, confirmButtonText: "ตกลง" });
+        } else if (err.response.status === 423) {
           // บัญชีบริษัทถูกล็อกเพราะกรอกรหัสผ่านผิดหลายครั้ง ข้อความจากเซิร์ฟเวอร์บอกครบแล้ว
           const msg = data?.message ?? "บัญชีถูกล็อกชั่วคราว";
           setError(msg);
@@ -290,6 +327,15 @@ export default function Home() {
               ))}
             </div>
 
+            {otp ? (
+              <OtpForm
+                step={otp}
+                username={username}
+                onBack={() => { setOtp(null); setError(""); }}
+                onResent={next => setOtp(next)}
+                onDone={(token, profile) => { finishStaffLogin(token, profile); router.push("/main"); }}
+              />
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* error */}
               {error && (
@@ -381,6 +427,7 @@ export default function Home() {
                 </button>
               </div>
             </form>
+            )}
 
             {mode === "vendor" && (
               <p className="text-center text-white/60 text-xs mt-5 leading-relaxed">
@@ -397,5 +444,155 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** นับถอยหลังเป็นวินาที (อัปเดตทุกวินาที) */
+function useSecondsLeft(until: number) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return Math.max(0, Math.ceil((until - now) / 1000));
+}
+
+const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+
+/**
+ * ขั้นที่สอง: กรอก OTP 6 หลักที่ส่งไป LINE OA หมอพร้อม
+ * ไม่เก็บรหัสผ่านไว้ในหน้าจอแล้ว กดกลับ = เริ่มใส่รหัสผ่านใหม่
+ */
+function OtpForm({ step, username, onBack, onResent, onDone }: {
+  step: OtpStep;
+  username: string;
+  onBack: () => void;
+  onResent: (next: OtpStep) => void;
+  onDone: (token: string, profile: UserProfile | undefined) => void;
+}) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const expiresIn = useSecondsLeft(step.expiresAt);
+  const resendIn = useSecondsLeft(step.resendAt);
+
+  const serverMsg = (err: unknown, fallback: string) => {
+    if (axios.isAxiosError(err)) {
+      const d = err.response?.data as { message?: string; code?: string } | undefined;
+      /* ขั้นกลางหมดอายุ / ผิดเกิน — ต้องกลับไปใส่รหัสผ่านใหม่ */
+      if (d?.code === "OTP_SESSION_EXPIRED") {
+        Swal.fire({ icon: "warning", title: "กรุณาเข้าระบบใหม่", text: d.message, confirmButtonText: "ตกลง" });
+        onBack();
+        return null;
+      }
+      return d?.message ?? fallback;
+    }
+    return fallback;
+  };
+
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(""); setInfo("");
+    setBusy(true);
+    try {
+      const res = await axios.post<LoginResponse>("/api/v1/auth/login/otp", { otp_token: step.token, code });
+      if (res.data?.success && res.data.token) onDone(res.data.token, res.data.data);
+      else setError("ยืนยันไม่สำเร็จ กรุณาลองใหม่");
+    } catch (err) {
+      const m = serverMsg(err, "ยืนยัน OTP ไม่สำเร็จ");
+      if (m) { setError(m); setCode(""); }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    setError(""); setInfo("");
+    setResending(true);
+    try {
+      const res = await axios.post<{ expires_in?: number; resend_after?: number }>(
+        "/api/v1/auth/login/otp/resend", { otp_token: step.token });
+      const now = Date.now();
+      onResent({
+        ...step,
+        expiresAt: now + (res.data.expires_in ?? 300) * 1000,
+        resendAt: now + (res.data.resend_after ?? 60) * 1000,
+      });
+      setCode("");
+      setInfo("ส่งรหัสใหม่แล้ว รหัสเดิมใช้ไม่ได้อีก");
+    } catch (err) {
+      const m = serverMsg(err, "ขอรหัสใหม่ไม่สำเร็จ");
+      if (m) setError(m);
+    } finally {
+      setResending(false);
+    }
+  };
+
+  return (
+    <form onSubmit={verify} className="space-y-4">
+      <div className="rounded-xl bg-[#0d9488]/15 border border-[#14b8a6]/30 p-3.5 text-sm text-white/85 leading-relaxed">
+        <div className="font-semibold text-white mb-0.5">ยืนยันตัวตนด้วย OTP</div>
+        ส่งรหัส 6 หลักไปที่ <b className="text-[#5eead4]">{step.destination}</b> แล้ว
+        <div className="text-white/60 text-xs mt-1">ผู้ใช้ {username} · เปิด LINE แล้วดูข้อความจากหมอพร้อม</div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+          <IconAlert />
+          <span>{error}</span>
+        </div>
+      )}
+      {info && !error && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm">{info}</div>
+      )}
+
+      <div>
+        <label htmlFor="otp-code" className="block text-sm text-white/70 mb-1.5 font-medium">รหัส OTP</label>
+        <input
+          id="otp-code"
+          name="one-time-code"
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          pattern="\d{6}"
+          maxLength={6}
+          autoFocus
+          placeholder="••••••"
+          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 text-center text-2xl tracking-[0.5em] tabular-nums focus:outline-none focus:border-[#14b8a6] focus:ring-1 focus:ring-[#14b8a6]/50"
+          value={code}
+          onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          disabled={busy}
+          required
+        />
+        <div className={`text-xs mt-1.5 ${expiresIn > 0 ? "text-white/60" : "text-red-300"}`}>
+          {expiresIn > 0 ? `รหัสหมดอายุใน ${mmss(expiresIn)} นาที` : "รหัสหมดอายุแล้ว กรุณากดขอรหัสใหม่"}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={busy || code.length !== 6}
+        className="w-full py-3 rounded-xl font-semibold text-sm tracking-wide transition-all shadow-lg
+          bg-linear-to-r from-[#115e59] to-[#0f766e] hover:from-[#13746b] hover:to-[#14857a]
+          text-white disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+      >
+        {busy ? "กำลังตรวจสอบ..." : "ยืนยัน OTP"}
+      </button>
+
+      <div className="flex items-center justify-between text-sm">
+        <button type="button" onClick={onBack} className="text-white/65 hover:text-white">
+          ← กลับไปหน้าเข้าระบบ
+        </button>
+        <button
+          type="button"
+          onClick={resend}
+          disabled={resendIn > 0 || resending}
+          className="text-[#5eead4] hover:text-white disabled:text-white/40 disabled:cursor-not-allowed"
+        >
+          {resendIn > 0 ? `ขอรหัสใหม่ได้ใน ${resendIn} วิ` : resending ? "กำลังส่ง..." : "ขอรหัสใหม่"}
+        </button>
+      </div>
+    </form>
   );
 }

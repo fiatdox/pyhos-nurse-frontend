@@ -52,7 +52,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
     submitted: { label: 'รอรับ', color: 'gold' },
     acknowledged: { label: 'รับแล้ว กำลังคีย์', color: 'blue' },
     completed: { label: 'คีย์แล้ว รอจัดยา', color: 'purple' },
-    prepared: { label: 'จัดยาเสร็จ รอมารับ', color: 'green' },
+    prepared: { label: 'รอบรับยา รอมารับ', color: 'green' },
     picked_up: { label: 'ตึกรับยาแล้ว', color: 'default' },
     rejected: { label: 'ส่งกลับแล้ว', color: 'red' },
     closed: { label: 'ปิดเรื่องแล้ว', color: 'default' },
