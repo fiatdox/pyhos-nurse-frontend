@@ -82,6 +82,8 @@ export const MENU: MenuSection[] = [
             { key: 'pharmacy.queue', href: '/pharmacy/queue', label: 'คิวใบสั่งยาจากหอผู้ป่วย', icon: PiFirstAidKitBold },
             /* หัวหน้าห้องยาและผู้ดูแลเห็นโดยค่าเริ่มต้น เปิดให้ฝ่ายการพยาบาลได้ที่หน้าจัดการสิทธิ์ */
             { key: 'pharmacy.dashboard', href: '/pharmacy/dashboard', label: 'วิเคราะห์การรับส่งใบสั่งยา', icon: PiChartBarBold },
+            /* เภสัชตั้งกลุ่มเหตุผลที่ใช้ตอนส่งใบกลับ (ใช้ทำสถิติ) เซิร์ฟเวอร์ให้แก้เฉพาะกลุ่มงานเภสัชกรรม/แอดมิน */
+            { key: 'pharmacy.reject-categories', href: '/pharmacy/reject-categories', label: 'ตั้งค่ากลุ่มเหตุผลส่งกลับ', icon: PiGearSixBold },
         ],
     },
     {

@@ -33,6 +33,8 @@ import { TubeFeedTag } from '../../lib/rxTubeFeed';
 import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
+import { REJECT_CATEGORIES_API, type RejectCategory } from '../../lib/rxReject';
+import RejectReason from '../../components/RxRejectReason';
 import { PICKUP_SLOT_COUNT, PickupSlotTag, SLOT_FORMAT, defaultPickupSlot, pickupSlotOptions } from '../../lib/rxPickupSlot';
 
 dayjs.extend(buddhistEra);
@@ -55,6 +57,9 @@ interface RxOrder {
         | 'picked_up' | 'rejected' | 'closed';
     note: string | null;
     reject_reason: string | null;
+    /** กลุ่มเหตุผลที่ส่งกลับ (สถิติ) ใบเก่าไม่มี */
+    reject_category?: string | null;
+    reject_category_label?: string | null;
     submitted_by_name: string;
     submitted_at: string;
     ack_by_name: string | null;
@@ -88,7 +93,7 @@ interface RxEvent {
 }
 
 /** ข้อมูลเพิ่มที่มากับรายละเอียดใบ ไม่มีในรายการคิว */
-interface RxDetail { prev_reject_reason: string | null; prev_rejected_at: string | null }
+interface RxDetail { prev_reject_reason: string | null; prev_reject_category?: string | null; prev_reject_category_label?: string | null; prev_rejected_at: string | null }
 
 /** เกินเท่านี้ถือว่าค้างผิดปกติ ต่างกันตามความด่วน */
 const STALE_SECONDS = { stat: 5 * 60, discharge: 10 * 60, routine: 20 * 60 };
@@ -273,6 +278,17 @@ export default function PharmacyQueuePage() {
     const [busy, setBusy] = useState(false);
     const [rejecting, setRejecting] = useState(false);
     const [reason, setReason] = useState('');
+    /** กลุ่มเหตุผลที่ส่งกลับ บังคับเลือก · ข้อความเพิ่มเติมบังคับเฉพาะ "อื่น ๆ" */
+    const [rejectCat, setRejectCat] = useState('');
+    /* กลุ่มที่เปิดใช้ (เภสัชตั้งที่ /pharmacy/reject-categories) โหลดตอนกด "ส่งกลับ" ทุกครั้ง จะได้เห็นค่าล่าสุด */
+    const [rejectCats, setRejectCats] = useState<RejectCategory[]>([]);
+    const startReject = () => {
+        setRejecting(true);
+        axios.get(REJECT_CATEGORIES_API, { headers: authHeaders() })
+            .then(res => setRejectCats((res.data?.data ?? []) as RejectCategory[]))
+            .catch(() => message.error('โหลดกลุ่มเหตุผลไม่สำเร็จ'));
+    };
+    const rejectNeedsNote = rejectCats.find(c => c.code === rejectCat)?.require_note ?? false;
     /*
       เสียงเตือนเปิดไว้ตั้งแต่แรก เพราะเครื่องห้องยาเปิดหน้านี้ค้างไว้ทั้งเวร
       ถ้าต้องกดเปิดเองทุกครั้งที่เปิดจอ วันที่ลืมกดคือวันที่ใบด่วนค้างอยู่เงียบ ๆ
@@ -570,7 +586,7 @@ export default function PharmacyQueuePage() {
     const askSlot = (order: RxOrder, from: 'card' | 'open', mode: 'prepare' | 'change' = 'prepare') => {
         /* เปลี่ยนรอบ: เริ่มที่รอบเดิมถ้ายังเลือกได้ · ใบที่ยังไม่มีรอบเริ่มที่ชั่วโมงถัดไป */
         const cur = order.pickup_from ? dayjs(order.pickup_from).format(SLOT_FORMAT) : null;
-        const still = cur && pickupSlotOptions(order.submitted_at).some(o => o.value === cur && !o.disabled);
+        const still = cur && pickupSlotOptions(order.submitted_at).some(o => o.value === cur);
         setSlot(mode === 'change' && still ? cur : defaultPickupSlot(order.submitted_at));
         setSlotFor({ order, from, mode });
     };
@@ -622,6 +638,7 @@ export default function PharmacyQueuePage() {
             setBusy(false);
             setRejecting(false);
             setReason('');
+            setRejectCat('');
         }
     };
 
@@ -1183,9 +1200,9 @@ export default function PharmacyQueuePage() {
                                     </div>
                                 )}
 
-                                {r.status === 'rejected' && r.reject_reason && (
+                                {r.status === 'rejected' && (r.reject_reason || r.reject_category) && (
                                     <div className="text-xs text-red-500 mt-1.5 line-clamp-2">
-                                        {r.reject_reason}
+                                        <RejectReason label={r.reject_category_label} reason={r.reject_reason} />
                                     </div>
                                 )}
 
@@ -1322,7 +1339,7 @@ export default function PharmacyQueuePage() {
                                                 <span>
                                                     ใบเดิมถูกส่งกลับ{detail?.prev_rejected_at ? ` เมื่อ ${detail.prev_rejected_at}` : ''}
                                                     {detail?.prev_reject_reason
-                                                        ? <> เพราะ <b>{detail.prev_reject_reason}</b></>
+                                                        ? <> เพราะ <b><RejectReason label={detail.prev_reject_category_label} reason={detail.prev_reject_reason} /></b></>
                                                         : ''} · ใบเดิมปิดเรื่องไปแล้ว ไม่ต้องจ่ายซ้ำ
                                                 </span>
                                             }
@@ -1391,18 +1408,32 @@ export default function PharmacyQueuePage() {
                             <div className="p-3 border-t border-gray-200 flex flex-col gap-2">
                                 {rejecting ? (
                                     <>
+                                        {/* กลุ่มเหตุผล = ใช้ทำสถิติ · ข้อความ = รายละเอียดให้หอรู้ว่าต้องแก้อะไร */}
+                                        <Text className="text-xs text-gray-500">กลุ่มเหตุผลที่ส่งกลับ</Text>
+                                        <Radio.Group value={rejectCat} onChange={e => setRejectCat(e.target.value)} className="w-full">
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                {rejectCats.map(c => (
+                                                    <Radio.Button key={c.code} value={c.code}
+                                                        className="text-center rounded! text-xs! px-1! h-auto! leading-5! py-1!">
+                                                        {c.label}
+                                                    </Radio.Button>
+                                                ))}
+                                            </div>
+                                        </Radio.Group>
                                         <TextArea
                                             rows={3} value={reason} onChange={e => setReason(e.target.value)}
-                                            placeholder="เหตุผลที่ส่งกลับ เช่น ภาพไม่ชัด / ไม่มีลายเซ็นแพทย์"
+                                            placeholder={rejectNeedsNote
+                                                ? 'พิมพ์เหตุผลที่ส่งกลับ (จำเป็น)'
+                                                : 'รายละเอียดเพิ่มเติมให้หอ (ไม่บังคับ) เช่น หน้าที่ 2 ไม่ชัด'}
                                             maxLength={300}
                                         />
                                         <div className="flex gap-2">
-                                            <Button onClick={() => { setRejecting(false); setReason(''); }} className="flex-1">
+                                            <Button onClick={() => { setRejecting(false); setReason(''); setRejectCat(''); }} className="flex-1">
                                                 ยกเลิก
                                             </Button>
                                             <Button danger type="primary" loading={busy} className="flex-1"
-                                                disabled={reason.trim().length < 3}
-                                                onClick={() => act('reject', { reason: reason.trim() })}>
+                                                disabled={!rejectCat || (rejectNeedsNote && reason.trim().length < 3)}
+                                                onClick={() => act('reject', { category: rejectCat, reason: reason.trim() })}>
                                                 ยืนยันส่งกลับ
                                             </Button>
                                         </div>
@@ -1438,7 +1469,7 @@ export default function PharmacyQueuePage() {
                                             </Button>
                                         )}
                                         {(open.status === 'submitted' || open.status === 'acknowledged') && (
-                                            <Button danger icon={<PiArrowUUpLeftBold />} onClick={() => setRejecting(true)}>
+                                            <Button danger icon={<PiArrowUUpLeftBold />} onClick={startReject}>
                                                 ส่งกลับให้หอแก้
                                             </Button>
                                         )}
@@ -1502,7 +1533,7 @@ export default function PharmacyQueuePage() {
                     <div className="text-sm text-gray-500 mb-2">
                         {slotFor.order.patient_name || 'ไม่ระบุชื่อ'} · {slotFor.order.ward_name ?? '-'}
                         {' · '}หอส่งใบ {dayjs(slotFor.order.submitted_at).format('D MMM HH:mm')} น.
-                        <div className="text-xs">รอบละ 1 ชม. ทั้งหมด {PICKUP_SLOT_COUNT} รอบ นับจากเวลาที่หอส่งใบ · รอบที่ผ่านไปแล้วเลือกไม่ได้</div>
+                        <div className="text-xs">รอบละ 1 ชม. ทั้งหมด {PICKUP_SLOT_COUNT} รอบ นับจากเวลาที่หอส่งใบ · รอบที่ผ่านไปแล้ว (สีจาง) ยังเลือกได้ กรณีจัดเสร็จแล้วลืมบันทึก</div>
                     </div>
                 )}
                 <Radio.Group value={slot} onChange={e => setSlot(e.target.value)} className="w-full">
@@ -1511,8 +1542,9 @@ export default function PharmacyQueuePage() {
                             ยังไม่เลือกรอบ (แจ้งตึกว่ายาพร้อมแล้ว ไม่ระบุเวลา)
                         </Radio.Button>
                         {slotFor && pickupSlotOptions(slotFor.order.submitted_at).map(o => (
-                            <Radio.Button key={o.value} value={o.value} disabled={o.disabled} className="text-center tabular-nums rounded! px-1!">
-                                {o.label}
+                            <Radio.Button key={o.value} value={o.value}
+                                className={`text-center tabular-nums rounded! px-1! ${o.past && o.value !== slot ? 'opacity-60 border-dashed!' : ''}`}>
+                                {o.label}{o.past && <span className="text-[10px] ml-1">ผ่านแล้ว</span>}
                             </Radio.Button>
                         ))}
                     </div>

@@ -39,7 +39,18 @@ interface Dashboard {
         sla: Sla;
         durations: Record<Stage, Dur>;
         files: number; file_views: number;
+        /** ปรึกษาแพทย์ (ครั้ง / ใบ) และแก้ HN หลังส่ง (ครั้ง / ใบ) */
+        consults?: number; consult_orders?: number; hn_edits?: number; hn_edit_orders?: number;
     };
+    /** รอบรับยา — นับเฉพาะใบที่จัดยาเสร็จแล้ว */
+    pickup?: {
+        prepared: number; with_slot: number; retro: number;
+        early: number; on_time: number; late: number; overdue: number; upcoming: number;
+        late_by: { p50: number | null; p90: number | null };
+        t_pickup_slot_p50: number | null; t_pickup_none_p50: number | null;
+        changes: number; assigned_later: number;
+    };
+    slot_hours?: { hour: number; n: number; on_time: number; late: number }[];
     by_priority: { priority: RxPriority; orders: number; rejected: number; sla: Sla; durations: Record<Stage, Dur> }[];
     daily: {
         date: string; orders: number; stat: number; discharge: number; routine: number; rejected: number;
@@ -52,12 +63,15 @@ interface Dashboard {
         stat: number; discharge: number; routine: number;
         rejected: number; resends: number; unverified: number; tube_feed: number;
         sla: Sla; t_first: Dur; t_lead: Dur; t_pickup: Dur;
+        slot_n?: number; slot_late?: number; consulted?: number;
     }[];
     by_staff: {
-        username: string; name: string; ack: number; key: number; prep: number; handover: number; reject: number;
+        username: string; name: string; ack: number; key: number; prep: number; handover: number; reject: number; consult?: number;
         t_ack_p50: number | null; t_key_p50: number | null; t_prep_p50: number | null;
     }[];
     reject_reasons: { reason: string; n: number; last_at: string }[];
+    /** กลุ่มเหตุผลที่ส่งกลับ (สถิติ) · category 'unspecified' = ใบก่อนมีกลุ่ม */
+    reject_categories?: { category: string; label: string; n: number; wards: number; last_at: string }[];
     hn_source: { source: string; orders: number; verified: number; rejected: number }[];
     lead_histogram: { bucket: number; n: number }[];
     backlog: {
@@ -367,6 +381,52 @@ function WardVolume({ data, dark }: { data: Dashboard['by_ward']; dark: boolean 
     return <div ref={ref} style={{ height: Math.max(160, 48 + rows.length * 30) }} />;
 }
 
+/**
+ * ใบต่อรอบรับยา แยกว่าตึกมารับทันรอบไหม — แท่งซ้อน แกนเดียว
+ * สีสถานะ (ทัน = เขียว · เลยรอบ = แดง) มีชื่อกำกับใน legend และ tooltip เสมอ ไม่ใช้สีอย่างเดียว
+ */
+function SlotHours({ data, dark }: { data: NonNullable<Dashboard['slot_hours']>; dark: boolean }) {
+    const pal = dark ? PALETTE.dark : PALETTE.light;
+    const lo = Math.min(...data.map(d => d.hour));
+    const hi = Math.max(...data.map(d => d.hour));
+    const hours = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+    const at = (h: number) => data.find(d => d.hour === h);
+    const series = [
+        { name: 'มารับทันรอบ', color: STATUS.good.color, v: (h: number) => at(h)?.on_time ?? 0 },
+        { name: 'มารับเลยรอบ', color: STATUS.critical.color, v: (h: number) => at(h)?.late ?? 0 },
+        { name: 'ยังไม่มารับ / อื่น ๆ', color: pal.context, v: (h: number) => { const r = at(h); return r ? r.n - r.on_time - r.late : 0; } },
+    ];
+    const ref = useChart({
+        textStyle: baseText(dark),
+        grid: { left: 36, right: 16, top: 32, bottom: 32 },
+        legend: { top: 0, left: 0, itemWidth: 12, itemHeight: 12 },
+        tooltip: {
+            trigger: 'axis', axisPointer: { type: 'shadow' },
+            formatter: (ps: unknown) => {
+                const arr = ps as { dataIndex: number; seriesName: string; value: number; marker: string }[];
+                const h = hours[arr[0]?.dataIndex ?? 0];
+                const n = at(h)?.n ?? 0;
+                return `รอบ ${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00 · <b>${n} ใบ</b><br/>`
+                    + arr.map(p => `${p.marker}${p.seriesName} ${p.value}`).join('<br/>');
+            },
+        },
+        xAxis: {
+            type: 'category', axisTick: { show: false },
+            data: hours.map(h => `${String(h).padStart(2, '0')}:00`),
+        },
+        yAxis: { type: 'value', minInterval: 1, splitLine: grid(dark) },
+        series: series.map((x, i) => ({
+            name: x.name, type: 'bar', stack: 'n', barMaxWidth: 22,
+            data: hours.map(x.v),
+            itemStyle: {
+                color: x.color, borderColor: pal.surface, borderWidth: 1,
+                borderRadius: i === series.length - 1 ? [4, 4, 0, 0] : 0,
+            },
+        })),
+    }, [data, dark]);
+    return <div ref={ref} style={{ height: 280 }} />;
+}
+
 /* ───────────────────────── หน้า ───────────────────────── */
 
 /* สร้างตอนเปิดหน้า ไม่ใช่ตอนโหลดไฟล์ จอห้องยาเปิดค้างข้ามวัน "วันนี้" ต้องเป็นวันนี้จริง */
@@ -474,6 +534,19 @@ export default function RxDashboardPage() {
             render: (_, r) => <>{r.unverified} <span className="text-slate-400 text-xs">{fmtPct(share(r.unverified, r.orders))}</span></>,
         },
         { title: 'ฉบับแก้', dataIndex: 'resends', key: 'rs', align: 'right', width: 80 },
+        {
+            title: <Tooltip title="ใบที่มีรอบรับยา แล้วตึกมากดรับหลังรอบจบ">มารับเลยรอบ</Tooltip>,
+            key: 'sl', align: 'right', width: 110,
+            sorter: (a, b) => (share(a.slot_late ?? 0, a.slot_n ?? 0) ?? -1) - (share(b.slot_late ?? 0, b.slot_n ?? 0) ?? -1),
+            render: (_, r) => r.slot_n
+                ? <>{r.slot_late ?? 0} <span className="text-slate-400 text-xs">/ {r.slot_n} ใบ</span></>
+                : <span className="text-slate-400">–</span>,
+        },
+        {
+            title: <Tooltip title="ใบที่ห้องยาบันทึกว่าโทรปรึกษาแพทย์">ปรึกษาแพทย์</Tooltip>,
+            key: 'cs', align: 'right', width: 100, sorter: (a, b) => (a.consulted ?? 0) - (b.consulted ?? 0),
+            render: (_, r) => <>{r.consulted ?? 0} <span className="text-slate-400 text-xs">{fmtPct(share(r.consulted ?? 0, r.orders))}</span></>,
+        },
         { title: 'NG-Tube', dataIndex: 'tube_feed', key: 'tf2', align: 'right', width: 80 },
     ], []);
 
@@ -484,6 +557,11 @@ export default function RxDashboardPage() {
         { title: 'จัดยาเสร็จ', dataIndex: 'prep', key: 'p', align: 'right', width: 90, sorter: (a, b) => a.prep - b.prep },
         { title: 'ส่งมอบ', dataIndex: 'handover', key: 'h', align: 'right', width: 80, sorter: (a, b) => a.handover - b.handover },
         { title: 'ส่งกลับ', dataIndex: 'reject', key: 'r', align: 'right', width: 80, sorter: (a, b) => a.reject - b.reject },
+        {
+            title: <Tooltip title="จำนวนครั้งที่คนนี้บันทึกการโทรปรึกษาแพทย์">ปรึกษาแพทย์</Tooltip>,
+            key: 'c', align: 'right', width: 100, render: (_, r) => r.consult ?? 0,
+            sorter: (a, b) => (a.consult ?? 0) - (b.consult ?? 0),
+        },
         {
             title: <Tooltip title="ใบที่คนนี้กดรับ: นับจากหอส่งถึงกดรับ">รอรับ P50</Tooltip>,
             key: 'ta', align: 'right', width: 100, render: (_, r) => fmtDur(r.t_ack_p50),
@@ -700,6 +778,55 @@ export default function RxDashboardPage() {
                         </Section>
                     </div>
 
+                    {data.pickup && (() => {
+                        const pk = data.pickup;
+                        const came = pk.early + pk.on_time + pk.late;
+                        const onTimeRate = share(pk.early + pk.on_time, came);
+                        return (
+                            <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                                <div className="xl:col-span-2">
+                                    <Section title="รอบรับยาและการติดตาม"
+                                        hint="รอบรับยาเริ่มใช้ 21 พ.ย. 2569 ใบที่จัดเสร็จก่อนนั้นจะไม่มีรอบ · ปรึกษาแพทย์/แก้ HN นับจากประวัติของใบ">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Kpi label="เลือกรอบรับยาแล้ว" value={fmtPct(share(pk.with_slot, pk.prepared))}
+                                                sub={`${nf.format(pk.with_slot)} จาก ${nf.format(pk.prepared)} ใบที่จัดเสร็จ`}
+                                                hint="ใบที่ห้องยาเลือกรอบให้ตึกมารับ (ตอนจัดเสร็จ หรือมาเลือกทีหลัง)" />
+                                            <Kpi label="ตึกมารับทันรอบ" value={fmtPct(onTimeRate)} status={slaStatus(onTimeRate)}
+                                                sub={came ? `ในรอบ ${pk.on_time} · มาก่อน ${pk.early} · เลยรอบ ${pk.late}` : 'ยังไม่มีใบที่มีรอบและมารับแล้ว'}
+                                                hint="นับใบที่มีรอบและตึกกดรับยาแล้ว · มาก่อนรอบนับว่าทัน" />
+                                            <Kpi label="เลยรอบไปนานแค่ไหน (P50)" value={fmtDur(pk.late_by.p50)}
+                                                sub={pk.late ? `P90 ${fmtDur(pk.late_by.p90)}` : 'ไม่มีใบที่มาเลยรอบ'}
+                                                hint="เฉพาะใบที่ตึกมารับหลังรอบจบ นับจากเวลาสิ้นสุดรอบ" />
+                                            <Kpi label="ยังไม่มารับ เลยรอบแล้ว" value={nf.format(pk.overdue)}
+                                                status={pk.overdue > 0 ? STATUS.critical : null}
+                                                sub={`ยังไม่ถึงรอบ ${pk.upcoming} ใบ`}
+                                                hint="ใบในช่วงที่เลือกที่ยาวางรออยู่ และรอบจบไปแล้ว ควรโทรตามตึก" />
+                                            <Kpi label="ยารอตึกมารับ: มีรอบ (P50)" value={fmtDur(pk.t_pickup_slot_p50)}
+                                                sub={`ไม่มีรอบ ${fmtDur(pk.t_pickup_none_p50)}`}
+                                                hint="จัดยาเสร็จ → ตึกมารับ เทียบใบที่มีรอบกับไม่มีรอบ · มีรอบควรสั้นกว่าหรือตรงตามที่นัด" />
+                                            <Kpi label="เปลี่ยนรอบ" value={nf.format(pk.changes)}
+                                                sub={`เลือกทีหลัง ${pk.assigned_later} · บันทึกย้อนหลัง ${pk.retro}`}
+                                                hint="เปลี่ยน = แก้รอบที่เลือกไว้แล้ว · เลือกทีหลัง = ตอนจัดเสร็จยังไม่เลือก · ย้อนหลัง = รอบเริ่มก่อนชั่วโมงที่จัดเสร็จ (ลืมกดตอนจัดเสร็จ)" />
+                                            <Kpi label="ปรึกษาแพทย์" value={nf.format(s.consult_orders ?? 0)}
+                                                sub={`${fmtPct(share(s.consult_orders ?? 0, s.orders))} ของใบ · ${s.consults ?? 0} ครั้ง`}
+                                                hint="ใบที่ห้องยาบันทึกว่าโทรปรึกษาแพทย์ (หนึ่งใบโทรได้หลายครั้ง)" />
+                                            <Kpi label="แก้ HN หลังส่ง" value={nf.format(s.hn_edit_orders ?? 0)}
+                                                sub={`${fmtPct(share(s.hn_edit_orders ?? 0, s.orders))} ของใบ · ${s.hn_edits ?? 0} ครั้ง`}
+                                                hint="หอแก้หรือใส่ HN หลังส่งใบไปแล้ว — สูงแปลว่าตอนส่งใส่ HN ผิดบ่อย" />
+                                        </div>
+                                    </Section>
+                                </div>
+                                <div className="xl:col-span-3">
+                                    <Section title="ใบต่อรอบรับยา และการมารับ" hint="รอบไหนใบเยอะ รอบไหนตึกมาไม่ทัน · ใช้ปรับรอบให้ตรงกับเวลาที่ตึกมารับได้จริง">
+                                        {data.slot_hours && data.slot_hours.length > 0
+                                            ? <SlotHours data={data.slot_hours} dark={dark} />
+                                            : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="ยังไม่มีใบที่เลือกรอบรับยาในช่วงนี้" />}
+                                    </Section>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     <Section title="รายหอผู้ป่วย" hint="กดหัวคอลัมน์เพื่อเรียง · ใช้หาหอที่ส่งกลับบ่อยหรือ HN ไม่ยืนยันบ่อย (ควรอบรมการสแกน/ใส่ HN)">
                         <Table size="small" rowKey="ward" pagination={false} scroll={{ x: 'max-content' }}
                             dataSource={data.by_ward} columns={wardColumns} />
@@ -713,7 +840,33 @@ export default function RxDashboardPage() {
                             </Section>
                         </div>
                         <div className="xl:col-span-2 flex flex-col gap-4">
-                            <Section title="เหตุผลที่ส่งกลับ" hint="เหตุผลเดียวกันที่พิมพ์ต่างกันเล็กน้อยรวมเป็นบรรทัดเดียว">
+                            <Section title="กลุ่มเหตุผลที่ส่งกลับ" hint="เภสัชเลือกกลุ่มตอนส่งกลับ · ใช้ดูว่าควรแก้ที่ต้นเหตุไหน (อบรมการสแกน / การใส่ HN / ระบบส่งซ้ำ)">
+                                {(() => {
+                                    const cats = data.reject_categories ?? [];
+                                    const total = cats.reduce((a, c) => a + c.n, 0);
+                                    if (total === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="ไม่มีใบที่ส่งกลับ" />;
+                                    const max = Math.max(...cats.map(c => c.n));
+                                    return (
+                                        <ul className="m-0 p-0 list-none flex flex-col gap-2">
+                                            {cats.map(c => (
+                                                <li key={c.category} className="text-sm">
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className={`flex-1 min-w-0 ${c.category === 'unspecified' ? 'text-gray-500' : ''}`}>{c.label}</span>
+                                                        <span className="tabular-nums font-semibold">{c.n}</span>
+                                                        <span className="tabular-nums text-xs text-gray-500 w-12 text-right">{fmtPct(share(c.n, total))}</span>
+                                                    </div>
+                                                    {/* แท่งเดียวสีเดียว ความยาวเทียบกลุ่มที่มากที่สุด */}
+                                                    <div className="h-1.5 rounded bg-gray-100 mt-0.5">
+                                                        <div className="h-1.5 rounded" style={{ width: `${(c.n / max) * 100}%`, background: c.category === 'unspecified' ? '#a3a3a3' : '#ff4d4f' }} />
+                                                    </div>
+                                                    <div className="text-[11px] text-gray-500 mt-0.5">{c.wards} หอ · ล่าสุด {dayjs(c.last_at).format('D MMM')}</div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    );
+                                })()}
+                            </Section>
+                            <Section title="ข้อความเหตุผลที่ส่งกลับ" hint="เหตุผลเดียวกันที่พิมพ์ต่างกันเล็กน้อยรวมเป็นบรรทัดเดียว">
                                 {data.reject_reasons.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="ไม่มีใบที่ส่งกลับ" /> : (
                                     <ul className="m-0 p-0 list-none flex flex-col gap-1.5">
                                         {data.reject_reasons.map((r, i) => (

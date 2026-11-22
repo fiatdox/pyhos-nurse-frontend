@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Badge, Drawer, Segmented, Select, Tooltip } from 'antd';
 import {
     PiPillBold, PiListBold, PiCaretLeftBold, PiCaretRightBold, PiMoonBold,
-    PiArrowUUpLeftBold, PiFirstAidKitBold, PiBuildingsBold, PiSirenBold, PiChartBarBold,
+    PiArrowUUpLeftBold, PiFirstAidKitBold, PiBuildingsBold, PiSirenBold, PiChartBarBold, PiGearSixBold,
 } from 'react-icons/pi';
 import type { IconType } from 'react-icons';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
@@ -35,6 +35,11 @@ const NAV: { key: string; href: string; label: string; title: string; icon: Icon
     {
         key: 'pharmacy.dashboard',
         href: '/pharmacy/dashboard', label: 'วิเคราะห์', title: 'วิเคราะห์การรับส่งใบสั่งยา', icon: PiChartBarBold,
+    },
+    {
+        /* เภสัชตั้งกลุ่มเหตุผลที่ใช้ตอนส่งใบกลับ (ใช้ทำสถิติ) */
+        key: 'pharmacy.reject-categories',
+        href: '/pharmacy/reject-categories', label: 'ตั้งค่าเหตุผลส่งกลับ', title: 'ตั้งค่ากลุ่มเหตุผลส่งกลับ', icon: PiGearSixBold,
     },
 ];
 

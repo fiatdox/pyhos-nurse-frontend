@@ -14,30 +14,38 @@ export const SLOT_FORMAT = 'YYYY-MM-DD HH:00';
 /** จำนวนรอบที่ให้เลือก (รอบละ 1 ชม.) */
 export const PICKUP_SLOT_COUNT = 23;
 
+/** รอบย้อนหลังที่แสดงให้เลือก เมื่อใบส่งมานานจนรอบนับจากเวลาส่งผ่านไปหมดแล้ว */
+const PAST_SLOTS_FOR_OLD_ORDER = 11;
+
 /**
  * รอบรับยา 23 รอบ เริ่มจากชั่วโมงที่หอส่งใบมา
- * รอบที่ผ่านไปแล้ว (ก่อนชั่วโมงนี้) แสดงแต่เลือกไม่ได้ · เซิร์ฟเวอร์รับตั้งแต่ชั่วโมงนี้ถึง 24 ชม. ข้างหน้า
- * ใบที่ส่งมานานจนทุกรอบผ่านไปหมดแล้ว เริ่มนับจากชั่วโมงนี้แทน จะได้มีรอบให้เลือกเสมอ
+ * รอบที่ผ่านไปแล้วยังเลือกได้ (past = true แสดงจาง) — ห้องยาจัดเสร็จแล้วลืมกด กลับมากดทีหลังต้องบันทึกรอบจริงได้
+ * เซิร์ฟเวอร์รับตั้งแต่ชั่วโมงที่หอส่งใบ ถึง 24 ชม. ข้างหน้า
+ * ใบที่ส่งมานานจนทุกรอบผ่านไปหมด เริ่มที่ 11 ชม. ก่อนตอนนี้ (ไม่ก่อนเวลาส่ง) จะได้มีทั้งรอบย้อนหลังและรอบข้างหน้า
  */
 export const pickupSlotOptions = (submittedAt?: string | null) => {
     const now = dayjs().startOf('hour');
-    let start = submittedAt ? dayjs(submittedAt).startOf('hour') : now;
-    if (!start.isValid() || start.isAfter(now) || start.add(PICKUP_SLOT_COUNT - 1, 'hour').isBefore(now)) start = now;
+    const sub = submittedAt ? dayjs(submittedAt).startOf('hour') : null;
+    let start = sub && sub.isValid() && !sub.isAfter(now) ? sub : now;
+    if (start.add(PICKUP_SLOT_COUNT - 1, 'hour').isBefore(now)) {
+        const back = now.subtract(PAST_SLOTS_FOR_OLD_ORDER, 'hour');
+        start = sub && sub.isAfter(back) ? sub : back;
+    }
     return Array.from({ length: PICKUP_SLOT_COUNT }, (_, i) => {
         const from = start.add(i, 'hour');
         return {
             value: from.format(SLOT_FORMAT),
             label: slotRange(from.format('YYYY-MM-DD HH:mm')),
-            disabled: from.isBefore(now),
+            past: from.isBefore(now),
         };
     });
 };
 
-/** ค่าเริ่มต้น = รอบชั่วโมงถัดไป (เวลาเดินไปห้องยาได้ทัน) ถ้าไม่อยู่ในรายการ ใช้รอบแรกที่เลือกได้ */
+/** ค่าเริ่มต้น = รอบชั่วโมงถัดไป (เวลาเดินไปห้องยาได้ทัน) ถ้าไม่อยู่ในรายการ ใช้รอบแรกที่ยังไม่ผ่าน */
 export const defaultPickupSlot = (submittedAt?: string | null) => {
     const opts = pickupSlotOptions(submittedAt);
     const next = dayjs().startOf('hour').add(1, 'hour').format(SLOT_FORMAT);
-    return opts.find(o => o.value === next && !o.disabled)?.value ?? opts.find(o => !o.disabled)?.value ?? '';
+    return opts.find(o => o.value === next)?.value ?? opts.find(o => !o.past)?.value ?? opts[0]?.value ?? '';
 };
 
 /** "11:00–12:00" · ถ้าไม่ใช่วันนี้ใส่ "พรุ่งนี้" หรือวันที่นำหน้า */

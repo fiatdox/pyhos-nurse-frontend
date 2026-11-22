@@ -30,6 +30,7 @@ import { RxDay, byTime } from '../../lib/rxDate';
 import { PickupSlotTag, slotRange } from '../../lib/rxPickupSlot';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
+import RejectReason from '../../components/RxRejectReason';
 import RxConsultBox, { ConsultTag } from '../../components/RxConsultBox';
 import RxWardPatientPicker, { type WardPatient } from '../../components/RxWardPatientPicker';
 
@@ -173,6 +174,9 @@ interface RxOrder {
         | 'picked_up' | 'rejected' | 'closed';
     note: string | null;
     reject_reason: string | null;
+    /** กลุ่มเหตุผลที่ส่งกลับ ใบเก่าไม่มี */
+    reject_category?: string | null;
+    reject_category_label?: string | null;
     submitted_by_name: string;
     submitted_at: string;
     ack_by_name: string | null;
@@ -960,7 +964,7 @@ export default function RxOrderPage() {
         {
             title: 'เหตุผลที่ส่งกลับ', dataIndex: 'reject_reason', key: 'rr',
             render: (v: string | null, r) => v
-                ? <span className="text-red-500 text-xs">{v}{r.rejected_by_name ? ` (${r.rejected_by_name})` : ''}</span>
+                ? <span className="text-red-500 text-xs"><RejectReason label={r.reject_category_label} reason={v} />{r.rejected_by_name ? ` (${r.rejected_by_name})` : ''}</span>
                 : <span className="text-gray-500">-</span>,
         },
     ];
@@ -990,7 +994,7 @@ export default function RxOrderPage() {
                                     <div>
                                         เหตุผลที่ถูกส่งกลับ:{' '}
                                         <span className="text-red-500 font-semibold">
-                                            {resendOf.reject_reason || 'ไม่ระบุ'}
+                                            <RejectReason label={resendOf.reject_category_label} reason={resendOf.reject_reason} />
                                         </span>
                                         {resendOf.rejected_by_name ? ` (${resendOf.rejected_by_name})` : ''}
                                     </div>
@@ -1524,7 +1528,7 @@ export default function RxOrderPage() {
 
                                         {r.status === 'rejected' && r.reject_reason && (
                                             <div className="text-xs text-red-500 mt-1.5 line-clamp-2">
-                                                {r.reject_reason}
+                                                <RejectReason label={r.reject_category_label} reason={r.reject_reason} />
                                             </div>
                                         )}
                                     </BoardCard>
@@ -1656,7 +1660,7 @@ export default function RxOrderPage() {
                                     title="ห้องยาส่งกลับให้แก้"
                                     description={
                                         <span className="text-xs">
-                                            {viewing.reject_reason}
+                                            <RejectReason label={viewing.reject_category_label} reason={viewing.reject_reason} />
                                             {viewing.rejected_by_name ? ` (${viewing.rejected_by_name})` : ''}
                                         </span>
                                     }
