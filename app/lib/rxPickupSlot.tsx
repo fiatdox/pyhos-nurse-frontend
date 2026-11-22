@@ -1,8 +1,9 @@
 'use client';
 
+import { useEffect, useState, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
 import dayjs from 'dayjs';
-import { Tag, Tooltip } from 'antd';
-import { PiClockBold } from 'react-icons/pi';
+import { Button, Popconfirm, Tag, Tooltip } from 'antd';
+import { PiClockBold, PiHandGrabbingBold } from 'react-icons/pi';
 
 /**
  * รอบรับยา: ห้องยากำหนดช่วงเวลา 1 ชั่วโมงให้ตึกมารับ ตอนกด "จัดยาเสร็จ"
@@ -69,5 +70,57 @@ export function PickupSlotTag({ from, to, className = '' }: { from?: string | nu
                 <PiClockBold /> รับยา {slotRange(from, to)}
             </Tag>
         </Tooltip>
+    );
+}
+
+/**
+ * ถึงรอบรับยาแล้วหรือยัง · ไม่มีรอบ = รับได้ทันที
+ * ตั้งเวลาปลุกตอนรอบเริ่ม ปุ่มจะเปิดเองโดยไม่ต้องรีเฟรชหน้า (เซิร์ฟเวอร์ตรวจซ้ำอีกชั้น)
+ */
+export const usePickupOpen = (from?: string | null) => {
+    const [now, setNow] = useState(() => Date.now());
+    const start = from ? dayjs(from).valueOf() : null;
+    useEffect(() => {
+        if (start === null || now >= start) return;
+        /* setTimeout รับได้ไม่เกิน ~24.8 วัน · รอบอยู่ภายใน 24 ชม. อยู่แล้ว เผื่อไว้ */
+        const t = setTimeout(() => setNow(Date.now()), Math.min(start - now + 500, 2_000_000_000));
+        return () => clearTimeout(t);
+    }, [start, now]);
+    return start === null || now >= start;
+};
+
+/**
+ * ปุ่มบันทึกว่าตึกรับยาไปแล้ว ใช้ทั้งหน้าหอและหน้าห้องยา
+ * ก่อนถึงรอบกดไม่ได้ (บอกเวลาที่จะกดได้) · ถึงรอบแล้วถามยืนยันก่อน เพราะกดแล้วใบออกจากคิวทั้งสองฝั่ง
+ */
+export function PickupButton({ from, to, onConfirm, loading, label = 'รับยาแล้ว', confirmTitle = 'ยืนยันว่ารับยาของใบนี้แล้ว?',
+    beforeHint = '', size, type = 'primary', block, className, icon }: {
+    from?: string | null; to?: string | null; onConfirm: () => void | Promise<unknown>; loading?: boolean;
+    label?: ReactNode; confirmTitle?: ReactNode; beforeHint?: string;
+    size?: 'small' | 'middle' | 'large'; type?: 'primary' | 'default'; block?: boolean; className?: string; icon?: ReactNode;
+}) {
+    const open = usePickupOpen(from);
+    const stop = (e?: RMouseEvent) => e?.stopPropagation();
+    const btnIcon = icon ?? <PiHandGrabbingBold />;
+    if (!open && from) {
+        return (
+            <Tooltip title={`กดได้ตั้งแต่ ${slotRange(from, to).replace(/–.*/, '')} น.${beforeHint ? ` · ${beforeHint}` : ''}`}>
+                {/* span ครอบเพราะปุ่มที่ disabled ไม่ส่ง event ให้ Tooltip */}
+                <span onClick={stop} className={block ? 'block' : 'inline-block'}>
+                    <Button size={size} block={block} className={className} icon={<PiClockBold />} disabled>
+                        รอถึงรอบ {dayjs(from).format('HH:mm')}
+                    </Button>
+                </span>
+            </Tooltip>
+        );
+    }
+    return (
+        <Popconfirm title={confirmTitle} description="ใบจะออกจากคิวของห้องยาและของหอ" okText="รับแล้ว" cancelText="ยกเลิก"
+            onConfirm={e => { stop(e as RMouseEvent | undefined); return onConfirm(); }}
+            onCancel={e => stop(e as RMouseEvent | undefined)}>
+            <Button size={size} type={type} block={block} className={className} icon={btnIcon} loading={loading} onClick={stop}>
+                {label}
+            </Button>
+        </Popconfirm>
     );
 }

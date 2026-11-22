@@ -17,7 +17,7 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import {
     PiPaperPlaneTiltBold, PiUploadSimpleBold, PiArrowsClockwiseBold, PiWarningBold,
     PiBroadcastBold, PiPlugsBold, PiTrashBold, PiFilePdfBold, PiNotePencilBold, PiEyeBold,
-    PiMagnifyingGlassBold, PiPackageBold, PiSquaresFourBold, PiRowsBold, PiCheckCircleBold,
+    PiMagnifyingGlassBold, PiPackageBold, PiSquaresFourBold, PiRowsBold, PiCheckCircleBold, PiArrowCounterClockwiseBold,
 } from 'react-icons/pi';
 import Navbar from '../../components/Navbar';
 import { useRxSocket, createBeeper } from '../../lib/rxSocket';
@@ -27,11 +27,11 @@ import { PRIORITY, PriorityDot, type RxPriority } from '../../lib/rxPriority';
 import { TubeFeedTag } from '../../lib/rxTubeFeed';
 import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
-import { PickupSlotTag, slotRange } from '../../lib/rxPickupSlot';
+import { PickupButton, PickupSlotTag, slotRange } from '../../lib/rxPickupSlot';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 import RxFileViewer, { type RxFile } from '../../components/RxFileViewer';
 import RejectReason from '../../components/RxRejectReason';
-import RxConsultBox, { ConsultTag } from '../../components/RxConsultBox';
+import RxConsultBox, { ConsultNote } from '../../components/RxConsultBox';
 import RxWardPatientPicker, { type WardPatient } from '../../components/RxWardPatientPicker';
 
 dayjs.extend(buddhistEra);
@@ -661,6 +661,27 @@ export default function RxOrderPage() {
         }
     };
 
+    /**
+     * ตึกรับยาแล้ว — หอกดเองที่เคาน์เตอร์ห้องยาหรือกลับมาถึงตึก
+     * กดได้ตั้งแต่รอบเริ่ม (เซิร์ฟเวอร์ตรวจซ้ำ) · กดแล้วใบหายจากคิวห้องยาทันทีผ่าน realtime
+     */
+    const [pickingUp, setPickingUp] = useState<string | null>(null);
+    const pickupOrder = async (r: RxOrder) => {
+        setPickingUp(r.rx_order_id);
+        try {
+            await axios.post(`/api/v1/rx/orders/${r.rx_order_id}/pickup`, {}, { headers: authHeaders() });
+            message.success('บันทึกว่ารับยาแล้ว ใบนี้ออกจากคิวห้องยา');
+            setViewing(v => (v?.rx_order_id === r.rx_order_id ? null : v));
+            fetchOrders(ward);
+        } catch (err) {
+            const res = axios.isAxiosError(err) ? err.response : undefined;
+            message.error((res?.data as { message?: string } | undefined)?.message ?? 'บันทึกการรับยาไม่สำเร็จ');
+            if (res?.status === 409) fetchOrders(ward);
+        } finally {
+            setPickingUp(null);
+        }
+    };
+
     /** กดจากใบที่ถูกส่งกลับ: เตรียมฟอร์มด้านบนให้พร้อม เหลือแค่ลากไฟล์ใหม่มาวาง */
     const startResend = (r: RxOrder) => {
         setResendOf(r);
@@ -875,8 +896,6 @@ export default function RxOrderPage() {
             render: (v: string, r) => (
                 <div className="leading-tight">
                     <div className="text-sm font-semibold tabular-nums">{dayjs(v).format('HH:mm')}</div>
-                    {/* โทรศัพท์ใต้เวลา = มีคนโทรปรึกษาแพทย์เรื่องใบนี้แล้ว ชี้ค้างดูรายละเอียด */}
-                    <ConsultTag at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
                     {r.status === 'prepared' && (
                         <PickupSlotTag from={r.pickup_from} to={r.pickup_to} className="mt-1 text-[11px]! leading-4! px-1!" />
                     )}
@@ -899,6 +918,8 @@ export default function RxOrderPage() {
                     <div className="text-xs text-gray-500">
                         HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}
                     </div>
+                    {/* ห้องยาหรือหอบันทึกว่าโทรปรึกษาแพทย์แล้ว — เห็นข้อความทันที ไม่ต้องเปิดใบ */}
+                    <ConsultNote className="mt-1" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
                 </div>
             ),
         },
@@ -940,6 +961,12 @@ export default function RxOrderPage() {
                         )}
                         {r.prepared_by_name && (
                             <div className="text-xs text-gray-500">จัดยาโดย {r.prepared_by_name}</div>
+                        )}
+                        {r.status === 'prepared' && (
+                            <PickupButton size="small" className="mt-1.5" from={r.pickup_from} to={r.pickup_to}
+                                loading={pickingUp === r.rx_order_id} onConfirm={() => pickupOrder(r)}
+                                confirmTitle={`ยืนยันว่ารับยาของ ${r.patient_name || `HN ${r.hn ?? '-'}`} แล้ว?`}
+                                beforeHint="มาก่อนรอบ ให้แจ้งห้องยาเปลี่ยนรอบ" />
                         )}
                         {stale && (
                             <Tooltip title="ห้องยายังไม่กดรับ หากเร่งด่วนให้โทรแจ้งห้องยาโดยตรง">
@@ -1499,12 +1526,12 @@ export default function RxOrderPage() {
                                             <span className="min-w-0">
                                                 {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
                                             </span>
-                                            <ConsultTag className="ml-auto shrink-0" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
                                         </div>
                                         {r.tube_feed && <TubeFeedTag compact className="mt-1" />}
                                         <div className="text-xs text-gray-500 tabular-nums">
                                             HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}
                                         </div>
+                                        <ConsultNote className="mt-1.5" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
 
                                         <div className="flex flex-wrap items-center gap-1 mt-1.5">
                                             {r.files_purged
@@ -1517,6 +1544,12 @@ export default function RxOrderPage() {
                                                 </Tag>
                                             )}
                                         </div>
+                                        {r.status === 'prepared' && (
+                                            <PickupButton size="small" block className="mt-1.5" from={r.pickup_from} to={r.pickup_to}
+                                                loading={pickingUp === r.rx_order_id} onConfirm={() => pickupOrder(r)}
+                                                confirmTitle={`ยืนยันว่ารับยาของ ${r.patient_name || `HN ${r.hn ?? '-'}`} แล้ว?`}
+                                                beforeHint="มาก่อนรอบ ให้แจ้งห้องยาเปลี่ยนรอบ" />
+                                        )}
 
                                         {/* ใบที่ห้องยายังไม่รับและรอนานผิดปกติ คือใบที่หอต้องโทรตาม */}
                                         {stale && (
@@ -1631,11 +1664,33 @@ export default function RxOrderPage() {
                               หอกดปิดเรื่องได้เอง เพราะหอเป็นคนรู้ว่าแก้แล้วส่งใบใหม่ไปหรือยัง
                               ใบเดิมไม่ได้ถูกลบ แค่ออกจากคิว ยังค้นด้วย HN เจอ
                             */}
+                            {viewing.status === 'prepared' && (
+                                <div className="flex flex-col gap-2">
+                                    {viewing.pickup_from && (
+                                        <PickupSlotTag from={viewing.pickup_from} to={viewing.pickup_to} className="justify-center py-1" />
+                                    )}
+                                    <PickupButton block size="large" from={viewing.pickup_from} to={viewing.pickup_to}
+                                        loading={pickingUp === viewing.rx_order_id} onConfirm={() => pickupOrder(viewing)}
+                                        beforeHint="มาก่อนรอบ ให้แจ้งห้องยาเปลี่ยนรอบ" />
+                                </div>
+                            )}
+
                             {viewing.status === 'rejected' && (
                                 <div className="flex flex-col gap-2">
+                                    {/*
+                                      ตีกลับเพราะเลือกประเภทผิด: แก้ประเภทแล้วส่งใหม่ด้วยไฟล์เดิม ไม่ต้องสแกน
+                                      กลุ่ม wrong_type เปิดฟอร์มไว้ให้เลย · กลุ่มอื่นยังกดเปิดได้ (เช่น เภสัชเลือกกลุ่มอื่นแต่พิมพ์ว่าประเภทผิด)
+                                    */}
+                                    {!viewing.files_purged && (
+                                        <ResubmitTypePanel
+                                            key={viewing.rx_order_id}
+                                            order={viewing}
+                                            onDone={() => { setViewing(null); fetchOrders(ward); }}
+                                        />
+                                    )}
                                     {/* ทางหลัก: สแกนใหม่แล้วส่งซ้ำ ใบเดิมปิดให้เองตอนส่งสำเร็จ */}
                                     <Button
-                                        block type="primary"
+                                        block type={viewing.reject_category === 'wrong_type' ? 'default' : 'primary'}
                                         icon={<PiUploadSimpleBold />}
                                         onClick={() => startResend(viewing)}
                                     >
@@ -1746,6 +1801,75 @@ interface LookupResult {
  * ห้องยาอาจคีย์ลง HIS ไปแล้วในชื่อคนเดิม หมายเหตุคือสิ่งที่บอกเขาว่าต้องไปตามแก้อะไร
  * HIS ล่มยังบันทึกได้ (ห้องยาจะเห็นว่ายังไม่ได้ยืนยัน) เหมือนตอนส่งใบ
  */
+/**
+ * แก้ประเภทแล้วส่งใหม่ (ใช้ไฟล์เดิม) — ห้องยาตีกลับเพราะเลือกประเภทผิด
+ * เซิร์ฟเวอร์สร้างใบใหม่ เริ่มนับเวลาใหม่ และปิดใบเดิมให้ (POST /orders/:id/resubmit)
+ */
+function ResubmitTypePanel({ order, onDone }: { order: RxOrder; onDone: () => void }) {
+    const { message } = App.useApp();
+    const wrongType = order.reject_category === 'wrong_type';
+    const [open, setOpen] = useState(wrongType);
+    const [prio, setPrio] = useState<RxPriority>(order.priority);
+    const [tube, setTube] = useState(order.tube_feed);
+    const [busy, setBusy] = useState(false);
+    const changed = prio !== order.priority || tube !== order.tube_feed;
+
+    const submit = async () => {
+        setBusy(true);
+        try {
+            await axios.post(`/api/v1/rx/orders/${order.rx_order_id}/resubmit`, { priority: prio, tube_feed: tube }, { headers: authHeaders() });
+            message.success('ส่งใบใหม่ให้ห้องยาแล้ว เริ่มนับเวลาใหม่ · ใบเดิมปิดให้แล้ว');
+            onDone();
+        } catch (err) {
+            const res = axios.isAxiosError(err) ? err.response : undefined;
+            message.error((res?.data as { message?: string } | undefined)?.message ?? 'ส่งใหม่ไม่สำเร็จ');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (!open) {
+        return (
+            <Button block icon={<PiArrowCounterClockwiseBold />} onClick={() => setOpen(true)}>
+                แก้ประเภท แล้วส่งใหม่ (ใช้ไฟล์เดิม)
+            </Button>
+        );
+    }
+    return (
+        <div className="rounded-md border border-blue-300 bg-blue-50 p-2.5 flex flex-col gap-2">
+            <div className="text-sm font-semibold flex items-center gap-1.5">
+                <PiArrowCounterClockwiseBold /> แก้ประเภท แล้วส่งใหม่
+            </div>
+            <div className="text-xs text-gray-500">
+                ใช้ภาพและ HN เดิม ไม่ต้องสแกน · ห้องยาเห็นเป็นใบเข้าใหม่ เริ่มนับเวลาใหม่ตั้งแต่ตอนกด
+            </div>
+            <div>
+                <Text className="text-xs text-gray-500 block mb-1">
+                    ความเร่งด่วน <span className="text-gray-400">(เดิม: {PRIORITY[order.priority].label})</span>
+                </Text>
+                <Radio.Group value={prio} onChange={e => setPrio(e.target.value)} optionType="button" buttonStyle="solid" size="small">
+                    <Radio.Button value="routine">ปกติ</Radio.Button>
+                    <Radio.Button value="discharge">ยากลับบ้าน</Radio.Button>
+                    <Radio.Button value="stat">STAT</Radio.Button>
+                </Radio.Group>
+            </div>
+            <Checkbox checked={tube} onChange={e => setTube(e.target.checked)}>
+                <span className="text-sm">ผู้ป่วยได้รับอาหารทางสายยาง (NG-Tube)</span>
+                {tube !== order.tube_feed && <span className="text-xs text-gray-500"> · เดิม: {order.tube_feed ? 'ใช่' : 'ไม่ใช่'}</span>}
+            </Checkbox>
+            <div className="flex gap-2">
+                {!wrongType && <Button size="small" className="flex-1" onClick={() => setOpen(false)}>ยกเลิก</Button>}
+                <Tooltip title={changed ? '' : 'ยังไม่ได้เปลี่ยนประเภท'}>
+                    <Button type="primary" className="flex-1" icon={<PiPaperPlaneTiltBold />} loading={busy}
+                        disabled={!changed} onClick={submit}>
+                        ส่งใหม่ให้ห้องยา
+                    </Button>
+                </Tooltip>
+            </div>
+        </div>
+    );
+}
+
 function EditHnPanel({ order, onSaved }: {
     order: RxOrder;
     onSaved: (d: Pick<RxOrder, 'hn' | 'an' | 'patient_name' | 'his_verified'>) => void;

@@ -61,6 +61,29 @@ export function ConsultTag({ at, note, by, count, className }: {
     );
 }
 
+/**
+ * ข้อความปรึกษาแพทย์ล่าสุดแบบเห็นทันทีในรายการ ไม่ต้องชี้ค้าง (แท็บเล็ตที่หอไม่มี hover)
+ * ข้อความยาวตัดเหลือ 2 บรรทัด · ชี้หรือแตะดูเต็ม · มีหลายครั้งบอกจำนวน ดูครบในหน้าต่างดูใบ
+ */
+export function ConsultNote({ at, note, by, count, className }: {
+    at: string | null | undefined; note?: string | null; by?: string | null; count?: number; className?: string;
+}) {
+    if (!at) return null;
+    return (
+        <Tooltip title={<span className="whitespace-pre-wrap">{note || '-'}</span>}>
+            <div className={`rounded border border-cyan-300 bg-cyan-50 px-1.5 py-1 text-xs leading-snug text-left ${className ?? ''}`}>
+                <div className="flex items-center gap-1 font-semibold text-cyan-800 whitespace-nowrap">
+                    <PiPhoneCallBold className="shrink-0" />
+                    ปรึกษาแพทย์แล้ว
+                    {count && count > 1 ? <span className="ml-auto font-normal tabular-nums">{count} ครั้ง</span> : null}
+                </div>
+                {note && <div className="line-clamp-2 wrap-break-word whitespace-pre-wrap">{note}</div>}
+                <div className="text-[11px] text-gray-500 tabular-nums">{fmt(at)} น.{by ? ` · ${by}` : ''}</div>
+            </div>
+        </Tooltip>
+    );
+}
+
 export default function RxConsultBox({ orderId, events, onSaved }: {
     orderId: string;
     /** ประวัติทั้งหมดของใบ คัดเฉพาะ consult ข้างใน */

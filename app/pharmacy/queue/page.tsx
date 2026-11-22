@@ -35,7 +35,7 @@ import { RxDay, byTime } from '../../lib/rxDate';
 import RxBoard, { BoardCard, type BoardColumn } from '../../components/RxBoard';
 import { REJECT_CATEGORIES_API, type RejectCategory } from '../../lib/rxReject';
 import RejectReason from '../../components/RxRejectReason';
-import { PICKUP_SLOT_COUNT, PickupSlotTag, SLOT_FORMAT, defaultPickupSlot, pickupSlotOptions } from '../../lib/rxPickupSlot';
+import { PICKUP_SLOT_COUNT, PickupButton, PickupSlotTag, SLOT_FORMAT, defaultPickupSlot, pickupSlotOptions } from '../../lib/rxPickupSlot';
 
 dayjs.extend(buddhistEra);
 dayjs.locale('th');
@@ -523,7 +523,14 @@ export default function PharmacyQueuePage() {
             */
             if (live) fetchRows(); else setMissed(n => n + 1);
         },
-        onStatus: e => { if (mine(e) && live) fetchRows(); },
+        onStatus: e => {
+            /* หอกดรับยาเอง (หรืออีกเครื่องกด) ขณะเปิดใบนี้อยู่ — ปิดแผงด้วย ไม่ให้ค้างปุ่มที่กดไม่ได้แล้ว */
+            if ((e.status === 'picked_up' || e.status === 'closed') && open?.rx_order_id === e.rx_order_id && !busy) {
+                setOpen(null);
+                message.info(`ใบนี้บันทึกรับยาแล้ว · ${e.by_name}`);
+            }
+            if (mine(e) && live) fetchRows();
+        },
         /*
           หอแก้ HN = ใบที่อาจคีย์ไปแล้วในชื่อคนผิด มีเสียงและค้างจนกดปิดเสมอ ไม่ขึ้นกับความด่วน
           ไม่กรองด้วยความด่วนที่เครื่องนี้รับ เพราะเครื่องที่รับใบนี้ไปแล้วต้องรู้แน่ ๆ
@@ -1208,7 +1215,16 @@ export default function PharmacyQueuePage() {
 
                                 {/* ปุ่มบนการ์ดไม่ควรเปิดหน้าต่างดูใบไปด้วย จึงกันคลิกไม่ให้ไหลขึ้นไปถึงการ์ด */}
                                 <div className="flex gap-1.5 mt-2" onClick={e => e.stopPropagation()}>
-                                    {next && (
+                                    {/* ตึกมารับ: ก่อนรอบเริ่มกดไม่ได้ ตึกมาก่อนให้กดดินสอเปลี่ยนรอบก่อน */}
+                                    {next?.path === 'pickup' ? (
+                                        <div className="flex-1">
+                                            <PickupButton size="small" block from={r.pickup_from} to={r.pickup_to}
+                                                label={next.label} loading={cardBusy === r.rx_order_id}
+                                                confirmTitle={`ยืนยันว่าตึกมารับยาของ ${r.patient_name || 'ใบนี้'} แล้ว?`}
+                                                beforeHint="ตึกมาก่อนรอบ ให้เปลี่ยนรอบก่อน"
+                                                onConfirm={() => quickAct(r, 'pickup')} />
+                                        </div>
+                                    ) : next && (
                                         <Button
                                             size="small" type="primary" className="flex-1"
                                             loading={cardBusy === r.rx_order_id}
@@ -1483,10 +1499,10 @@ export default function PharmacyQueuePage() {
                                             </Button>
                                         )}
                                         {open.status === 'prepared' && (
-                                            <Button type="primary" size="large" icon={<PiHandGrabbingBold />}
-                                                loading={busy} onClick={() => act('pickup')}>
-                                                ตึกมารับยาแล้ว
-                                            </Button>
+                                            <PickupButton block size="large" from={open.pickup_from} to={open.pickup_to}
+                                                label="ตึกมารับยาแล้ว" loading={busy} onConfirm={() => act('pickup')}
+                                                confirmTitle="ยืนยันว่าตึกมารับยาของใบนี้แล้ว?"
+                                                beforeHint="ตึกมาก่อนรอบ ให้กดเปลี่ยนรอบรับยาก่อน" />
                                         )}
                                         {open.status === 'rejected' && (
                                             <Button icon={<PiCheckCircleBold />} loading={busy} onClick={() => act('close')}>
