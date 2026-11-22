@@ -29,6 +29,12 @@ export interface RxOrderEvent {
     pickup_to?: string;
     /** true = ห้องยาเปลี่ยน/กำหนดรอบรับยาของใบที่จัดเสร็จแล้ว */
     slot_changed?: boolean;
+    /** order:ward — หอย้ายตึกของใบ ward = ตึกใหม่ */
+    from_ward?: number;
+    from_ward_name?: string;
+    ward_name?: string;
+    /** order:ward — true = ห้องยากดรับทราบการย้ายแล้ว (ไม่ใช่การย้ายครั้งใหม่) */
+    ward_ack?: boolean;
 }
 
 type Room = { kind: 'pharmacy' } | { kind: 'ward'; ward: number | undefined };
@@ -43,6 +49,8 @@ interface Options {
     onHn?: (e: RxOrderEvent) => void;
     /** เรียกเมื่อมีคนบันทึกว่าโทรปรึกษาแพทย์ — reason คือข้อความที่บันทึก */
     onConsult?: (e: RxOrderEvent) => void;
+    /** เรียกเมื่อหอย้ายตึกของใบ — ส่งถึงทั้งตึกเดิม (from_ward) และตึกใหม่ (ward) */
+    onWard?: (e: RxOrderEvent) => void;
     /** เรียกทุกครั้งที่ต่อติด เพื่อให้หน้าจอไปดึงรายการใหม่ ปิดช่องว่างระหว่างที่หลุด */
     onReconnect?: () => void;
 }
@@ -69,14 +77,14 @@ const socketUrl = (): string => {
     return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws/rx';
 };
 
-export const useRxSocket = ({ room, onNew, onStatus, onHn, onConsult, onReconnect }: Options) => {
+export const useRxSocket = ({ room, onNew, onStatus, onHn, onConsult, onWard, onReconnect }: Options) => {
     const [connected, setConnected] = useState(false);
     /*
       เก็บ callback ไว้ใน ref เพราะหน้าจอสร้างฟังก์ชันใหม่ทุกรอบที่วาด
       ถ้าผูกเข้ากับ useEffect ตรง ๆ จะตัดแล้วต่อใหม่ทุกครั้งที่ state เปลี่ยน
     */
-    const cb = useRef({ onNew, onStatus, onHn, onConsult, onReconnect });
-    cb.current = { onNew, onStatus, onHn, onConsult, onReconnect };
+    const cb = useRef({ onNew, onStatus, onHn, onConsult, onWard, onReconnect });
+    cb.current = { onNew, onStatus, onHn, onConsult, onWard, onReconnect };
 
     const roomKey = room.kind === 'pharmacy' ? 'pharmacy' : `ward:${room.ward ?? ''}`;
 
@@ -130,6 +138,9 @@ export const useRxSocket = ({ room, onNew, onStatus, onHn, onConsult, onReconnec
                         break;
                     case 'order:consult':
                         cb.current.onConsult?.(msg as RxOrderEvent);
+                        break;
+                    case 'order:ward':
+                        cb.current.onWard?.(msg as RxOrderEvent);
                         break;
                     default:
                         break;

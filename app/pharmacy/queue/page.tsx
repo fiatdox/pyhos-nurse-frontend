@@ -18,7 +18,7 @@ import {
     PiWarningBold, PiSpeakerHighBold, PiSpeakerSlashBold, PiBroadcastBold, PiPlugsBold,
     PiClockCountdownBold, PiPackageBold, PiMagnifyingGlassBold, PiSquaresFourBold, PiRowsBold,
     PiQuestionBold, PiShieldCheckBold,
-    PiClockBold, PiPencilSimpleBold,
+    PiClockBold, PiPencilSimpleBold, PiArrowsLeftRightBold,
 } from 'react-icons/pi';
 import { getUserProfile } from '../../lib/auth';
 import { usePharmacy } from '../PharmacyShell';
@@ -82,6 +82,14 @@ interface RxOrder {
     consult_note: string | null;
     consult_by_name: string | null;
     consult_count: number;
+    /** หอย้ายตึกของใบหลังส่ง (ครั้งล่าสุด) — ชื่อตึกเดิม (จัดยาเข้าช่องของ ward_name ปัจจุบัน) */
+    moved_from_name?: string | null;
+    moved_note?: string | null;
+    moved_by_name?: string | null;
+    moved_at?: string | null;
+    /** ห้องยายังไม่กดรับทราบการย้ายครั้งล่าสุด */
+    ward_move_pending?: boolean;
+    ward_ack_by_name?: string | null;
 }
 
 interface RxEvent {
@@ -140,7 +148,7 @@ const ACTION_LABEL: Record<string, string> = {
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     resend: 'หอส่งฉบับแก้',
     reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
-    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN', consult: 'ปรึกษาแพทย์',
+    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN', consult: 'ปรึกษาแพทย์', change_ward: 'หอย้ายตึก',
     set_pickup_slot: 'เปลี่ยนรอบรับยา',
 };
 
@@ -184,6 +192,33 @@ const ACT_DONE: Record<string, string> = {
  * รอบรับยาบนการ์ด/แถว + ไอคอนดินสอกดเปลี่ยนรอบ (ไม่เปิดหน้าต่างใบ)
  * ยังไม่มีรอบ = ข้อความจาง "ยังไม่กำหนดรอบ" + ไอคอนเดียวกัน
  */
+/**
+ * หอย้ายตึกของใบ และห้องยายังไม่กดรับทราบ — ใบเดินขั้นตอนต่อตามเดิม ไม่ได้เริ่มใหม่
+ * ค้างบนการ์ดจนเภสัชกดยืนยันว่าย้ายยา/ช่องรับไปตึกใหม่แล้ว
+ */
+function WardMoveBanner({ order, busy, onAck, className = '' }: {
+    order: RxOrder; busy: boolean; onAck: () => void; className?: string;
+}) {
+    if (!order.ward_move_pending) return null;
+    return (
+        <div className={`rounded border-2 border-indigo-400 bg-indigo-50 px-2 py-1.5 text-xs leading-snug ${className}`}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-1 font-semibold text-indigo-800">
+                <PiArrowsLeftRightBold className="shrink-0" />
+                ย้ายตึก: {order.moved_from_name ?? '-'} → {order.ward_name ?? '-'}
+            </div>
+            {order.moved_note && <div className="line-clamp-2 wrap-break-word">{order.moved_note}</div>}
+            <div className="text-[11px] text-gray-500">
+                {order.moved_at ? `${dayjs(order.moved_at).format('D MMM HH:mm')} น. · ` : ''}{order.moved_by_name ?? ''}
+                {order.status === 'prepared' ? ' · ยาจัดเสร็จแล้ว ย้ายไปช่องตึกใหม่' : ' · จัดยาเข้าช่องตึกใหม่'}
+            </div>
+            <Button size="small" type="primary" block className="mt-1" icon={<PiCheckCircleBold />} loading={busy} onClick={onAck}>
+                รับทราบ ย้ายช่องแล้ว
+            </Button>
+        </div>
+    );
+}
+
 function SlotWithEdit({ order, onEdit, className = '' }: { order: RxOrder; onEdit: () => void; className?: string }) {
     return (
         <span className={`inline-flex items-center gap-1 ${className}`}>
@@ -561,6 +596,48 @@ export default function PharmacyQueuePage() {
             if (live) fetchRows();
             if (open?.rx_order_id === e.rx_order_id) void reloadEvents(e.rx_order_id);
         },
+        /*
+          หอย้ายตึกของใบ — ยาต้องเข้าช่องรับของตึกใหม่ มีเสียงและค้างจนกดปิด (ใบอาจจัดเข้าช่องเดิมไปแล้ว)
+          เครื่องที่ดูตึกเดิมหรือตึกใหม่ต้องรู้ทั้งคู่
+        */
+        onWard: e => {
+            if (wards.length > 0 && !wards.includes(e.ward) && !(e.from_ward && wards.includes(e.from_ward))) return;
+            /* อีกเครื่องกดรับทราบแล้ว — ปิดแจ้งเตือนค้าง เอาป้ายบนการ์ดออก */
+            if (e.ward_ack) {
+                notification.destroy(`rx-ward-${e.rx_order_id}`);
+                setOpen(o => (o?.rx_order_id === e.rx_order_id ? { ...o, ward_move_pending: false } : o));
+                if (live) fetchRows();
+                return;
+            }
+            if (sound) beeper.current.chime('reject');
+            notification.open({
+                key: `rx-ward-${e.rx_order_id}`,
+                placement: 'topRight',
+                type: 'warning',
+                title: <span className="font-semibold">หอย้ายตึกของใบสั่งยา</span>,
+                description: (
+                    <div className="leading-snug text-xs">
+                        <div className="text-sm font-semibold">{e.from_ward_name ?? `ตึก ${e.from_ward}`} → {e.ward_name ?? `ตึก ${e.ward}`}</div>
+                        <div className="mt-1">หมายเหตุ: {e.reason || '-'}</div>
+                        <div className="text-gray-500">ใบเลขที่ {e.rx_order_id} · ย้ายโดย {e.by_name}</div>
+                        {e.status === 'prepared' && (
+                            <div className="text-red-500 font-semibold mt-1">ยาจัดเสร็จแล้ว ย้ายยาไปช่องรับของตึกใหม่</div>
+                        )}
+                        <div className="mt-1">ใบอยู่ขั้นเดิม ทำงานต่อได้เลย · กดรับทราบที่การ์ดหรือที่นี่</div>
+                    </div>
+                ),
+                actions: (
+                    <Button size="small" type="primary" onClick={() => void ackWard({
+                        rx_order_id: e.rx_order_id, ward_name: e.ward_name ?? null,
+                    } as RxOrder)}>
+                        รับทราบ ย้ายช่องแล้ว
+                    </Button>
+                ),
+                duration: 0,
+            });
+            if (live) fetchRows();
+            if (open?.rx_order_id === e.rx_order_id) void openOrder(open);
+        },
     });
 
     /*
@@ -596,6 +673,25 @@ export default function PharmacyQueuePage() {
         const still = cur && pickupSlotOptions(order.submitted_at).some(o => o.value === cur);
         setSlot(mode === 'change' && still ? cur : defaultPickupSlot(order.submitted_at));
         setSlotFor({ order, from, mode });
+    };
+
+    /** เภสัชกดรับทราบการย้ายตึก — ใบอยู่ขั้นเดิม แค่ป้ายเตือนหาย */
+    const [wardAckBusy, setWardAckBusy] = useState<string | null>(null);
+    const ackWard = async (r: RxOrder) => {
+        setWardAckBusy(r.rx_order_id);
+        try {
+            await axios.post(`/api/v1/rx/orders/${r.rx_order_id}/ward-ack`, {}, { headers: authHeaders() });
+            message.success(`รับทราบการย้ายไป ${r.ward_name ?? 'ตึกใหม่'} แล้ว`);
+            notification.destroy(`rx-ward-${r.rx_order_id}`);
+            setOpen(o => (o?.rx_order_id === r.rx_order_id ? { ...o, ward_move_pending: false } : o));
+            fetchRows();
+        } catch (err) {
+            const res = axios.isAxiosError(err) ? err.response : undefined;
+            message.error((res?.data as { message?: string } | undefined)?.message ?? 'บันทึกการรับทราบไม่สำเร็จ');
+            if (res?.status === 409) fetchRows();
+        } finally {
+            setWardAckBusy(null);
+        }
     };
 
     const quickAct = async (r: RxOrder, path: 'ack' | 'complete' | 'prepare' | 'pickup' | 'close' | 'pickup-slot', body?: Record<string, unknown>) => {
@@ -751,7 +847,18 @@ export default function PharmacyQueuePage() {
         },
         {
             title: 'หอผู้ป่วย', dataIndex: 'ward_name', key: 'w', width: 150,
-            render: (v: string | null) => <span className="text-sm">{v || '-'}</span>,
+            render: (v: string | null, r) => (
+                <span className="text-sm">
+                    {v || '-'}
+                    {r.moved_from_name && <div className="text-[11px] text-indigo-700 font-semibold">ย้ายจาก {r.moved_from_name}</div>}
+                    {r.ward_move_pending && (
+                        <Button size="small" type="primary" className="mt-1" icon={<PiCheckCircleBold />}
+                            loading={wardAckBusy === r.rx_order_id} onClick={e => { e.stopPropagation(); void ackWard(r); }}>
+                            รับทราบการย้าย
+                        </Button>
+                    )}
+                </span>
+            ),
         },
         {
             title: 'สถานะ', key: 's', width: 180,
@@ -1158,6 +1265,7 @@ export default function PharmacyQueuePage() {
                                             : null;
                         return (
                             <BoardCard accent={PRIORITY[r.priority].dot} onClick={() => openOrder(r)}>
+                                <WardMoveBanner order={r} className="mb-1.5" busy={wardAckBusy === r.rx_order_id} onAck={() => ackWard(r)} />
                                 <div className="flex items-center gap-1.5 text-xs">
                                     <PriorityDot color={PRIORITY[r.priority].dot} />
                                     <span className={r.priority === 'routine' ? 'text-gray-500' : 'font-semibold'}>
@@ -1188,6 +1296,9 @@ export default function PharmacyQueuePage() {
 
                                 <div className="flex flex-wrap items-center gap-1 mt-1.5">
                                     <Tag className="m-0! text-[11px]">{r.ward_name}</Tag>
+                                    {r.moved_from_name && (
+                                        <Tag color="geekblue" className="m-0! text-[11px] font-semibold">ย้ายจาก {r.moved_from_name}</Tag>
+                                    )}
                                     {r.files_purged
                                         ? <PurgedTag />
                                         : <Tag className="m-0! text-[11px]">{r.file_count} ไฟล์</Tag>}
@@ -1317,6 +1428,7 @@ export default function PharmacyQueuePage() {
                         <span className="font-semibold">{open.patient_name || 'ไม่ระบุชื่อ'}</span>
                         <span className="text-xs text-gray-500">HN {open.hn || '-'}{open.an ? ` · AN ${open.an}` : ''}</span>
                         <Tag className="m-0!">{open.ward_name}</Tag>
+                        {open.moved_from_name && <Tag color="geekblue" className="m-0! font-semibold">ย้ายจาก {open.moved_from_name}</Tag>}
                         {!open.his_verified && <Tag color="red" className="m-0!">ยังไม่ยืนยันกับ HIS</Tag>}
                     </div>
                 )}
@@ -1335,6 +1447,9 @@ export default function PharmacyQueuePage() {
                         <div className="w-80 shrink-0 border-l border-gray-200 flex flex-col">
                             {/* เส้นคั่นระหว่างแต่ละส่วน: ส่งโดย · คำเตือน · ค่าไต · INR · ปรึกษา · ประวัติ */}
                             <div className="p-3 flex flex-col gap-3 overflow-auto flex-1 [&>*+*]:border-t [&>*+*]:border-gray-200 [&>*+*]:pt-3">
+                                {open.ward_move_pending && (
+                                    <WardMoveBanner order={open} busy={wardAckBusy === open.rx_order_id} onAck={() => ackWard(open)} />
+                                )}
                                 <div>
                                     <Text className="text-xs text-gray-500">ส่งโดย</Text>
                                     <div className="text-sm">{open.submitted_by_name}</div>

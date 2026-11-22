@@ -17,7 +17,7 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import {
     PiPaperPlaneTiltBold, PiUploadSimpleBold, PiArrowsClockwiseBold, PiWarningBold,
     PiBroadcastBold, PiPlugsBold, PiTrashBold, PiFilePdfBold, PiNotePencilBold, PiEyeBold,
-    PiMagnifyingGlassBold, PiPackageBold, PiSquaresFourBold, PiRowsBold, PiCheckCircleBold, PiArrowCounterClockwiseBold,
+    PiMagnifyingGlassBold, PiPackageBold, PiSquaresFourBold, PiRowsBold, PiCheckCircleBold, PiArrowCounterClockwiseBold, PiArrowsLeftRightBold,
 } from 'react-icons/pi';
 import Navbar from '../../components/Navbar';
 import { useRxSocket, createBeeper } from '../../lib/rxSocket';
@@ -150,7 +150,7 @@ const ACTION_LABEL: Record<string, string> = {
     prepare: 'จัดยาเสร็จ พร้อมให้มารับ', pickup: 'ตึกมารับยาแล้ว', close: 'ปิดเรื่อง',
     /* ชื่อผู้ทำอยู่ข้างหลังอยู่แล้ว ไม่ระบุว่าเป็นห้องยา เพราะตอนนี้หอก็เปิดดูได้ */
     reject: 'ส่งกลับ', view_file: 'เปิดดูไฟล์', purge_files: 'ลบไฟล์ภาพ (ครบกำหนดจัดเก็บ)',
-    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN', consult: 'ปรึกษาแพทย์',
+    set_hn: 'แอดมินใส่ HN', edit_hn: 'หอแก้ HN', consult: 'ปรึกษาแพทย์', change_ward: 'หอย้ายตึก',
     set_pickup_slot: 'ห้องยาเปลี่ยนรอบรับยา',
 };
 
@@ -200,6 +200,14 @@ interface RxOrder {
     consult_note: string | null;
     consult_by_name: string | null;
     consult_count: number;
+    /** หอย้ายตึกของใบหลังส่ง (ครั้งล่าสุด) — ชื่อตึกเดิม (จัดยาเข้าช่องของ ward_name ปัจจุบัน) */
+    moved_from_name?: string | null;
+    moved_note?: string | null;
+    moved_by_name?: string | null;
+    moved_at?: string | null;
+    /** ห้องยายังไม่กดรับทราบการย้ายครั้งล่าสุด */
+    ward_move_pending?: boolean;
+    ward_ack_by_name?: string | null;
 }
 
 /** เกินเท่านี้ถือว่าห้องยายังไม่รับนานผิดปกติ ต่างกันตามความด่วน */
@@ -405,6 +413,20 @@ export default function RxOrderPage() {
         onHn: e => {
             fetchOrders(ward);
             message.info({ key: `hn-${e.rx_order_id}`, content: `แก้ HN ใบสั่งยาแล้ว · ${e.by_name}` });
+        },
+        /* ย้ายตึก: ตึกเดิมเห็นว่าใบออกไปแล้ว · ตึกใหม่เห็นว่ามีใบย้ายเข้ามา */
+        onWard: e => {
+            fetchOrders(ward);
+            if (e.ward_ack) {
+                if (e.ward === ward) message.success({ key: `ward-${e.rx_order_id}`, content: `ห้องยารับทราบการย้ายตึกแล้ว · ${e.by_name}` });
+                return;
+            }
+            if (e.from_ward === ward) {
+                message.info({ key: `ward-${e.rx_order_id}`, content: `ย้ายใบสั่งยาไป ${e.ward_name ?? 'ตึกใหม่'} แล้ว · ${e.by_name}`, duration: 10 });
+                if (viewingRef.current === e.rx_order_id) setViewing(null);
+            } else if (e.ward === ward) {
+                message.warning({ key: `ward-${e.rx_order_id}`, content: `มีใบสั่งยาย้ายเข้ามาจาก ${e.from_ward_name ?? 'ตึกอื่น'} · ${e.by_name}`, duration: 15 });
+            }
         },
         /* ห้องยา (หรืออีกเครื่องในหอ) บันทึกว่าโทรปรึกษาแพทย์แล้ว — key เดียวกับตอนบันทึกเอง ไม่ขึ้นซ้ำ */
         onConsult: e => {
@@ -909,8 +931,9 @@ export default function RxOrderPage() {
                     <div className="font-semibold">
                         {r.patient_name || <span className="text-gray-500">ไม่ระบุชื่อ</span>}
                     </div>
-                    {(r.tube_feed || r.files_purged) && (
+                    {(r.tube_feed || r.files_purged || r.moved_from_name) && (
                         <div className="flex flex-wrap gap-1 mt-0.5">
+                            {r.moved_from_name && <MovedTag order={r} />}
                             {r.tube_feed && <TubeFeedTag compact />}
                             {r.files_purged && <PurgedTag />}
                         </div>
@@ -1527,6 +1550,7 @@ export default function RxOrderPage() {
                                                 {r.patient_name || <span className="text-gray-500 font-normal">ไม่ระบุชื่อ</span>}
                                             </span>
                                         </div>
+                                        {r.moved_from_name && <div className="mt-1"><MovedTag order={r} /></div>}
                                         {r.tube_feed && <TubeFeedTag compact className="mt-1" />}
                                         <div className="text-xs text-gray-500 tabular-nums">
                                             HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}
@@ -1737,6 +1761,16 @@ export default function RxOrderPage() {
                                 onSaved={() => { fetchOrders(ward); void openEvents(viewing.rx_order_id); }}
                             />
 
+                            {/* ผู้ป่วยย้ายตึกระหว่างรอยา — ย้ายใบไปตึกใหม่ ห้องยาจะจัดยาเข้าช่องของตึกใหม่ (ห้องยาย้ายเองไม่ได้) */}
+                            {HN_EDITABLE.includes(viewing.status) && (
+                                <MoveWardPanel
+                                    key={`mv-${viewing.rx_order_id}`}
+                                    order={viewing}
+                                    wards={wards}
+                                    onMoved={() => { setViewing(null); fetchOrders(ward); }}
+                                />
+                            )}
+
                             {HN_EDITABLE.includes(viewing.status) && (
                                 <EditHnPanel
                                     key={viewing.rx_order_id}
@@ -1865,6 +1899,85 @@ function ResubmitTypePanel({ order, onDone }: { order: RxOrder; onDone: () => vo
                         ส่งใหม่ให้ห้องยา
                     </Button>
                 </Tooltip>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * ย้ายตึกของใบ (ผู้ป่วยย้ายตึกหลังส่งใบ เช่น ออกจาก ICU)
+ * เซิร์ฟเวอร์ตรวจกับ HIS ว่าผู้ป่วยอยู่ตึกใหม่ · HIS ยังไม่อัปเดตจะถามยืนยันก่อนย้าย
+ */
+/** ป้ายใบที่ย้ายตึกมา — บอกด้วยว่าห้องยารับทราบแล้วหรือยัง (ห้องยาต้องย้ายยาไปช่องของตึกนี้) */
+function MovedTag({ order }: { order: RxOrder }) {
+    const pending = !!order.ward_move_pending;
+    return (
+        <Tooltip title={`${order.moved_note ?? ''}${order.moved_by_name ? ` · ย้ายโดย ${order.moved_by_name}` : ''}${!pending && order.ward_ack_by_name ? ` · ห้องยารับทราบ: ${order.ward_ack_by_name}` : ''}`}>
+            <Tag color={pending ? 'orange' : 'geekblue'} className="m-0! text-[11px]">
+                ย้ายจาก {order.moved_from_name} · {pending ? 'รอห้องยารับทราบ' : 'ห้องยารับทราบแล้ว'}
+            </Tag>
+        </Tooltip>
+    );
+}
+
+function MoveWardPanel({ order, wards, onMoved }: { order: RxOrder; wards: Ward[]; onMoved: () => void }) {
+    const { message, modal } = App.useApp();
+    const [open, setOpen] = useState(false);
+    const [to, setTo] = useState<number | undefined>();
+    const [note, setNote] = useState('');
+    const [busy, setBusy] = useState(false);
+    const toName = wards.find(w => w.ward === to)?.ward_name ?? '';
+
+    const send = async (force: boolean) => {
+        setBusy(true);
+        try {
+            await axios.post(`/api/v1/rx/orders/${order.rx_order_id}/ward`, { ward: to, note: note.trim(), force },
+                { headers: authHeaders() });
+            message.success(`ย้ายใบไป ${toName} แล้ว ห้องยาได้รับแจ้งทันที`);
+            onMoved();
+        } catch (err) {
+            const res = axios.isAxiosError(err) ? err.response : undefined;
+            const d = res?.data as { message?: string; code?: string } | undefined;
+            if (res?.status === 409 && d?.code === 'NOT_IN_WARD') {
+                modal.confirm({
+                    title: 'HIS ยังไม่แสดงว่าผู้ป่วยอยู่ตึกใหม่',
+                    content: <div className="text-sm">{d.message}<div className="mt-2">ยืนยันย้ายไป <b>{toName}</b>?</div></div>,
+                    okText: 'ยืนยันย้าย', cancelText: 'ยกเลิก',
+                    onOk: () => send(true),
+                });
+            } else {
+                message.error(d?.message ?? 'ย้ายตึกไม่สำเร็จ');
+            }
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (!open) {
+        return (
+            <Button block icon={<PiArrowsLeftRightBold />} onClick={() => setOpen(true)}>
+                ผู้ป่วยย้ายตึก · ย้ายใบไปตึกใหม่
+            </Button>
+        );
+    }
+    return (
+        <div className="rounded-md border border-indigo-300 bg-indigo-50 p-2.5 flex flex-col gap-2">
+            <div className="text-sm font-semibold flex items-center gap-1.5"><PiArrowsLeftRightBold /> ย้ายใบไปตึกใหม่</div>
+            <div className="text-xs text-gray-500">
+                ห้องยาจะจัดยาเข้าช่องรับของตึกใหม่ และแจ้งตึกใหม่เมื่อยาพร้อม · รอบรับยาเดิมยังอยู่
+            </div>
+            <Select
+                placeholder="เลือกตึกที่ผู้ป่วยย้ายไป" showSearch optionFilterProp="label" value={to} onChange={setTo}
+                options={wards.filter(w => w.ward !== order.ward).map(w => ({ label: w.ward_name, value: w.ward }))}
+            />
+            <Input.TextArea rows={2} maxLength={300} value={note} onChange={e => setNote(e.target.value)}
+                placeholder="หมายเหตุ เช่น ย้ายออกจาก ICU ไปตึกอายุรกรรมชาย 13:30 น." />
+            <div className="flex gap-2">
+                <Button size="small" className="flex-1" onClick={() => setOpen(false)}>ยกเลิก</Button>
+                <Button type="primary" className="flex-1" loading={busy} disabled={!to || note.trim().length < 3}
+                    onClick={() => send(false)}>
+                    ย้ายตึก
+                </Button>
             </div>
         </div>
     );
