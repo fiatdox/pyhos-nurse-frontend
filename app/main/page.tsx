@@ -55,20 +55,26 @@ interface CardGroup {
 function MenuCard({ item, color }: { item: MenuItem; color: [string, string] }) {
   const Icon = item.icon;
   return (
+    /*
+      มือถือ: การ์ดเป็นแถวแนวนอน (ไอคอนซ้าย ชื่อขวา) เตี้ยลงเกือบครึ่ง เห็นเมนูได้มากขึ้นในหนึ่งหน้าจอ
+      จอกว้าง: การ์ดแนวตั้งแบบเดิม แต่ระยะในการ์ดกระชับขึ้น
+      ชื่อเมนูใช้ text-balance ให้ตัดบรรทัดสองบรรทัดยาวพอ ๆ กัน ไม่เหลือคำเดียวค้างบรรทัดล่าง
+    */
     <Link
       href={item.href}
-      className="group bg-white border border-gray-200 rounded-2xl p-4 flex flex-col items-center gap-2.5 text-center
-        transition-all hover:shadow-lg hover:-translate-y-0.5 hover:border-(--brand-text)
+      className="group bg-white border border-gray-200 rounded-xl px-3 py-2 sm:p-3 flex flex-row sm:flex-col items-center gap-3 sm:gap-2
+        text-left sm:text-center min-h-12
+        transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-(--brand-text)
         focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand-text)"
     >
       <span
-        className="text-2xl p-3 rounded-xl text-(--c) bg-(--cb) dark:text-(--cd) dark:bg-(--cbd)"
+        className="text-lg sm:text-2xl p-1.5 sm:p-2.5 rounded-lg shrink-0 text-(--c) bg-(--cb) dark:text-(--cd) dark:bg-(--cbd)"
         style={colorVars(color)}
         aria-hidden
       >
         <Icon />
       </span>
-      <span className="text-[13px] font-semibold text-gray-700 leading-snug group-hover:text-(--brand-text)">
+      <span className="text-[13px] font-semibold text-gray-700 leading-snug text-balance group-hover:text-(--brand-text)">
         {item.label}
       </span>
     </Link>
@@ -110,10 +116,10 @@ const Main = () => {
         สีตัวหนังสือบนแถบเป็นค่าคงที่ แถบนี้เป็นเขียวตายตัวทั้งสองโหมด
         ถ้าใช้ text-teal-200 โหมดมืดจะพลิกเป็นเฉดเข้มแล้วจมหายไปกับพื้น (ดู globals.css)
       */}
-      <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] px-4 sm:px-6 py-7 shadow-lg">
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
-          <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm shrink-0">
-            <PiHandWavingBold className="w-7 h-7 text-white" />
+      <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] px-4 sm:px-6 py-5 shadow-md">
+        <div className="max-w-7xl mx-auto flex items-center gap-4">
+          <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-sm shrink-0">
+            <PiHandWavingBold className="w-6 h-6 text-white" />
           </div>
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl font-bold text-white m-0 leading-tight truncate">
@@ -130,7 +136,7 @@ const Main = () => {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         {/*
           ยังไม่รู้กลุ่มของผู้ใช้ ให้วาดโครงไว้ก่อน ไม่วาดการ์ดทุกใบแล้วค่อยซ่อน
           เพราะการ์ดที่โผล่มาครึ่งวินาทีก่อนหายไปก็ถูกกดได้ แล้วผู้ใช้จะงงว่ามันหายไปไหน
@@ -153,7 +159,8 @@ const Main = () => {
                   {g.heading}
                   <span className="text-xs font-normal text-gray-500">({g.items.length})</span>
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {/* จอใหญ่ 7 คอลัมน์ หมวด IPD (7 เมนู) จะอยู่แถวเดียว ไม่เหลือการ์ดใบเดียวค้างแถวล่าง */}
+                <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2.5 sm:gap-3">
                   {g.items.map(item => <MenuCard key={item.key} item={item} color={color} />)}
                 </div>
               </section>

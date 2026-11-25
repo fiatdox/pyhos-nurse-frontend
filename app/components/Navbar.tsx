@@ -6,13 +6,14 @@ import { Drawer, Menu, ConfigProvider, Checkbox, Alert, Spin, Typography, Segmen
 import type { IconType } from 'react-icons';
 import {
     PiSparkleBold, PiListChecksBold, PiMoonBold, PiUserCircleBold, PiSignOutBold,
-    PiMoneyWavyBold, PiCalendarXBold, PiBuildingsBold,
+    PiMoneyWavyBold, PiCalendarXBold, PiBuildingsBold, PiHouseBold,
 } from 'react-icons/pi';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import Link from 'next/link';
 import { MENU, BASE_LINKS, MENU_ACCESS_ITEM, RX_RETENTION_ITEM, RX_MISSING_HN_ITEM, RX_OCR_ITEM, LOGIN_OTP_ITEM } from '../lib/menu';
 import { useMenuAccess } from '../lib/useMenuAccess';
 import { FormSkeleton } from './Skeletons';
+import { getUserProfile } from '../lib/auth';
 
 interface AiSetting {
     enabled: boolean;
@@ -80,6 +81,24 @@ const DrawerLink = ({ href, icon: Icon, label, onClick }: { href: string; icon: 
     </Link>
 );
 
+/**
+ * ลิงก์บนแถบเขียว — หน้าที่อยู่ตอนนี้มีพื้นสว่างกว่าและขีดขาวด้านล่าง
+ * เดิมมีแค่พื้นโปร่ง 15% ซึ่งแทบไม่ต่างจากตอนเอาเมาส์ชี้ ผู้ใช้จึงไม่รู้ว่าอยู่หน้าไหน
+ */
+const topLinkClass = (active: boolean) =>
+    `relative px-3 py-2 rounded-md text-sm font-medium text-white! hover:text-white! transition-colors hover:bg-white/10
+     focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white
+     ${active ? 'bg-white/20 after:absolute after:left-3 after:right-3 after:-bottom-1.5 after:h-0.5 after:rounded-full after:bg-[#ffffff]' : ''}`;
+
+/** ปุ่มไอคอนบนแถบเขียว — มีกรอบโฟกัสให้คนที่ใช้คีย์บอร์ดเห็นว่าอยู่ปุ่มไหน (เดิมปิดกรอบโฟกัสทิ้ง) */
+const ICON_BTN = 'p-2 rounded-md text-white hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white';
+
+/** ตัวอักษรแรกของชื่อ (ข้ามคำนำหน้า) ใช้เป็นรูปประจำตัวแบบง่าย */
+const initialOf = (name: string) => {
+    const bare = name.replace(/^(นางสาว|นาง|นาย|น\.ส\.|ดร\.|นพ\.|พญ\.|ภก\.|ภญ\.)\s*/, '').trim();
+    return bare.charAt(0) || '?';
+};
+
 const Navbar = () => {
     const [openLeft, setOpenLeft] = useState(false);
     const [openRight, setOpenRight] = useState(false);
@@ -87,8 +106,16 @@ const Navbar = () => {
     const router = useRouter();
     const pathname = usePathname();
 
-    /* หมวดที่มีหน้าปัจจุบันอยู่ ใช้กางหมวดนั้นไว้ตอนเปิดลิ้นชัก */
-    const openKey = MENU.find(sec => sec.items.some(i => i.href === pathname))?.key ?? '';
+    /* อยู่หน้าใดหน้าหนึ่งในหมวดเมนู — ใช้ไฮไลต์ปุ่ม "ระบบงาน" บนแถบ */
+    const inSection = MENU.some(sec => sec.items.some(i => i.href === pathname));
+
+    /* ชื่อจาก sessionStorage มีแค่ฝั่งเบราว์เซอร์ อ่านหลัง mount กันวาดไม่ตรงกับเซิร์ฟเวอร์ */
+    const [profile, setProfile] = useState<{ name: string; position: string }>({ name: '', position: '' });
+    useEffect(() => {
+        const p = getUserProfile();
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- อ่าน sessionStorage ครั้งเดียวหลัง mount
+        setProfile({ name: String(p?.name ?? ''), position: String(p?.position_name ?? '') });
+    }, []);
 
     const showLeftDrawer = () => setOpenLeft(true);
     const onCloseLeft = () => setOpenLeft(false);
@@ -172,7 +199,8 @@ const Navbar = () => {
                     <div className="absolute inset-y-0 left-0 flex items-center sm:hidden">
                         <button
                             onClick={showLeftDrawer}
-                            className="p-2 rounded-md text-white hover:text-gray-200 hover:bg-white/10 focus:outline-none"
+                            aria-label="เปิดเมนูทั้งหมด"
+                            className={ICON_BTN}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -185,7 +213,9 @@ const Navbar = () => {
                         <div className="hidden sm:flex items-center mr-2">
                             <button
                                 onClick={showLeftDrawer}
-                                className="p-2 rounded-md text-white hover:text-gray-200 hover:bg-white/10 focus:outline-none"
+                                aria-label="เปิดเมนูทั้งหมด"
+                                title="เมนูทั้งหมด"
+                                className={ICON_BTN}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -202,14 +232,16 @@ const Navbar = () => {
                             <div className="flex space-x-4">
                                 <Link
                                     href="/main"
-                                    className={`hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium ${pathname === '/main' ? 'bg-white/15' : ''}`}
+                                    aria-current={pathname === '/main' ? 'page' : undefined}
+                                    className={topLinkClass(pathname === '/main')}
                                 >
-                                    <span className="text-white">หน้าหลัก</span>
+                                    หน้าหลัก
                                 </Link>
 
                                 {/* เมนูย่อยแบบเดิม เปลี่ยนแค่รายการข้างในให้เป็นหน้าที่มีจริง */}
                                 <div className="group">
-                                    <button className="text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                                    {/* อยู่หน้าใดหน้าหนึ่งในเมนูย่อย = ไฮไลต์ "ระบบงาน" ให้รู้ว่าอยู่ในหมวดนี้ */}
+                                    <button className={`${topLinkClass(inSection)} flex items-center`} aria-haspopup="true">
                                         ระบบงาน
                                         <svg className="ml-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                             <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -271,28 +303,33 @@ const Navbar = () => {
                                     <Link
                                         key={item.key}
                                         href={item.href}
-                                        className={`hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium ${
-                                            pathname === item.href ? 'bg-white/15' : ''
-                                        }`}
+                                        aria-current={pathname === item.href ? 'page' : undefined}
+                                        className={`${topLinkClass(pathname === item.href)} flex items-center gap-1.5`}
                                     >
-                                        <span className="text-white flex items-center gap-1.5">
-                                            <item.icon className="w-4 h-4" />
-                                            {item.label}
-                                        </span>
+                                        <item.icon className="w-4 h-4" aria-hidden />
+                                        {item.label}
                                     </Link>
                                 ))}
                             </div>
                         </div>
                     </div>
                     <div className="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0">
-                        {/* User Icon (Right) */}
+                        {/*
+                          ปุ่มบัญชีผู้ใช้ — เดิมเป็นไอคอนคนเปล่า ๆ ไม่รู้ว่ากดแล้วได้อะไร
+                          จอกว้างแสดงชื่อด้วย จะได้เห็นว่าเข้าระบบในชื่อใคร (เครื่องของหอใช้ร่วมกันหลายคน)
+                        */}
                         <button
                             onClick={showRightDrawer}
-                            className="p-2 rounded-full text-white hover:text-gray-200 hover:bg-white/10 focus:outline-none"
+                            aria-label="บัญชีผู้ใช้และตั้งค่า"
+                            title="บัญชีผู้ใช้และตั้งค่า"
+                            className={`${ICON_BTN} flex items-center gap-2 rounded-full! md:rounded-lg! md:pl-1.5 md:pr-3`}
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                            </svg>
+                            <span className="w-8 h-8 rounded-full bg-white/20 border border-white/40 grid place-items-center text-sm font-bold" aria-hidden>
+                                {profile.name ? initialOf(profile.name) : <PiUserCircleBold className="w-5 h-5" />}
+                            </span>
+                            {profile.name && (
+                                <span className="hidden md:block max-w-44 truncate text-sm font-medium">{profile.name}</span>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -300,7 +337,7 @@ const Navbar = () => {
 
             {/* Left Drawer (Menu) */}
             <Drawer
-                title={<span className="text-white font-bold text-lg">Menu</span>}
+                title={<span className="text-white font-bold text-lg">เมนู</span>}
                 placement="left"
                 onClose={onCloseLeft}
                 open={openLeft}
@@ -309,6 +346,25 @@ const Navbar = () => {
             >
                 <div className={DRAWER_PANEL}>
                     <div className="flex-1">
+                        {/*
+                          หน้าหลักกับลิงก์ทั่วไปอยู่บนแถบบนเฉพาะจอกว้าง บนมือถือไม่มีทางไปอื่นนอกจากลิ้นชักนี้
+                          จึงใส่ไว้บนสุดของลิ้นชักด้วย
+                        */}
+                        <div className="flex flex-col gap-0.5 pb-2 mb-1 border-b border-white/15">
+                            {[{ key: 'home', href: '/main', label: 'หน้าหลัก', icon: PiHouseBold as IconType }, ...access.baseLinks].map(item => {
+                                const active = pathname === item.href;
+                                const Icon = item.icon;
+                                return (
+                                    <Link key={item.key} href={item.href} onClick={onCloseLeft}
+                                        aria-current={active ? 'page' : undefined}
+                                        className={`flex items-center gap-3 px-2 py-2 rounded text-white! transition-colors hover:bg-white/10
+                                            ${active ? 'bg-white/15 font-semibold' : ''}`}>
+                                        <Icon className="w-5 h-5 shrink-0" aria-hidden />
+                                        <span>{item.label}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
                         <ConfigProvider
                             theme={{
                                 components: {
@@ -329,7 +385,11 @@ const Navbar = () => {
                                 mode="inline"
                                 theme="dark"
                                 inlineIndent={12}
-                                defaultOpenKeys={[openKey]}
+                                /*
+                                  กางทุกหมวดไว้ก่อน เดิมพับหมดต้องกดสองครั้งกว่าจะถึงหน้าที่ต้องการ
+                                  เมนูรวมราว 20 กว่ารายการ เลื่อนดูในลิ้นชักได้สบาย ยังพับเองได้ถ้าต้องการ
+                                */
+                                defaultOpenKeys={access.sections.map(({ section }) => section.key)}
                                 /* ไฮไลต์ทุกรายการที่ชี้มาหน้านี้ หน้าที่อยู่สองหมวดจะสว่างทั้งสองที่ ซึ่งถูกแล้ว */
                                 selectedKeys={access.sections.flatMap(({ items }) =>
                                     items.filter(i => i.href === pathname).map(i => i.key))}
@@ -366,7 +426,7 @@ const Navbar = () => {
 
             {/* Right Drawer (User Profile) */}
             <Drawer
-                title={<span className="text-white font-bold text-lg">Setting</span>}
+                title={<span className="text-white font-bold text-lg">บัญชีและตั้งค่า</span>}
                 placement="right"
                 onClose={onCloseRight}
                 open={openRight}
@@ -375,15 +435,23 @@ const Navbar = () => {
             >
                 <div className={DRAWER_PANEL}>
                     <div className="flex-1">
-                        <div className="flex items-center gap-3 p-2 font-bold border-b border-white/10 mb-2">
-                            <PiUserCircleBold className="w-5 h-5" />
-                            <span>Setting Information</span>
+                        {/* ผู้ที่เข้าระบบอยู่ — เครื่องของหอใช้ร่วมกัน ต้องเห็นชัดว่าเป็นบัญชีใครก่อนกดอะไร */}
+                        <div className="flex items-center gap-3 p-2 pb-3 border-b border-white/15">
+                            <span className="w-11 h-11 rounded-full bg-white/20 border border-white/40 grid place-items-center text-lg font-bold shrink-0" aria-hidden>
+                                {profile.name ? initialOf(profile.name) : <PiUserCircleBold className="w-6 h-6" />}
+                            </span>
+                            <div className="min-w-0">
+                                <div className="font-bold leading-tight truncate">{profile.name || 'ผู้ใช้งาน'}</div>
+                                {profile.position && <div className="text-xs text-white/80 truncate">{profile.position}</div>}
+                            </div>
                         </div>
-                        {/* เห็นเมนูไม่เท่ากันเพราะอยู่คนละกลุ่ม บอกไว้ตรงนี้จะได้ไม่ต้องเดา */}
+                        {/* เห็นเมนูไม่เท่ากันเพราะอยู่คนละกลุ่ม · กลุ่มงานที่ชื่อซ้ำกับกลุ่มผู้ใช้ไม่ต้องขึ้นอีกบรรทัด */}
                         {access.ready && (
-                            <div className="px-2 pb-2 text-xs text-white/70 leading-snug">
+                            <div className="px-2 pt-2 text-xs text-white/80 leading-snug">
                                 กลุ่มผู้ใช้: {access.groupLabels.length > 0 ? access.groupLabels.join(' · ') : 'ยังไม่ได้จัดกลุ่ม'}
-                                {access.majorName && <div>{access.majorName}</div>}
+                                {access.majorName && !access.groupLabels.includes(access.majorName) && (
+                                    <div>กลุ่มงาน: {access.majorName}</div>
+                                )}
                             </div>
                         )}
                         {/* เรียงตามลำดับที่ต้องตั้งค่าจริง — ตำแหน่งต้องมาก่อน
