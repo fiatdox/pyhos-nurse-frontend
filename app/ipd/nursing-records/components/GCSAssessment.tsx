@@ -209,10 +209,17 @@ export default function GCSAssessment({ an }: { an: string }) {
     fetchData();
   }, [an, getHeaders, fetchRecords]);
 
+  /*
+    คะแนนรวมขึ้นเมื่อเลือกครบ E V M เท่านั้น
+    เดิมช่องที่ยังไม่เลือกถูกนับเป็นค่าสูงสุด (E4 V5 M6) หน้าจอจึงขึ้น "15 Mild" ตั้งแต่ยังไม่ประเมิน
+    และกดบันทึกได้เลยโดยได้ 15 ลงประวัติ ทั้งที่ผู้ป่วยอาจไม่รู้สึกตัว
+  */
+  const [complete, setComplete] = useState(false);
   const recalcScore = () => {
     const values = form.getFieldsValue();
-    const score = (values.eye_opening || 4) + (values.verbal_response || 5) + (values.motor_response || 6);
-    setLiveScore(score);
+    const done = !!values.eye_opening && !!values.verbal_response && !!values.motor_response;
+    setComplete(done);
+    if (done) setLiveScore(values.eye_opening + values.verbal_response + values.motor_response);
   };
 
   const onFinish = async (values: any) => {
@@ -246,6 +253,7 @@ export default function GCSAssessment({ an }: { an: string }) {
       form.resetFields();
       form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
       setLiveScore(15);
+      setComplete(false);
       await fetchRecords();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -311,13 +319,13 @@ export default function GCSAssessment({ an }: { an: string }) {
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-linear-to-r from-indigo-500 to-blue-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiBrainBold className="text-white text-xl" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white m-0">แบบประเมินระดับความรู้สึกตัว (Glasgow Coma Scale)</h1>
-              <div className="flex items-center gap-3 mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white m-0 leading-snug">แบบประเมินระดับความรู้สึกตัว (Glasgow Coma Scale)</h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                 <span className="text-white/90 text-sm font-semibold">{patientName}</span>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">HN: {patient?.hn || '-'}</Tag>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">AN: {an}</Tag>
@@ -333,7 +341,6 @@ export default function GCSAssessment({ an }: { an: string }) {
                 <div className="text-white font-bold text-lg">E{latestRecord.eye_opening}V{latestRecord.verbal_response}M{latestRecord.motor_response} = {latestRecord.total_score}</div>
               </div>
             )}
-            <Button size="small" onClick={() => window.history.back()} className="border-white/30 text-white bg-white/10 hover:bg-white/20">ย้อนกลับ</Button>
           </div>
         </div>
 
@@ -373,7 +380,7 @@ export default function GCSAssessment({ an }: { an: string }) {
                   return (
                     <div key={key} className={`bg-${c}-50 rounded-lg px-3 pt-2 pb-1 mb-2 border border-${c}-100`}>
                       <div className={`text-xs text-${c}-600 font-bold mb-2`}>{item.label}</div>
-                      <Form.Item name={key} className="mb-1!">
+                      <Form.Item name={key} className="mb-1!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
                         <Radio.Group className="flex flex-col gap-1">
                           {item.options.map(opt => (
                             <Radio key={opt.value} value={opt.value} className="text-xs">
@@ -387,12 +394,21 @@ export default function GCSAssessment({ an }: { an: string }) {
                 })}
 
                 {/* Live Score */}
-                <div className={`rounded-xl p-3 mb-3 text-center border ${liveCfg.bgColor}`}>
+                <div className={`rounded-xl p-3 mb-3 text-center border ${complete ? liveCfg.bgColor : 'bg-gray-50 border-gray-200'}`}>
                   <div className="text-sm text-gray-500">GCS Score</div>
-                  <div className={`text-3xl font-bold ${liveCfg.textColor}`}>
-                    E{form.getFieldValue('eye_opening') || '?'}V{form.getFieldValue('verbal_response') || '?'}M{form.getFieldValue('motor_response') || '?'} = {liveScore}
-                  </div>
-                  <Tag color={liveCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveCfg.label}</Tag>
+                  {complete ? (
+                    <>
+                      <div className={`text-3xl font-bold ${liveCfg.textColor}`}>
+                        E{form.getFieldValue('eye_opening')}V{form.getFieldValue('verbal_response')}M{form.getFieldValue('motor_response')} = {liveScore}
+                      </div>
+                      <Tag color={liveCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveCfg.label}</Tag>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-3xl font-bold text-gray-400">–</div>
+                      <div className="text-xs text-gray-500 mt-1">เลือกให้ครบ E, V และ M ก่อน จึงจะคิดคะแนน</div>
+                    </>
+                  )}
                 </div>
 
                 {/* Pupil Assessment */}

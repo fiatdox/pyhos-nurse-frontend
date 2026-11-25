@@ -237,13 +237,13 @@ export default function SpecialCareRecord({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         <div className="bg-linear-to-r from-rose-600 to-pink-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiShieldCheckBold className="text-white text-xl" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white m-0">บันทึกการดูแลพิเศษ (Special Care Records)</h1>
-              <div className="flex items-center gap-3 mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white m-0 leading-snug">บันทึกการดูแลพิเศษ (Special Care Records)</h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                 <span className="text-white/90 text-sm font-semibold">{patientName}</span>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">HN: {patient?.hn || '-'}</Tag>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">AN: {an}</Tag>
@@ -252,7 +252,6 @@ export default function SpecialCareRecord({ an }: { an: string }) {
               </div>
             </div>
           </div>
-          <Button size="small" onClick={() => window.history.back()} className="border-white/30 text-white bg-white/10 hover:bg-white/20">ย้อนกลับ</Button>
         </div>
 
         {loading ? (

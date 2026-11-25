@@ -213,7 +213,10 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
         ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score'];
     keys.forEach(k => { score += (values[k] || 0); });
     setLiveScore(score);
+    /* ยังตอบไม่ครบ ไม่แสดงระดับ — เดิมข้อที่ว่างนับเป็น 0 จึงขึ้น "ไม่มีความเสี่ยง" ตั้งแต่ยังไม่ได้ถาม */
+    setComplete(keys.every(k => values[k] !== undefined && values[k] !== null));
   };
+  const [complete, setComplete] = useState(false);
 
   const onFinish = async (values: any) => {
     setSaving(true);
@@ -258,6 +261,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       form.resetFields();
       form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: selectedTool, nurse_name: getUserProfile()?.fullname || '' });
       setLiveScore(0);
+      setComplete(false);
       await fetchRecords();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -324,13 +328,13 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-linear-to-r from-violet-500 to-purple-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiSmileySadBold className="text-white text-xl" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white m-0">แบบประเมินสุขภาพจิต/ความวิตกกังวล</h1>
-              <div className="flex items-center gap-3 mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white m-0 leading-snug">แบบประเมินสุขภาพจิต/ความวิตกกังวล</h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                 <span className="text-white/90 text-sm font-semibold">{patientName}</span>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">HN: {patient?.hn || '-'}</Tag>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">AN: {an}</Tag>
@@ -346,7 +350,6 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                 <div className="text-white font-bold text-lg">{latestRecord.total_score} คะแนน</div>
               </div>
             )}
-            <Button size="small" onClick={() => window.history.back()} className="border-white/30 text-white bg-white/10 hover:bg-white/20">ย้อนกลับ</Button>
           </div>
         </div>
 
@@ -380,7 +383,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                 </Row>
 
                 <Form.Item label="เครื่องมือประเมิน" name="assessment_tool">
-                  <Select onChange={(v) => { setSelectedTool(v); setLiveScore(0); form.resetFields(['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score', 'q6_score', 'q7_score', 'q8_score', 'q9_score']); }}>
+                  <Select onChange={(v) => { setSelectedTool(v); setLiveScore(0); setComplete(false); form.resetFields(['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score', 'q6_score', 'q7_score', 'q8_score', 'q9_score']); }}>
                     <Option value="ST-5">ST-5 (Suicidal Tendency)</Option>
                     <Option value="2Q">2Q Depression Screening</Option>
                     <Option value="9Q">9Q (PHQ-9) Depression</Option>
@@ -392,7 +395,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                   <div className="text-xs text-violet-600 font-bold mb-2">{selectedTool}</div>
                   {selectedTool === '9Q' ? (
                     nineQQuestions.map(q => (
-                      <Form.Item key={q.key} label={q.label} name={q.key} className="mb-2!">
+                      <Form.Item key={q.key} label={q.label} name={q.key} className="mb-2!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
                         <Radio.Group className="flex flex-col gap-0.5">
                           {nineQOptions.map(opt => (
                             <Radio key={opt.value} value={opt.value} className="text-xs">{opt.label} ({opt.value})</Radio>
@@ -402,7 +405,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                     ))
                   ) : (
                     getQuestions().map(q => (
-                      <Form.Item key={q.key} label={q.label} name={q.key} className="mb-2!">
+                      <Form.Item key={q.key} label={q.label} name={q.key} className="mb-2!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
                         <Radio.Group className="flex gap-4">
                           {q.options!.map(opt => (
                             <Radio key={opt.value} value={opt.value} className="text-xs">{opt.label}</Radio>
@@ -414,10 +417,19 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                 </div>
 
                 {/* Live Score */}
-                <div className={`rounded-xl p-3 mb-3 text-center border ${liveCfg.bgColor}`}>
+                <div className={`rounded-xl p-3 mb-3 text-center border ${complete ? liveCfg.bgColor : 'bg-gray-50 border-gray-200'}`}>
                   <div className="text-sm text-gray-500">คะแนนรวม ({selectedTool})</div>
-                  <div className={`text-3xl font-bold ${liveCfg.textColor}`}>{liveScore}</div>
-                  <Tag color={liveCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveCfg.label}</Tag>
+                  {complete ? (
+                    <>
+                      <div className={`text-3xl font-bold ${liveCfg.textColor}`}>{liveScore}</div>
+                      <Tag color={liveCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveCfg.label}</Tag>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-3xl font-bold text-gray-400">–</div>
+                      <div className="text-xs text-gray-500 mt-1">ตอบให้ครบทุกข้อก่อน จึงจะแปลผล</div>
+                    </>
+                  )}
                 </div>
 
                 {/* Additional assessment */}

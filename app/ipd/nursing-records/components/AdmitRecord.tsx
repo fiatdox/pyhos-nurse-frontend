@@ -267,7 +267,7 @@ const painLabel = (score: number) => {
 const PAIN_MARKS: Record<number, React.ReactNode> = Object.fromEntries(
   [...Array(11)].map((_, i) => [
     i,
-    <Text key={i} type="secondary" style={{ fontSize: 10 }}>
+    <Text key={i} type="secondary" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>
       {i % 2 === 0 ? i : ''}
     </Text>,
   ])
@@ -449,7 +449,7 @@ const fhsLabel = (fhs: number) => {
 const DILATION_MARKS: Record<number, React.ReactNode> = Object.fromEntries(
   [...Array(11)].map((_, i) => [
     i,
-    <Text key={i} type="secondary" style={{ fontSize: 10 }}>
+    <Text key={i} type="secondary" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>
       {i % 2 === 0 ? i : ''}
     </Text>,
   ])
@@ -459,7 +459,7 @@ const DILATION_MARKS: Record<number, React.ReactNode> = Object.fromEntries(
 const STATION_MARKS: Record<number, React.ReactNode> = Object.fromEntries(
   [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5].map(i => [
     i,
-    <Text key={i} type="secondary" style={{ fontSize: 10 }}>
+    <Text key={i} type="secondary" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>
       {i % 2 === 0 ? (i > 0 ? `+${i}` : i) : ''}
     </Text>,
   ])
@@ -876,7 +876,8 @@ function AdmitRecordInner({ an }: { an: string }) {
   return (
     <Form
       form={form}
-      className="admit-form"
+      /* มือถือ: ตัวเลือกแบบปุ่มเรียง (Segmented) ตัดเป็นแถวละ 2 ปุ่ม ไม่อัด 4 ปุ่มจนชื่อถูกตัด ("Wheelchai") */
+      className="admit-form max-sm:[&_.ant-segmented-group]:flex-wrap! max-sm:[&_.ant-segmented-item]:min-w-[calc(50%-2px)]!"
       layout="vertical"
       onFinish={onFinish}
       requiredMark={false}

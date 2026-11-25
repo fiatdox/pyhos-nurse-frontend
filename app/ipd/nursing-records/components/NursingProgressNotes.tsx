@@ -38,7 +38,6 @@ import Swal from 'sweetalert2';
 import { VscSave, VscCheck } from 'react-icons/vsc';
 import {
   PiNotePencilBold,
-  PiArrowLeftBold,
   PiClipboardTextBold,
   PiStethoscopeBold,
   PiChatCircleTextBold,
@@ -312,7 +311,7 @@ function NoteBadges({ note }: { note: NursingNote }) {
   return (
     <Space size={[4, 4]} wrap>
       <Tag color={shiftColor(note.shift)} style={{ margin: 0 }}>{note.shift ?? '-'}</Tag>
-      <Tag color={frameworkOf(note.note_type).color} style={{ margin: 0, color: '#fff', border: 'none' }}>
+      <Tag variant="solid" color={frameworkOf(note.note_type).color} style={{ margin: 0, color: '#fff', border: 'none' }}>
         {note.note_type}
       </Tag>
       {role && <Tag style={{ margin: 0, borderColor: role.color, color: role.color }}>{role.label}</Tag>}
@@ -695,9 +694,6 @@ function ProgressNotesInner({ an }: { an: string }) {
               <Text style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{patientName}</Text>
             </div>
           </Space>
-          <Button icon={<PiArrowLeftBold />} onClick={() => window.history.back()} ghost>
-            ย้อนกลับ
-          </Button>
         </Flex>
 
         <Divider style={{ margin: '10px 0', borderColor: 'rgba(255,255,255,.25)' }} />
@@ -801,7 +797,7 @@ function ProgressNotesInner({ an }: { an: string }) {
                         ไม่งั้นผู้ช่วยพยาบาลเลือกเป็นวิชาชีพแล้วเลี่ยงการตรวจสอบได้ */}
                     <Form.Item label="ในฐานะ" colon={false}>
                       <Flex align="center" style={{ height: 32 }}>
-                        <Tag color={myRole?.color} style={{ margin: 0, color: '#fff', border: 'none' }}>
+                        <Tag variant="solid" color={myRole?.color} style={{ margin: 0, color: '#fff', border: 'none' }}>
                           {myRole?.label ?? profile?.position_name ?? '-'}
                         </Tag>
                       </Flex>

@@ -231,16 +231,17 @@ export default function BradenScale({ an }: { an: string }) {
     fetchData();
   }, [an, getHeaders, fetchRecords]);
 
+  /*
+    คะแนนรวมขึ้นเมื่อตอบครบ 6 ข้อเท่านั้น
+    เดิมข้อที่ยังไม่ตอบถูกนับเป็นค่าสูงสุด (= ไม่เสี่ยง) จึงบันทึกได้ 23 คะแนนทั้งที่ยังไม่ได้ประเมิน
+  */
+  const [complete, setComplete] = useState(false);
   const recalcScore = () => {
     const values = form.getFieldsValue();
-    const score =
-      (values.sensory_perception || 4) +
-      (values.moisture || 4) +
-      (values.activity || 4) +
-      (values.mobility || 4) +
-      (values.nutrition || 4) +
-      (values.friction_shear || 3);
-    setLiveScore(score);
+    const keys = ['sensory_perception', 'moisture', 'activity', 'mobility', 'nutrition', 'friction_shear'];
+    const done = keys.every(k => !!values[k]);
+    setComplete(done);
+    if (done) setLiveScore(keys.reduce((sum, k) => sum + values[k], 0));
   };
 
   const onFinish = async (values: any) => {
@@ -279,6 +280,7 @@ export default function BradenScale({ an }: { an: string }) {
       form.resetFields();
       form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
       setLiveScore(23);
+      setComplete(false);
       await fetchRecords();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -343,13 +345,13 @@ export default function BradenScale({ an }: { an: string }) {
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-linear-to-r from-purple-500 to-fuchsia-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiShieldWarningBold className="text-white text-xl" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white m-0">แบบประเมินแผลกดทับ (Braden Scale)</h1>
-              <div className="flex items-center gap-3 mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white m-0 leading-snug">แบบประเมินแผลกดทับ (Braden Scale)</h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                 <span className="text-white/90 text-sm font-semibold">{patientName}</span>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">HN: {patient?.hn || '-'}</Tag>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">AN: {an}</Tag>
@@ -365,7 +367,6 @@ export default function BradenScale({ an }: { an: string }) {
                 <div className="text-white font-bold text-lg">{latestRecord.total_score} คะแนน</div>
               </div>
             )}
-            <Button size="small" onClick={() => window.history.back()} className="border-white/30 text-white bg-white/10 hover:bg-white/20">ย้อนกลับ</Button>
           </div>
         </div>
 
@@ -402,7 +403,7 @@ export default function BradenScale({ an }: { an: string }) {
                 <div className="bg-purple-50 rounded-lg px-3 pt-2 pb-1 mb-2 border border-purple-100">
                   <div className="text-xs text-purple-600 font-bold mb-2">Braden Scale (คะแนนต่ำ = ความเสี่ยงสูง)</div>
                   {Object.entries(bradenItems).map(([key, item]) => (
-                    <Form.Item key={key} label={item.label} name={key} className="mb-2!">
+                    <Form.Item key={key} label={item.label} name={key} className="mb-2!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
                       <Radio.Group className="flex flex-col gap-1">
                         {item.options.map(opt => (
                           <Radio key={opt.value} value={opt.value} className="text-xs">
@@ -415,10 +416,19 @@ export default function BradenScale({ an }: { an: string }) {
                 </div>
 
                 {/* Live Score */}
-                <div className={`rounded-xl p-3 mb-3 text-center border ${liveRiskCfg.bgColor}`}>
+                <div className={`rounded-xl p-3 mb-3 text-center border ${complete ? liveRiskCfg.bgColor : 'bg-gray-50 border-gray-200'}`}>
                   <div className="text-sm text-gray-500">คะแนนรวม (Braden)</div>
-                  <div className={`text-3xl font-bold ${liveRiskCfg.textColor}`}>{liveScore}</div>
-                  <Tag color={liveRiskCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveRiskCfg.label}</Tag>
+                  {complete ? (
+                    <>
+                      <div className={`text-3xl font-bold ${liveRiskCfg.textColor}`}>{liveScore}</div>
+                      <Tag color={liveRiskCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveRiskCfg.label}</Tag>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-3xl font-bold text-gray-400">–</div>
+                      <div className="text-xs text-gray-500 mt-1">ตอบให้ครบทั้ง 6 ข้อก่อน จึงจะคิดคะแนน</div>
+                    </>
+                  )}
                 </div>
 
                 {/* Suggested interventions */}

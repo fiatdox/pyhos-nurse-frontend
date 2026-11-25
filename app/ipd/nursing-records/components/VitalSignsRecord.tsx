@@ -829,12 +829,12 @@ export default function VitalSignsRecord({ an }: { an: string }) {
       <div className="p-4 max-w-400 mx-auto">
         {/* หัวเรื่อง */}
         <div className="bg-linear-to-r from-red-500 to-rose-400 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiHeartbeatBold className="text-white text-xl" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white m-0">แบบบันทึกสัญญาณชีพ (Vital Signs)</h1>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white m-0 leading-snug">แบบบันทึกสัญญาณชีพ (Vital Signs)</h1>
               <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                 <span className="text-white/90 text-sm font-semibold">{patient?.ptname || '-'}</span>
                 <Tag className="border-none bg-white/20 text-white m-0 text-xs">HN: {patient?.hn || '-'}</Tag>
@@ -852,8 +852,6 @@ export default function VitalSignsRecord({ an }: { an: string }) {
               </div>
             </div>
           </div>
-          <Button size="small" onClick={() => window.history.back()}
-            className="border-white/30 text-white bg-white/10 hover:bg-white/20">ย้อนกลับ</Button>
         </div>
 
         {loading ? (
@@ -906,8 +904,9 @@ export default function VitalSignsRecord({ an }: { an: string }) {
                     </Form.Item>
                   )}
 
+                  {/* มือถือ: ผู้บันทึกกับวิธีได้ค่าอยู่คนละแถว เดิมครึ่งจอชื่อถูกตัดเหลือ "พยาบ..." */}
                   <Row gutter={8}>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       {/* ผู้บันทึกมาจากบัญชีที่เข้าสู่ระบบ แก้ไม่ได้ ฝั่ง server ก็ใช้ค่าจาก token
                           ไม่ใช่ค่าที่ส่งมาจากหน้าจอ */}
                       <Form.Item label="พยาบาลผู้บันทึก" colon={false}>
@@ -922,7 +921,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
                         </div>
                       </Form.Item>
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Form.Item label="วิธีได้มาซึ่งค่า" name="entry_method">
                         <Segmented block options={[
                           { value: 'manual', label: 'วัดเอง' },
