@@ -3,8 +3,7 @@ import {
     PiPillBold, PiPaperPlaneTiltBold, PiFirstAidKitBold, PiVirusBold, PiMoneyWavyBold,
     PiIdentificationBadgeBold, PiBuildingsBold, PiForkKnifeBold, PiTagBold, PiSlidersHorizontalBold,
     PiClockCounterClockwiseBold, PiChartBarBold, PiGearSixBold, PiHospitalBold, PiUsersThreeBold,
-    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold, PiScanBold, PiDeviceMobileCameraBold,
-} from 'react-icons/pi';
+    PiCalendarCheckBold, PiGaugeBold, PiTrendUpBold, PiIdentificationCardBold, PiScanBold, PiDeviceMobileCameraBold, PiChartLineUpBold } from 'react-icons/pi';
 import { VscAccount, VscChecklist } from 'react-icons/vsc';
 import { GrUserAdd, GrWheelchairActive } from 'react-icons/gr';
 import { SiWikibooks } from 'react-icons/si';
@@ -71,6 +70,7 @@ export const MENU: MenuSection[] = [
             { key: 'ipd.order-food', href: '/ipd/order-food', label: 'สั่งอาหาร', icon: IoFastFoodOutline },
             { key: 'ipd.rx-order', href: '/ipd/rx-order', label: 'ส่งใบสั่งยาให้ห้องยา', icon: PiPaperPlaneTiltBold },
             { key: 'ipd.mar-dashboard', href: '/ipd/mar-dashboard', label: 'วิเคราะห์การให้ยา (MAR)', icon: PiChartBarBold },
+            { key: 'ipd.records-dashboard', href: '/ipd/records-dashboard', label: 'วิเคราะห์บันทึกทางการพยาบาล', icon: PiChartLineUpBold },
         ],
     },
     {

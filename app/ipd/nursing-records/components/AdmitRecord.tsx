@@ -670,7 +670,7 @@ function AdmitRecordInner({ an }: { an: string }) {
 
       form.setFieldsValue({
         ...existingRecord,
-        nurse_name: existingRecord.nurse_name || getUserProfile()?.fullname || '',
+        nurse_name: existingRecord.nurse_name || (getUserProfile()?.fullname || getUserProfile()?.name) || '',
         pain_score:
           existingRecord.pain_score !== null && existingRecord.pain_score !== undefined
             ? Number(existingRecord.pain_score)
@@ -689,7 +689,7 @@ function AdmitRecordInner({ an }: { an: string }) {
         membrane_rupture_datetime: toDate(existingRecord.membrane_rupture_datetime),
       });
     } else {
-      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
     }
   }, [loading, existingRecord, form]);
 
@@ -1789,7 +1789,7 @@ function AdmitRecordInner({ an }: { an: string }) {
                               type="link"
                               size="small"
                               style={{ padding: 0, height: 'auto', fontSize: 11 }}
-                              onClick={() => setField('physical_exam_by', getUserProfile()?.fullname || '')}
+                              onClick={() => setField('physical_exam_by', (getUserProfile()?.fullname || getUserProfile()?.name) || '')}
                             >
                               ใช้ชื่อฉัน
                             </Button>

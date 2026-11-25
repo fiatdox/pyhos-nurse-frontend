@@ -152,7 +152,7 @@ export default function IORecord({ an }: { an: string }) {
       await axios.post('/api/v1/nursing-records/io', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), unit: 'ml', nurse_name: getUserProfile()?.fullname || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), unit: 'ml', nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
       await fetchEntries();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -237,7 +237,7 @@ export default function IORecord({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-linear-to-r from-cyan-600 to-blue-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiDropBold className="text-white text-xl" />
@@ -280,7 +280,7 @@ export default function IORecord({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-cyan-600 font-bold text-sm">บันทึก I/O</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), unit: 'ml', nurse_name: getUserProfile()?.fullname || '' }}
+                initialValues={{ record_datetime: dayjs(), unit: 'ml', nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>

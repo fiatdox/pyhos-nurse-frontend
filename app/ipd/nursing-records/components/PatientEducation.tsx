@@ -172,7 +172,7 @@ export default function PatientEducation({ an }: { an: string }) {
   const resetForm = () => {
     setEditingRecord(null);
     form.resetFields();
-    form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
+    form.setFieldsValue({ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
   };
 
   const onFinish = async (values: any) => {
@@ -259,7 +259,7 @@ export default function PatientEducation({ an }: { an: string }) {
     <div className="bg-slate-50 min-h-screen font-sans">
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
-        <div className="bg-linear-to-r from-amber-500 to-yellow-400 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiBookOpenBold className="text-white text-xl" />
@@ -289,7 +289,7 @@ export default function PatientEducation({ an }: { an: string }) {
                 </div>
               }>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' }}
+                initialValues={{ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>

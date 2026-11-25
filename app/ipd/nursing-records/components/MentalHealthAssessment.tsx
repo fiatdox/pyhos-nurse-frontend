@@ -259,7 +259,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       await axios.post('/api/v1/nursing-records/mental-health', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: selectedTool, nurse_name: getUserProfile()?.fullname || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: selectedTool, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
       setLiveScore(0);
       setComplete(false);
       await fetchRecords();
@@ -327,7 +327,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-linear-to-r from-violet-500 to-purple-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiSmileySadBold className="text-white text-xl" />
@@ -361,7 +361,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-violet-600 font-bold text-sm">ประเมินสุขภาพจิต</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), assessment_tool: 'ST-5', nurse_name: getUserProfile()?.fullname || '' }}
+                initialValues={{ record_datetime: dayjs(), assessment_tool: 'ST-5', nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
                 onValuesChange={recalcScore}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
@@ -396,7 +396,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                   {selectedTool === '9Q' ? (
                     nineQQuestions.map(q => (
                       <Form.Item key={q.key} label={q.label} name={q.key} className="mb-2!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
-                        <Radio.Group className="flex flex-col gap-0.5">
+                        <Radio.Group className="score-options flex flex-col gap-1">
                           {nineQOptions.map(opt => (
                             <Radio key={opt.value} value={opt.value} className="text-xs">{opt.label} ({opt.value})</Radio>
                           ))}
@@ -406,7 +406,7 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                   ) : (
                     getQuestions().map(q => (
                       <Form.Item key={q.key} label={q.label} name={q.key} className="mb-2!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
-                        <Radio.Group className="flex gap-4">
+                        <Radio.Group className="score-options flex flex-wrap gap-2">
                           {q.options!.map(opt => (
                             <Radio key={opt.value} value={opt.value} className="text-xs">{opt.label}</Radio>
                           ))}
@@ -463,10 +463,14 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                   <Input placeholder="ระบุชื่อ" />
                 </Form.Item>
 
-                <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
-                  className="bg-violet-500 hover:bg-violet-600 w-full shadow-md" size="middle">
-                  บันทึกการประเมิน
-                </Button>
+                {/* ปุ่มบันทึกติดล่างจอ ไม่ต้องเลื่อนหาท้ายฟอร์มยาว (สำคัญบนมือถือ) */}
+                <div className="sticky bottom-0 z-10 -mx-3 px-3 pt-2 pb-3 bg-white border-t border-gray-100">
+                  <div className="text-xs text-center mb-1.5 font-semibold text-gray-600">{complete ? `${liveScore} คะแนน · ${liveCfg.label}` : 'ยังตอบไม่ครบ — คะแนนจะขึ้นเมื่อตอบครบทุกข้อ'}</div>
+                  <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
+                    className="bg-violet-500 hover:bg-violet-600 w-full shadow-md" size="middle">
+                    บันทึกการประเมิน
+                  </Button>
+                </div>
               </Form>
             </Card>
 
@@ -480,6 +484,12 @@ export default function MentalHealthAssessment({ an }: { an: string }) {
                     label: <span className="flex items-center gap-1.5"><PiChartLineUpBold /> แนวโน้ม ({records.length})</span>,
                     children: (
                       <div className="p-3 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
+                        {records.length === 0 && (
+                          <div className="py-12 text-center text-sm text-gray-500">
+                            ยังไม่มีบันทึกของผู้ป่วยรายนี้
+                            <div className="text-xs text-gray-400 mt-1">บันทึกครั้งแรกแล้ว ผลจะแสดงที่นี่</div>
+                          </div>
+                        )}
                         {sortedRecords.length > 0 && (
                           <div className="bg-white border border-gray-100 rounded-xl p-4">
                             <div className="text-xs font-bold text-gray-500 mb-3">แนวโน้มคะแนน</div>

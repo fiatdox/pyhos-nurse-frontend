@@ -209,7 +209,7 @@ export default function RestraintRecord({ an }: { an: string }) {
       }
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: editingId ? 'แก้ไขสำเร็จ' : 'บันทึกสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
       setEditingId(null);
       await fetchRecords();
     } catch (error: any) {
@@ -285,7 +285,7 @@ export default function RestraintRecord({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-linear-to-r from-red-500 to-rose-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiHandGrabbingBold className="text-white text-xl" />
@@ -318,9 +318,9 @@ export default function RestraintRecord({ an }: { an: string }) {
             {/* Form - Left 2 cols */}
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-red-600 font-bold text-sm">{editingId ? 'แก้ไขบันทึก' : 'บันทึกการผูกยึด'}</span>}
-              extra={editingId && <Button size="small" onClick={() => { setEditingId(null); form.resetFields(); form.setFieldsValue({ record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' }); }}>ยกเลิกแก้ไข</Button>}>
+              extra={editingId && <Button size="small" onClick={() => { setEditingId(null); form.resetFields(); form.setFieldsValue({ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }); }}>ยกเลิกแก้ไข</Button>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), status: 'active', nurse_name: getUserProfile()?.fullname || '' }}
+                initialValues={{ record_datetime: dayjs(), status: 'active', nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>
@@ -418,10 +418,13 @@ export default function RestraintRecord({ an }: { an: string }) {
                   <Input placeholder="ระบุชื่อ" />
                 </Form.Item>
 
-                <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
-                  className="bg-red-500 hover:bg-red-600 w-full shadow-md" size="middle">
-                  {editingId ? 'แก้ไขบันทึก' : 'บันทึกการผูกยึด'}
-                </Button>
+                {/* ปุ่มบันทึกติดล่างจอ ไม่ต้องเลื่อนหาท้ายฟอร์มยาว (สำคัญบนมือถือ) */}
+                <div className="sticky bottom-0 z-10 -mx-3 px-3 pt-2 pb-3 bg-white border-t border-gray-100">
+                  <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
+                    className="bg-red-500 hover:bg-red-600 w-full shadow-md" size="middle">
+                    {editingId ? 'แก้ไขบันทึก' : 'บันทึกการผูกยึด'}
+                  </Button>
+                </div>
               </Form>
             </Card>
 
@@ -435,6 +438,12 @@ export default function RestraintRecord({ an }: { an: string }) {
                     label: <span className="flex items-center gap-1.5"><PiCardsBold /> บันทึก ({records.length})</span>,
                     children: (
                       <div className="p-3 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
+                        {records.length === 0 && (
+                          <div className="py-12 text-center text-sm text-gray-500">
+                            ยังไม่มีบันทึกของผู้ป่วยรายนี้
+                            <div className="text-xs text-gray-400 mt-1">บันทึกครั้งแรกแล้ว ผลจะแสดงที่นี่</div>
+                          </div>
+                        )}
                         {sortedRecords.map(rec => {
                           const stCfg = statusConfig[rec.status];
                           return (

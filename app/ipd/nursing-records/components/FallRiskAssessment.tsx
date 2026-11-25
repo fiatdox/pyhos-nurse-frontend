@@ -205,16 +205,13 @@ export default function FallRiskAssessment({ an }: { an: string }) {
     fetchData();
   }, [an, getHeaders, fetchRecords]);
 
+  /* คะแนนรวมและระดับความเสี่ยงขึ้นเมื่อตอบครบ 6 ข้อ (คำตอบ 0 คะแนนนับว่าตอบแล้ว) */
+  const [complete, setComplete] = useState(false);
   const recalcScore = () => {
     const values = form.getFieldsValue();
-    const score =
-      (values.history_of_falling || 0) +
-      (values.secondary_diagnosis || 0) +
-      (values.ambulatory_aid || 0) +
-      (values.iv_heparin_lock || 0) +
-      (values.gait || 0) +
-      (values.mental_status || 0);
-    setLiveScore(score);
+    const keys = ['history_of_falling', 'secondary_diagnosis', 'ambulatory_aid', 'iv_heparin_lock', 'gait', 'mental_status'];
+    setComplete(keys.every(k => values[k] !== undefined && values[k] !== null));
+    setLiveScore(keys.reduce((sum, k) => sum + (values[k] || 0), 0));
   };
 
   const onFinish = async (values: any) => {
@@ -251,8 +248,9 @@ export default function FallRiskAssessment({ an }: { an: string }) {
       await axios.post('/api/v1/nursing-records/fall-risk', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), history_of_falling: 0, secondary_diagnosis: 0, ambulatory_aid: 0, iv_heparin_lock: 0, gait: 0, mental_status: 0, nurse_name: getUserProfile()?.fullname || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
       setLiveScore(0);
+      setComplete(false);
       await fetchRecords();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -316,7 +314,7 @@ export default function FallRiskAssessment({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-linear-to-r from-yellow-500 to-orange-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiWarningBold className="text-white text-xl" />
@@ -350,11 +348,10 @@ export default function FallRiskAssessment({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-orange-600 font-bold text-sm">ประเมิน Morse Fall Scale</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
+                /* ไม่เลือกคำตอบไว้ให้ก่อน เดิมทุกข้อถูกตั้งเป็น "ไม่มี 0 คะแนน" กดบันทึกทันทีก็ได้ "เสี่ยงต่ำ" ทั้งที่ไม่ได้ประเมิน */
                 initialValues={{
                   record_datetime: dayjs(),
-                  history_of_falling: 0, secondary_diagnosis: 0, ambulatory_aid: 0,
-                  iv_heparin_lock: 0, gait: 0, mental_status: 0,
-                  nurse_name: getUserProfile()?.fullname || '',
+                  nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '',
                 }}
                 onValuesChange={recalcScore}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
@@ -380,8 +377,8 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                 <div className="bg-orange-50 rounded-lg px-3 pt-2 pb-1 mb-2 border border-orange-100">
                   <div className="text-xs text-orange-600 font-bold mb-2">Morse Fall Scale</div>
                   {Object.entries(morseItems).map(([key, item]) => (
-                    <Form.Item key={key} label={item.label} name={key} className="mb-2!">
-                      <Radio.Group className="flex flex-col gap-1">
+                    <Form.Item key={key} label={item.label} name={key} className="mb-2!" rules={[{ required: true, message: 'กรุณาเลือกข้อนี้' }]}>
+                      <Radio.Group className="score-options flex flex-col gap-1">
                         {item.options.map(opt => (
                           <Radio key={opt.value} value={opt.value} className="text-xs">
                             {opt.label} <Tag className="m-0 ml-1 text-xs" color={opt.score > 0 ? 'orange' : 'default'}>{opt.score} คะแนน</Tag>
@@ -393,17 +390,28 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                 </div>
 
                 {/* Live Score */}
-                <div className={`rounded-xl p-3 mb-3 text-center border ${liveRiskCfg.bgColor}`}>
+                <div className={`rounded-xl p-3 mb-3 text-center border ${complete ? liveRiskCfg.bgColor : 'bg-gray-50 border-gray-200'}`}>
                   <div className="text-sm text-gray-500">คะแนนรวม</div>
-                  <div className={`text-3xl font-bold ${liveRiskCfg.textColor}`}>{liveScore}</div>
-                  <Tag color={liveRiskCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveRiskCfg.label}</Tag>
+                  {complete ? (
+                    <>
+                      <div className={`text-3xl font-bold ${liveRiskCfg.textColor}`}>{liveScore}</div>
+                      <Tag color={liveRiskCfg.color} className="m-0 mt-1 text-sm font-bold px-3 py-0.5">{liveRiskCfg.label}</Tag>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-3xl font-bold text-gray-400">–</div>
+                      <div className="text-xs text-gray-500 mt-1">ตอบให้ครบทั้ง 6 ข้อก่อน จึงจะคิดคะแนน</div>
+                    </>
+                  )}
                 </div>
 
-                {/* Suggested interventions */}
-                <div className="bg-gray-50 rounded-lg px-3 py-2 mb-2 border border-gray-200 text-xs">
-                  <div className="font-bold text-gray-500 mb-1">แนวทางการดูแล (แนะนำ)</div>
-                  <div className="text-gray-600 whitespace-pre-line">{liveRiskCfg.interventions}</div>
-                </div>
+                {/* Suggested interventions — ขึ้นเมื่อตอบครบแล้วเท่านั้น */}
+                {complete && (
+                  <div className="bg-gray-50 rounded-lg px-3 py-2 mb-2 border border-gray-200 text-xs">
+                    <div className="font-bold text-gray-500 mb-1">แนวทางการดูแล (แนะนำ)</div>
+                    <div className="text-gray-600 whitespace-pre-line">{liveRiskCfg.interventions}</div>
+                  </div>
+                )}
 
                 <Form.Item label="มาตรการที่ดำเนินการ" name="interventions">
                   <TextArea rows={3} placeholder="ระบุมาตรการที่ดำเนินการจริง..." />
@@ -413,10 +421,14 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                   <Input placeholder="ระบุชื่อ" />
                 </Form.Item>
 
-                <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
-                  className="bg-orange-500 hover:bg-orange-600 w-full shadow-md" size="middle">
-                  บันทึกการประเมิน
-                </Button>
+                {/* ปุ่มบันทึกติดล่างจอ ไม่ต้องเลื่อนหาท้ายฟอร์มยาว (สำคัญบนมือถือ) */}
+                <div className="sticky bottom-0 z-10 -mx-3 px-3 pt-2 pb-3 bg-white border-t border-gray-100">
+                  <div className="text-xs text-center mb-1.5 font-semibold text-gray-600">{complete ? `${liveScore} คะแนน · ${liveRiskCfg.label}` : 'ยังตอบไม่ครบ — คะแนนจะขึ้นเมื่อตอบครบทุกข้อ'}</div>
+                  <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
+                    className="bg-orange-500 hover:bg-orange-600 w-full shadow-md" size="middle">
+                    บันทึกการประเมิน
+                  </Button>
+                </div>
               </Form>
             </Card>
 
@@ -430,6 +442,12 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                     label: <span className="flex items-center gap-1.5"><PiChartLineUpBold /> แนวโน้ม ({records.length})</span>,
                     children: (
                       <div className="p-3 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
+                        {records.length === 0 && (
+                          <div className="py-12 text-center text-sm text-gray-500">
+                            ยังไม่มีบันทึกของผู้ป่วยรายนี้
+                            <div className="text-xs text-gray-400 mt-1">บันทึกครั้งแรกแล้ว ผลจะแสดงที่นี่</div>
+                          </div>
+                        )}
                         {/* Score Trend Visual */}
                         {sortedRecords.length > 0 && (
                           <div className="bg-white border border-gray-100 rounded-xl p-4">

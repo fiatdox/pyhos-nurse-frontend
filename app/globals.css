@@ -412,3 +412,29 @@ body {
   background-color: var(--color-gray-300) !important;
   color: var(--foreground) !important;
 }
+
+/*
+  ตัวเลือกคะแนนในแบบประเมิน (Fall Risk, Braden, GCS, สุขภาพจิต)
+  เดิมเป็นปุ่มกลมเล็กแถวสูง ~22px กดพลาดบนแท็บเล็ต/มือถือ
+  ตอนนี้ทั้งแถวเป็นพื้นที่กด สูงอย่างน้อย 40px และแถวที่เลือกมีพื้นและขอบสีของระบบ
+  ใช้ --brand-text ซึ่งมีค่าแยกโหมดสว่าง/มืดอยู่แล้ว จึงไม่ต้องเขียนโหมดมืดซ้ำ
+*/
+.score-options .ant-radio-wrapper {
+  margin-inline-end: 0;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  align-items: center;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background-color .15s, border-color .15s;
+}
+.score-options .ant-radio-wrapper:hover {
+  background: color-mix(in srgb, var(--brand-text) 6%, transparent);
+}
+.score-options .ant-radio-wrapper-checked {
+  background: color-mix(in srgb, var(--brand-text) 12%, transparent);
+  border-color: color-mix(in srgb, var(--brand-text) 45%, transparent);
+  font-weight: 600;
+}

@@ -828,7 +828,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
 
       <div className="p-4 max-w-400 mx-auto">
         {/* หัวเรื่อง */}
-        <div className="bg-linear-to-r from-red-500 to-rose-400 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiHeartbeatBold className="text-white text-xl" />

@@ -201,12 +201,12 @@ export default function PainAssessment({ an }: { an: string }) {
         reassess_score: values.reassess_score ?? null,
         reassess_time: values.reassess_time || null,
         // คอลัมน์นี้เป็น NOT NULL — ถ้าผู้ใช้ลบชื่อออก ให้ย้อนกลับไปใช้ชื่อผู้ที่ล็อกอินอยู่
-        nurse_name: values.nurse_name || getUserProfile()?.fullname || '',
+        nurse_name: values.nurse_name || (getUserProfile()?.fullname || getUserProfile()?.name) || '',
       };
       await axios.post('/api/v1/nursing-records/pain', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: getUserProfile()?.fullname || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
       setLiveScore(0);
       await fetchRecords();
     } catch (error) {
@@ -289,7 +289,7 @@ export default function PainAssessment({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-linear-to-r from-rose-500 to-red-500 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiHeartbeatBold className="text-white text-xl" />
@@ -323,7 +323,7 @@ export default function PainAssessment({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-rose-600 font-bold text-sm">ประเมินความปวด</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: getUserProfile()?.fullname || '' }}
+                initialValues={{ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>
@@ -431,10 +431,13 @@ export default function PainAssessment({ an }: { an: string }) {
                   <Input placeholder="ระบุชื่อ" />
                 </Form.Item>
 
-                <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
-                  className="bg-rose-500 hover:bg-rose-600 w-full shadow-md" size="middle">
-                  บันทึกการประเมิน
-                </Button>
+                {/* ปุ่มบันทึกติดล่างจอ ไม่ต้องเลื่อนหาท้ายฟอร์มยาว (สำคัญบนมือถือ) */}
+                <div className="sticky bottom-0 z-10 -mx-3 px-3 pt-2 pb-3 bg-white border-t border-gray-100">
+                  <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
+                    className="bg-rose-500 hover:bg-rose-600 w-full shadow-md" size="middle">
+                    บันทึกการประเมิน
+                  </Button>
+                </div>
               </Form>
             </Card>
 
@@ -448,6 +451,12 @@ export default function PainAssessment({ an }: { an: string }) {
                     label: <span className="flex items-center gap-1.5"><PiChartLineUpBold /> แนวโน้ม ({records.length})</span>,
                     children: (
                       <div className="p-3 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
+                        {records.length === 0 && (
+                          <div className="py-12 text-center text-sm text-gray-500">
+                            ยังไม่มีบันทึกของผู้ป่วยรายนี้
+                            <div className="text-xs text-gray-400 mt-1">บันทึกครั้งแรกแล้ว ผลจะแสดงที่นี่</div>
+                          </div>
+                        )}
                         {sortedRecords.length > 0 && (
                           <div className="bg-white border border-gray-100 rounded-xl p-4">
                             <div className="text-xs font-bold text-gray-500 mb-3">แนวโน้ม Pain Score</div>

@@ -122,7 +122,7 @@ export default function DischargeRecord({ an }: { an: string }) {
             });
           }
         } catch {
-          form.setFieldsValue({ discharge_datetime: dayjs(), record_datetime: dayjs(), nurse_name: getUserProfile()?.fullname || '' });
+          form.setFieldsValue({ discharge_datetime: dayjs(), record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -177,7 +177,7 @@ export default function DischargeRecord({ an }: { an: string }) {
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-linear-to-r from-orange-500 to-red-400 rounded-xl shadow-lg mb-4 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiSignOutBold className="text-white text-xl" />
