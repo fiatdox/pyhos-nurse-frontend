@@ -125,6 +125,8 @@ interface Entry {
     source: 'manual' | HnSource;
     looking: boolean;
     hisDown: boolean;
+    /** HN ที่ระบบเติมให้เองจากการอ่านไฟล์ (ตรงกับผู้ป่วยที่อยู่ตึกนี้คนเดียว) ว่าง = ไม่ได้เติมเอง */
+    autoHn?: string;
 }
 
 /**
@@ -488,6 +490,8 @@ export default function RxOrderPage() {
 
             const fd = new FormData();
             if (prepared.image) fd.append('file', prepared.image, 'page1.jpg');
+            /* บริเวณที่ HN มักอยู่ (ล่างกลาง → ขวาล่าง) เซิร์ฟเวอร์อ่านก่อน แม่นและเร็วกว่าอ่านทั้งหน้า */
+            if (prepared.image && prepared.roi) fd.append('roi', prepared.roi, 'hn-region.jpg');
             if (candidates.length > 0) {
                 fd.append('candidates', candidates.join(','));
                 if (source) fd.append('source', source);
@@ -498,6 +502,27 @@ export default function RxOrderPage() {
             const res = await axios.post('/api/v1/rx/read-hn', fd, { headers: authHeaders() });
             const data = res.data as HnRead;
             const matches = data.matches ?? [];
+            /*
+              เติม HN ให้เองเมื่อเลขที่อ่านได้ตรงกับผู้ป่วยที่อยู่ตึกนี้ "คนเดียว"
+              เลขบนใบตรงกับคนที่นอนตึกนี้อยู่ แทบเป็นไปไม่ได้ที่จะบังเอิญ (นอนพร้อมกันหลักร้อยจากเกือบเจ็ดแสนเลข)
+              ถ้าตรงสองคนขึ้นไปไม่เลือกให้ ให้พยาบาลกดเอง · ช่อง HN ที่พิมพ์ไว้แล้วไม่ถูกทับ
+            */
+            const inWard = matches.filter(m => m.in_ward);
+            const auto = inWard.length === 1 ? inWard[0] : null;
+            if (auto) {
+                setEntries(prev => prev.map(e => (e.uid === uid && !e.hn.trim() ? {
+                    ...e,
+                    hn: auto.hn,
+                    patient: {
+                        ptname: auto.ptname, an: auto.an,
+                        admission: auto.admission, ward_name: auto.ward_name, discharged_at: auto.discharged_at,
+                        in_ward: auto.in_ward,
+                    },
+                    source: auto.source,
+                    hisDown: false,
+                    autoHn: auto.hn,
+                } : e)));
+            }
             patchEntry(uid, {
                 reading: false,
                 matches,
@@ -515,7 +540,7 @@ export default function RxOrderPage() {
         }
     }, [patchEntry, ward]);
 
-    /** รับเลขที่อ่านได้มาใส่ให้ไฟล์นั้น — เกิดจากการกดของผู้ใช้เท่านั้น */
+    /** รับเลขที่อ่านได้มาใส่ให้ไฟล์นั้น — กดเลือกเอง (เติมอัตโนมัติอยู่ใน readEntry เฉพาะตรงกับผู้ป่วยตึกนี้คนเดียว) */
     const acceptHn = (uid: string, m: HnMatch) => {
         patchEntry(uid, {
             hn: m.hn,
@@ -1268,6 +1293,12 @@ export default function RxOrderPage() {
                                                     )}
 
                                                     {/* เลขที่อ่านได้ กดเลือกได้ทีละเลข ไม่กดก็พิมพ์เองได้ */}
+                                                    {!e.reading && e.autoHn && e.hn === e.autoHn && (
+                                                        <span className="text-[11px] text-emerald-700 font-semibold">
+                                                            เติม HN ให้อัตโนมัติ (ตรงกับผู้ป่วยในตึกนี้) · ดูชื่อให้ตรงกับใบก่อนส่ง
+                                                        </span>
+                                                    )}
+
                                                     {!e.reading && e.matches.length > 0 && (
                                                         <div className="flex flex-wrap items-center gap-1.5">
                                                             <span className="text-[11px] text-gray-500 shrink-0">
@@ -1664,6 +1695,7 @@ export default function RxOrderPage() {
                             orderId={viewing.rx_order_id}
                             files={viewFiles}
                             retentionDays={retention}
+                            tubeFeed={!!viewing.tube_feed}
                             className="flex-1 min-w-0"
                         />
 

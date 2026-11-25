@@ -33,7 +33,34 @@ export interface HnReadInput {
     source: HnSource | null;
     /** ภาพสำหรับส่งไปทำ OCR มีเฉพาะตอนที่สองชั้นแรกอ่านไม่ได้ */
     image: Blob | null;
+    /** ภาพเฉพาะบริเวณที่ HN มักอยู่ (ล่างกลาง → ขวาล่าง) เซิร์ฟเวอร์อ่านส่วนนี้ก่อน */
+    roi: Blob | null;
 }
+
+/**
+ * บริเวณที่ HN มักอยู่บนใบ order ของที่นี่: มุมขวาล่าง แถวเดียวกับบรรทัดท้ายใบ (ล่าง 15% ของหน้า เริ่มที่ 15% ของความกว้าง)
+ * แถบล่างแคบอ่านเร็วกว่าแถบ 40% ราวเท่าตัวหรือมากกว่า และไม่ติดตัวเลขกลางใบ (วันที่/เวลาที่เขียนท้ายรายการยา)
+ * ใบที่ HN อยู่สูงกว่านี้ไม่ได้อ่านพลาด แค่ช้าลง เพราะเซิร์ฟเวอร์ถอยไปอ่านทั้งหน้าเอง
+ */
+const HN_REGION = { x: 0.15, y: 0.85, w: 0.85, h: 0.15 };
+
+/** ตัวเลขเล็กเกินไป OCR อ่านพลาดง่าย ขยายภาพที่ตัดให้ด้านกว้างอย่างน้อยเท่านี้ */
+const ROI_MIN_WIDTH = 1800;
+
+const cropHnRegion = (src: HTMLCanvasElement): HTMLCanvasElement => {
+    const sx = src.width * HN_REGION.x;
+    const sy = src.height * HN_REGION.y;
+    const sw = src.width * HN_REGION.w;
+    const sh = src.height * HN_REGION.h;
+    const up = Math.min(2, Math.max(1, ROI_MIN_WIDTH / sw));
+    const out = canvasOf(sw * up, sh * up);
+    const ctx = out.getContext('2d');
+    if (ctx) {
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, out.width, out.height);
+    }
+    return out;
+};
 
 /**
  * ด้านยาวสุดของภาพที่ส่งไปอ่าน
@@ -123,14 +150,15 @@ export const prepareHnRead = async (file: File): Promise<HnReadInput> => {
         : { text: '', canvas: await imageToCanvas(file) };
 
     const fromText = digitRuns(text);
-    if (fromText.length > 0) return { candidates: fromText, source: 'pdf_text', image: null };
+    if (fromText.length > 0) return { candidates: fromText, source: 'pdf_text', image: null, roi: null };
 
     const fromBarcode = readBarcode(canvas);
-    if (fromBarcode.length > 0) return { candidates: fromBarcode, source: 'barcode', image: null };
+    if (fromBarcode.length > 0) return { candidates: fromBarcode, source: 'barcode', image: null, roi: null };
 
-    const blob = await new Promise<Blob | null>(resolve =>
-        canvas.toBlob(b => resolve(b), 'image/jpeg', 0.85));
-    return { candidates: [], source: null, image: blob };
+    const toJpeg = (c: HTMLCanvasElement) => new Promise<Blob | null>(resolve =>
+        c.toBlob(b => resolve(b), 'image/jpeg', 0.85));
+    const [blob, roi] = await Promise.all([toJpeg(canvas), toJpeg(cropHnRegion(canvas))]);
+    return { candidates: [], source: null, image: blob, roi };
 };
 
 /**

@@ -1440,6 +1440,7 @@ export default function PharmacyQueuePage() {
                             orderId={open.rx_order_id}
                             files={files}
                             retentionDays={retention}
+                            tubeFeed={!!open.tube_feed}
                             className="flex-1 min-w-0"
                         />
 

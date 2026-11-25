@@ -34,14 +34,30 @@ interface Props {
     className?: string;
     /** จำนวนวันที่เก็บไฟล์ ใช้ในข้อความเมื่อไฟล์ถูกลบตามกำหนดแล้ว */
     retentionDays?: number | null;
+    /** ใบให้ยาทางสายยาง — ตราประทับบนเอกสารบอก NG Tube ด้วย */
+    tubeFeed?: boolean;
 }
+
+/**
+ * ตราประทับสีแดงบนเอกสาร: "สแกน" เสมอ และ "NG Tube" ถ้าใบให้ยาทางสายยาง
+ * บอกว่าเป็นสำเนาจากไฟล์ที่หออัปโหลด ไม่ใช่ใบต้นฉบับ (กันจ่ายซ้ำถ้าใบกระดาษตามมาอีก)
+ * วาดทับตอนแสดงและตอนพิมพ์ ไม่แก้ไฟล์ที่เก็บไว้ ไฟล์ต้นฉบับจึงยังตรงกับ sha256 เดิม
+ * สีแดงตายตัว ไม่เปลี่ยนตามโหมดมืด เพราะวางบนกระดาษสีขาวเสมอ
+ */
+const stampLines = (tubeFeed?: boolean) => (tubeFeed ? ['สแกน', 'NG Tube'] : ['สแกน']);
+const STAMP_CSS = 'border:3px solid #dc2626;color:#dc2626;background:rgba(255,255,255,.88);'
+    + 'border-radius:6px;padding:2px 12px;font-weight:700;font-size:20px;line-height:1.3;text-align:center';
+const STAMP_STYLE = {
+    border: '3px solid #dc2626', color: '#dc2626', background: 'rgba(255,255,255,.88)',
+    borderRadius: 6, padding: '2px 12px', fontWeight: 700, fontSize: 20, lineHeight: 1.3, textAlign: 'center',
+} as const;
 
 const authHeaders = (): Record<string, string> => {
     const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export default function RxFileViewer({ orderId, files, className = '', retentionDays }: Props) {
+export default function RxFileViewer({ orderId, files, className = '', retentionDays, tubeFeed }: Props) {
     const [idx, setIdx] = useState(0);
     const [zoom, setZoom] = useState(1);
     const [rotate, setRotate] = useState(0);
@@ -165,7 +181,17 @@ export default function RxFileViewer({ orderId, files, className = '', retention
         img.onerror = () => frame.remove();
         img.src = src;
         doc.body.appendChild(img);
-    }, [src, rotate, isPdf, current]);
+
+        /* ตราประทับมุมซ้ายบนของกระดาษ ไม่หมุนตามภาพ · print-color-adjust ให้พิมพ์สีแดงแม้ปิดพิมพ์พื้นหลัง */
+        const stamp = doc.createElement('div');
+        stamp.style.cssText = `position:fixed;top:0;left:0;${STAMP_CSS};print-color-adjust:exact;-webkit-print-color-adjust:exact`;
+        for (const line of stampLines(tubeFeed)) {
+            const d = doc.createElement('div');
+            d.textContent = line;
+            stamp.appendChild(d);
+        }
+        doc.body.appendChild(stamp);
+    }, [src, rotate, isPdf, current, tubeFeed]);
 
     return (
         <div className={`flex flex-col bg-slate-100 dark:bg-[#1f1f1f] ${className}`}>
@@ -202,6 +228,14 @@ export default function RxFileViewer({ orderId, files, className = '', retention
                 </div>
             </div>
 
+            <div className="relative flex-1 min-h-0 flex flex-col">
+            {/* ตราประทับลอยมุมซ้ายบน ไม่ซูม/หมุนตามภาพ และไม่บังการเลื่อนดูภาพ */}
+            {src && !err && !gone && (
+                <div aria-label={stampLines(tubeFeed).join(' ')} style={STAMP_STYLE}
+                    className="pointer-events-none absolute top-3 left-6 z-10 shadow">
+                    {stampLines(tubeFeed).map(l => <div key={l}>{l}</div>)}
+                </div>
+            )}
             <div className="flex-1 overflow-auto p-3">
                 {/*
                   ยังไม่มีภาพและยังไม่มีข้อผิดพลาด = กำลังจะโหลด ต้องนับเป็นช่วงรอด้วย
@@ -252,6 +286,7 @@ export default function RxFileViewer({ orderId, files, className = '', retention
                         />
                     </div>
                 )}
+            </div>
             </div>
         </div>
     );
