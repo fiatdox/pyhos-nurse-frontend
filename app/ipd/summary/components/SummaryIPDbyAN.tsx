@@ -1203,36 +1203,7 @@ const CarePlanPage = ({ patientData, plans }: { patientData: PatientData; plans:
 };
 
 // ===================== Page 5 =====================
-const IORecordPage = ({ patientData }: { patientData: PatientData }) => (
-  <Page size="A4" style={styles.page}>
-    <FormHeader title="5. บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)" />
-    <FormFooter />
-    <PatientHeader patientData={patientData} />
-    <View style={styles.table}>
-      <View style={styles.tableRow}>
-        <View style={[styles.tableColHeader, styles.w15]}><Text>เวลา</Text></View>
-        <View style={[styles.tableColHeader, styles.w30]}><Text>Intake (รับเข้า)</Text></View>
-        <View style={[styles.tableColHeader, styles.w10]}><Text>ปริมาณ (ml)</Text></View>
-        <View style={[styles.tableColHeader, styles.w30]}><Text>Output (ขับออก)</Text></View>
-        <View style={[styles.tableColHeader, styles.w15]}><Text>ปริมาณ (ml)</Text></View>
-      </View>
-      <View style={styles.tableRow}>
-        <View style={[styles.tableCol, styles.w15]}><Text>12:00</Text></View>
-        <View style={[styles.tableCol, styles.w30]}><Text>น้ำดื่ม</Text></View>
-        <View style={[styles.tableCol, styles.w10]}><Text>200</Text></View>
-        <View style={[styles.tableCol, styles.w30]}><Text>Urine</Text></View>
-        <View style={[styles.tableCol, styles.w15]}><Text>300</Text></View>
-      </View>
-      <View style={styles.tableRow}>
-        <View style={[styles.tableCol, styles.w15]}><Text>16:00</Text></View>
-        <View style={[styles.tableCol, styles.w30]}><Text>IV Fluid (5%D/N/2)</Text></View>
-        <View style={[styles.tableCol, styles.w10]}><Text>400</Text></View>
-        <View style={[styles.tableCol, styles.w30]}><Text>-</Text></View>
-        <View style={[styles.tableCol, styles.w15]}><Text>-</Text></View>
-      </View>
-    </View>
-  </Page>
-);
+// หน้า I/O เดิม (ตัวเลขตัวอย่าง) เอาออกแล้ว — I/O จริงอยู่ในฟอร์มปรอท
 
 // ===================== Page 6 =====================
 const MARPage = ({ patientData }: { patientData: PatientData }) => (
@@ -1378,7 +1349,6 @@ const FullMedicalReport = ({ patientData, admit, vitals, vitalMeta, plans }: {
     <VitalSignsPage patientData={patientData} vitals={vitals} vitalMeta={vitalMeta} />
     <ProgressNotesPage patientData={patientData} />
     <CarePlanPage patientData={patientData} plans={plans} />
-    <IORecordPage patientData={patientData} />
     <MARPage patientData={patientData} />
     <SpecialCarePage patientData={patientData} />
     <EducationPage patientData={patientData} />

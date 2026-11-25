@@ -7,7 +7,6 @@ const AdmitRecord = dynamic(() => import('../../components/AdmitRecord'), { ssr:
 const VitalSignsRecord = dynamic(() => import('../../components/VitalSignsRecord'), { ssr: false });
 const NursingProgressNotes = dynamic(() => import('../../components/NursingProgressNotes'), { ssr: false });
 const NursingCarePlan = dynamic(() => import('../../components/NursingCarePlan'), { ssr: false });
-const IORecord = dynamic(() => import('../../components/IORecord'), { ssr: false });
 const MedicationRecord = dynamic(() => import('../../components/MedicationRecord'), { ssr: false });
 const SpecialCareRecord = dynamic(() => import('../../components/SpecialCareRecord'), { ssr: false });
 const PatientEducation = dynamic(() => import('../../components/PatientEducation'), { ssr: false });
@@ -20,13 +19,15 @@ const WoundCareRecord = dynamic(() => import('../../components/WoundCareRecord')
 const RestraintRecord = dynamic(() => import('../../components/RestraintRecord'), { ssr: false });
 const GCSAssessment = dynamic(() => import('../../components/GCSAssessment'), { ssr: false });
 const MentalHealthAssessment = dynamic(() => import('../../components/MentalHealthAssessment'), { ssr: false });
+const GraphicSheet = dynamic(() => import('../../components/GraphicSheet'), { ssr: false });
 
 const moduleComponents: Record<string, React.ComponentType<{ an: string }>> = {
   admit: AdmitRecord,
   vital: VitalSignsRecord,
   nursing: NursingProgressNotes,
   careplan: NursingCarePlan,
-  io: IORecord,
+  // หน้า I/O เดิมรวมเข้าฟอร์มปรอทแล้ว — ลิงก์เก่า /io/<an> ไปที่ฟอร์มปรอทแทน
+  io: GraphicSheet,
   mar: MedicationRecord,
   special: SpecialCareRecord,
   education: PatientEducation,
@@ -39,6 +40,7 @@ const moduleComponents: Record<string, React.ComponentType<{ an: string }>> = {
   restraint: RestraintRecord,
   gcs: GCSAssessment,
   'mental-health': MentalHealthAssessment,
+  graphic: GraphicSheet,
 };
 
 const moduleNames: Record<string, string> = {
@@ -46,7 +48,7 @@ const moduleNames: Record<string, string> = {
   vital: 'แบบบันทึกสัญญาณชีพ (Vital Signs Record)',
   nursing: 'บันทึกทางการพยาบาล (Nursing Progress Notes)',
   careplan: 'แผนการพยาบาล (Focus list / CNPG)',
-  io: 'บันทึกการได้รับและขับออกของสารน้ำ (I/O Record)',
+  io: 'ฟอร์มปรอท (Graphic sheet)',
   mar: 'บันทึกการให้ยา (MAR)',
   special: 'บันทึกการดูแลพิเศษ (Special Care Records)',
   education: 'บันทึกการศึกษาและให้ความรู้ (Patient Education)',
@@ -59,6 +61,7 @@ const moduleNames: Record<string, string> = {
   restraint: 'บันทึกการผูกยึด (Restraint Record)',
   gcs: 'แบบประเมินระดับความรู้สึกตัว (GCS)',
   'mental-health': 'แบบประเมินสุขภาพจิต/ความวิตกกังวล',
+  graphic: 'ฟอร์มปรอท (Graphic sheet)',
 };
 
 export default function NursingRecordPage({ params }: { params: Promise<{ module: string; an: string }> }) {

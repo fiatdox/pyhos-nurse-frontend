@@ -6,7 +6,7 @@ import { tableLoading } from '@/app/components/Skeletons';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
 import { VscSearch, VscRefresh, VscSave } from "react-icons/vsc";
-import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold, PiClipboardTextBold, PiHeartbeatBold, PiNotePencilBold, PiListChecksBold, PiDropBold, PiPillBold, PiStarBold, PiBookOpenBold, PiArrowsLeftRightBold, PiSignOutBold, PiPersonSimpleBold, PiShieldWarningBold, PiThermometerBold, PiScissorsBold, PiLinkBold, PiBrainBold, PiSmileyNervousBold } from 'react-icons/pi';
+import { PiUserBold, PiHouseBold, PiCalendarCheckBold, PiArrowRightBold, PiFolderOpenBold, PiClipboardTextBold, PiHeartbeatBold, PiChartLineBold, PiNotePencilBold, PiListChecksBold, PiPillBold, PiStarBold, PiBookOpenBold, PiArrowsLeftRightBold, PiSignOutBold, PiPersonSimpleBold, PiShieldWarningBold, PiThermometerBold, PiScissorsBold, PiLinkBold, PiBrainBold, PiSmileyNervousBold } from 'react-icons/pi';
 import dayjs from 'dayjs';
 import Navbar from '../../components/Navbar';
 import Swal from 'sweetalert2';
@@ -419,9 +419,9 @@ export default function PatientList() {
               items: [
                 { key: 'admit', icon: <PiClipboardTextBold className="text-[var(--brand-text)] text-base" />, label: 'การบันทึกการรับผู้ป่วย' },
                 { key: 'vital', icon: <PiHeartbeatBold className="text-red-500 text-base" />, label: 'สัญญาณชีพ (Vital Signs)' },
+                { key: 'graphic', icon: <PiChartLineBold className="text-blue-600 text-base" />, label: 'ฟอร์มปรอท / I/O (Graphic sheet)' },
                 { key: 'nursing', icon: <PiNotePencilBold className="text-blue-600 text-base" />, label: 'บันทึกทางการพยาบาล (Progress Notes)' },
                 { key: 'careplan', icon: <PiListChecksBold className="text-green-600 text-base" />, label: 'แผนการพยาบาล (Care Plan)' },
-                { key: 'io', icon: <PiDropBold className="text-cyan-500 text-base" />, label: 'บันทึกสารน้ำ (I/O Record)' },
                 { key: 'mar', icon: <PiPillBold className="text-purple-500 text-base" />, label: 'บันทึกการให้ยา (MAR)' },
                 { key: 'special', icon: <PiStarBold className="text-amber-500 text-base" />, label: 'การดูแลพิเศษ (Special Care)' },
                 { key: 'education', icon: <PiBookOpenBold className="text-indigo-500 text-base" />, label: 'การให้ความรู้ (Patient Education)' },
