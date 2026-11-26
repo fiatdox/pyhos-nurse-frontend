@@ -50,6 +50,26 @@ const SLOTS = [2, 6, 10, 14, 18, 22];
 /** เวลาเหตุการณ์ → ช่องเวลาของฟอร์ม: 00–03 = 2, 04–07 = 6, ... 20–23 = 22 */
 const slotOf = (d: Dayjs) => Math.floor(d.hour() / 4);
 
+/**
+ * ความปวดหนึ่งครั้ง — มาจากหน้าสัญญาณชีพ (vital) หรือแบบประเมินความปวด (assess)
+ * CPOT เต็ม 8 เกณฑ์ต่างจาก NRS จึงเทียบความรุนแรงด้วยระดับ ไม่ใช่ตัวเลขดิบ
+ */
+interface PainEntry { at: string; v: number; tool: string; src: 'vital' | 'assess'; location: string | null; reassess: number | null }
+const isCpot = (e: { tool: string }) => e.tool === 'CPOT';
+/** 0 ไม่ปวด · 1 เล็กน้อย · 2 ปานกลาง · 3 มาก — CPOT 0-2/3-5/>5, NRS 0/1-3/4-6/7-10 */
+const painRank = (e: { v: number; tool: string }) => isCpot(e)
+  ? (e.v <= 2 ? 1 : e.v <= 5 ? 2 : 3)
+  : (e.v === 0 ? 0 : e.v <= 3 ? 1 : e.v <= 6 ? 2 : 3);
+const PAIN_RANK_TH = ['ไม่ปวด', 'ปวดเล็กน้อย', 'ปวดปานกลาง', 'ปวดมาก'];
+/** ปานกลางขึ้นไปต้องได้รับการจัดการ แล้วประเมินซ้ำ */
+const needsCare = (e: { v: number; tool: string }) => painRank(e) >= 2;
+const painText = (e: PainEntry) => isCpot(e) ? `CPOT ${e.v}/8` : `${e.tool === 'vital' ? 'Pain' : e.tool} ${e.v}/10`;
+const painEntries = (sheet: Sheet): PainEntry[] => [
+  ...sheet.vitals.filter(v => v.pain_score !== null && v.pain_score !== undefined)
+    .map(v => ({ at: v.at, v: v.pain_score as number, tool: 'vital', src: 'vital' as const, location: null, reassess: null })),
+  ...(sheet.pains ?? []).map(x => ({ at: x.at, v: x.pain_score, tool: x.assessment_tool || 'NRS', src: 'assess' as const, location: x.location, reassess: x.reassess_score })),
+].sort((a, b) => a.at.localeCompare(b.at));
+
 const O2_SHORT: Record<string, string> = {
   cannula: 'C', simple_mask: 'M', mask_with_bag: 'MB', venturi: 'V', hfnc: 'HF',
   cpap: 'CP', bipap: 'BP', ventilator: 'Vent', t_piece: 'T',
@@ -85,7 +105,7 @@ const INK = '#0f172a';
 
 const T_MIN = 35, T_MAX = 41;
 const GRAPH_H = 360;
-const PAIN_H = 66;
+const PAIN_H = 96;
 
 /** ข้อความหนึ่งชิ้นบนใบ — จัดกึ่งกลางแนวตั้งที่ y */
 function T({ x, y, children, size = 9, anchor = 'middle', weight, color = INK }: {
@@ -110,16 +130,16 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
     }
     return m;
   }, [sheet.vitals]);
-  /* ความปวด: รวมคะแนนจากสัญญาณชีพกับแบบประเมินความปวด ช่องละค่าเดียว ใช้ครั้งล่าสุด */
+  /* ความปวด: ช่องละหนึ่งจุด ใช้ครั้งที่รุนแรงที่สุด (ความปวดสูงต้องไม่หายจากใบ) เก็บครั้งอื่นไว้แสดงเมื่อชี้ */
   const painCell = useMemo(() => {
-    const m = new Map<string, { at: string; v: number; note: string }>();
-    const all = [
-      ...sheet.vitals.filter(v => v.pain_score !== null && v.pain_score !== undefined).map(v => ({ at: v.at, v: v.pain_score as number, note: 'จากสัญญาณชีพ' })),
-      ...(sheet.pains ?? []).map(x => ({ at: x.at, v: x.pain_score, note: [x.assessment_tool === 'CPOT' ? `CPOT ${x.pain_score}/8` : `แบบประเมินความปวด ${x.assessment_tool ?? ''}`.trim(), x.location, x.reassess_score !== null ? `ประเมินซ้ำ ${x.reassess_score}` : ''].filter(Boolean).join(' · ') })),
-    ].sort((a, b) => a.at.localeCompare(b.at));
-    for (const x of all) { const at = dayjs(x.at); m.set(`${at.format('YYYY-MM-DD')}|${slotOf(at)}`, x); }
+    const m = new Map<string, PainEntry[]>();
+    for (const e of painEntries(sheet)) {
+      const at = dayjs(e.at);
+      const k = `${at.format('YYYY-MM-DD')}|${slotOf(at)}`;
+      m.set(k, [...(m.get(k) ?? []), e]);
+    }
     return m;
-  }, [sheet.vitals, sheet.pains]);
+  }, [sheet]);
   const medsAt = useMemo(() => {
     const m = new Map<string, Med[]>();
     for (const x of sheet.meds) {
@@ -161,7 +181,7 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
   const yUrine = y; y += RH;
   const yType = y; y += RH;
   const yEnd = y; y += 8;
-  const yLegend = y; y += 112;
+  const yLegend = y; y += 156;
   const H = y + 10;
 
   const tY = (t: number) => yGraph + (T_MAX - Math.max(T_MIN, Math.min(T_MAX, t))) / (T_MAX - T_MIN) * GRAPH_H;
@@ -180,11 +200,14 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
   };
   const temps = points(v => v.t, tY);
   const pulses = points(v => v.p, p => tY(pulseToT(p)));
-  const pains: { x: number; y: number; v: number; note: string }[] = [];
+  const pains: { x: number; y: number; e: PainEntry; all: PainEntry[] }[] = [];
   days.forEach((d, di) => SLOTS.forEach((_, si) => {
-    const c = painCell.get(`${dayKey(d)}|${si}`);
-    if (c) pains.push({ x: slotX(di, si), y: painY(c.v), v: c.v, note: c.note });
+    const list = painCell.get(`${dayKey(d)}|${si}`);
+    if (!list) return;
+    const top = list.reduce((a, b) => (painRank(b) > painRank(a) || (painRank(b) === painRank(a) && b.at > a.at) ? b : a));
+    pains.push({ x: slotX(di, si), y: painY(top.v), e: top, all: list });
   }));
+  const painTip = (all: PainEntry[]) => all.map(e => `${dayjs(e.at).format('HH:mm')} ${painText(e)} (${PAIN_RANK_TH[painRank(e)]})${e.src === 'vital' ? ' · จากสัญญาณชีพ' : ''}${e.location ? ` · ${e.location}` : ''}${e.reassess !== null ? ` · ประเมินซ้ำ ${e.reassess}` : ''}`).join('\n');
   const path = (ps: { x: number; y: number }[]) => ps.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
   const opDates = sheet.op_dates.map(d => dayjs(d));
@@ -332,7 +355,34 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
         </rect>
       )}
       {pains.length > 1 && <path d={path(pains)} fill="none" stroke={INK} strokeWidth={0.9} />}
-      {pains.map((p, i) => <circle key={`pa${i}`} cx={p.x} cy={p.y} r={2.6} fill={INK}><title>{`Pain ${p.v} (${p.note})`}</title></circle>)}
+      {pains.map((p, i) => {
+        const care = needsCare(p.e);
+        const c = care ? RED : INK;
+        // ประเมินซ้ำ: วงกลมกลวงขวาของจุดเดิม ต่อด้วยเส้นประ — เห็นว่าหลังจัดการปวดลดลงเท่าไร
+        const rx = p.x + SLOT_W * 0.45, ry = p.e.reassess !== null ? painY(p.e.reassess) : 0;
+        return (
+          <g key={`pa${i}`}>
+            <title>{painTip(p.all)}</title>
+            {p.all.length > 1 && <circle cx={p.x} cy={p.y} r={5.2} fill="none" stroke={c} strokeWidth={0.9} />}
+            {isCpot(p.e)
+              ? <path d={`M${p.x},${p.y - 3.8} L${p.x + 3.6},${p.y + 2.6} L${p.x - 3.6},${p.y + 2.6} Z`} fill={c} />
+              : <circle cx={p.x} cy={p.y} r={2.6} fill={c} />}
+            {(isCpot(p.e) || care) && (
+              // จุดชิดขอบบนของแถว ย้ายป้ายไปด้านซ้ายของจุด ไม่ให้ทับเส้นขอบ
+              p.y - 8 < yPain + 7
+                ? <T x={p.x - 6} y={p.y} size={7.5} weight={700} color={c} anchor="end">{isCpot(p.e) ? `C${p.e.v}` : String(p.e.v)}</T>
+                : <T x={p.x} y={p.y - 8} size={7.5} weight={700} color={c}>{isCpot(p.e) ? `C${p.e.v}` : String(p.e.v)}</T>
+            )}
+            {p.e.reassess !== null && (
+              <>
+                <line x1={p.x + 2.6} y1={p.y} x2={rx - 2.4} y2={ry} stroke={INK} strokeWidth={0.8} strokeDasharray="2 1.5" />
+                <circle cx={rx} cy={ry} r={2.4} fill="#fff" stroke={INK} strokeWidth={1} />
+                <T x={rx + 1} y={ry - 7} size={7} color={INK}>{`R${p.e.reassess}`}</T>
+              </>
+            )}
+          </g>
+        );
+      })}
 
       {/* ───── ยา ───── */}
       {label(yMedH, 'Medication')}
@@ -418,7 +468,7 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
       })}
 
       {/* ───── คำอธิบายท้ายใบ ───── */}
-      <rect x={X0} y={yLegend} width={XR - X0} height={112} fill="none" stroke={BLUE} strokeWidth={1.6} />
+      <rect x={X0} y={yLegend} width={XR - X0} height={156} fill="none" stroke={BLUE} strokeWidth={1.6} />
       <line x1={X0 + 320} x2={X0 + 320} y1={yLegend} y2={yLegend + 112} stroke={BLUE} strokeWidth={1.4} />
       <line x1={X0 + 720} x2={X0 + 720} y1={yLegend} y2={yLegend + 112} stroke={BLUE} strokeWidth={1.4} />
       <T x={X0 + 18} y={yLegend + 18} size={11} anchor="start" color={BLUE}>ประเภทผู้ป่วย :</T>
@@ -437,6 +487,19 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
       <T x={X0 + 746} y={yLegend + 40} size={9.5} anchor="start" color={BLUE}>● อุณหภูมิ   X ชีพจร</T>
       <T x={X0 + 746} y={yLegend + 58} size={9.5} anchor="start" color={BLUE}>O₂: RA ห้อง · C cannula · M mask</T>
       <T x={X0 + 746} y={yLegend + 76} size={9.5} anchor="start" color={BLUE}>HF HFNC · Vent เครื่องช่วยหายใจ</T>
+      {/* ความปวด: แถวล่างของกล่องคำอธิบาย เต็มความกว้าง */}
+      <line x1={X0} x2={XR} y1={yLegend + 112} y2={yLegend + 112} stroke={BLUE} strokeWidth={1.2} />
+      <T x={X0 + 18} y={yLegend + 128} size={10} anchor="start" color={BLUE} weight={700}>ความปวด :</T>
+      <circle cx={X0 + 92} cy={yLegend + 128} r={2.6} fill={INK} />
+      <T x={X0 + 99} y={yLegend + 128} size={9} anchor="start" color={BLUE}>NRS 0-10</T>
+      <path d={`M${X0 + 162},${yLegend + 124.2} L${X0 + 165.6},${yLegend + 130.6} L${X0 + 158.4},${yLegend + 130.6} Z`} fill={INK} />
+      <T x={X0 + 170} y={yLegend + 128} size={9} anchor="start" color={BLUE}>C = CPOT 0-8 (คะแนนจริง ไม่แปลงสเกล)</T>
+      <circle cx={X0 + 364} cy={yLegend + 128} r={2.4} fill="#fff" stroke={INK} strokeWidth={1} />
+      <T x={X0 + 371} y={yLegend + 128} size={9} anchor="start" color={BLUE}>R = คะแนนประเมินซ้ำหลังจัดการ</T>
+      <circle cx={X0 + 528} cy={yLegend + 128} r={4.6} fill="none" stroke={INK} strokeWidth={0.9} />
+      <circle cx={X0 + 528} cy={yLegend + 128} r={2} fill={INK} />
+      <T x={X0 + 537} y={yLegend + 128} size={9} anchor="start" color={BLUE}>วงล้อม = ช่องนี้มีหลายค่า แสดงค่าที่ปวดมากที่สุด</T>
+      <T x={X0 + 18} y={yLegend + 144} size={9} anchor="start" color={RED}>สีแดง = ปวดปานกลางขึ้นไป (NRS ≥ 4 · CPOT ≥ 3) ต้องได้รับการจัดการและประเมินซ้ำ · ชี้ที่จุดเพื่อดูทุกค่าในช่อง</T>
       <T x={X0 + 746} y={yLegend + 94} size={8.5} anchor="start" color={BLUE}>{`พิมพ์ ${dayjs().format('D/M/')}${dayjs().year() + 543} ${dayjs().format('HH:mm')}`}</T>
     </svg>
   );
@@ -542,10 +605,11 @@ export default function GraphicSheet({ an }: { an: string }) {
         </div>
 
         {sheet && !sheet.storage_ready && (
-          <Alert className="print:hidden mb-3" type="warning" showIcon title="ยังบันทึก I/O และข้อมูลรายวันไม่ได้"
+          <Alert className="print:hidden! mb-3" type="warning" showIcon title="ยังบันทึก I/O และข้อมูลรายวันไม่ได้"
             description="เซิร์ฟเวอร์ยังไม่ได้สร้างตารางของฟอร์มปรอท (sql/2026-11-26_nursing_graphic_sheet.sql) ส่วนสัญญาณชีพยังแสดงได้ตามปกติ" />
         )}
-        {error && <Alert className="print:hidden mb-3" type="error" showIcon title={error} />}
+        {error && <Alert className="print:hidden! mb-3" type="error" showIcon title={error} />}
+        {sheet && <PainHandover sheet={sheet} />}
 
         {/* ใบแคบกว่า 760px อ่านไม่ออก บนมือถือจึงเลื่อนซ้ายขวาแทนการย่อ */}
         <div className="overflow-x-auto rounded-lg border border-gray-200 print:border-0 print:overflow-visible" style={{ background: '#ffffff' }}>
@@ -566,6 +630,33 @@ export default function GraphicSheet({ an }: { an: string }) {
           patient={patient} onSaved={() => void load()} />
       )}
     </div>
+  );
+}
+
+/**
+ * สรุปความปวดสำหรับส่งเวร (จอเท่านั้น): ครั้งล่าสุดในใบนี้ และเตือนถ้าปวดปานกลางขึ้นไปแต่ยังไม่มีการประเมินซ้ำ
+ * "ประเมินซ้ำแล้ว" = มีคะแนนประเมินซ้ำในบันทึกนั้น หรือมีการประเมินครั้งใหม่ตามมา
+ */
+function PainHandover({ sheet }: { sheet: Sheet }) {
+  const list = painEntries(sheet);
+  if (!list.length) return null;
+  const last = list[list.length - 1];
+  const fmt = (e: PainEntry) => `${dayjs(e.at).format('DD/MM HH:mm')} น. · ${painText(e)} (${PAIN_RANK_TH[painRank(e)]})${e.location ? ` · ${e.location}` : ''}${e.src === 'vital' ? ' · จากสัญญาณชีพ' : ''}`;
+  const pending = needsCare(last) && last.reassess === null;
+  const after = last.reassess !== null ? { ...last, v: last.reassess } : null;
+  const recent = list.slice(-6).reverse();
+  return (
+    <Alert className="print:hidden! mb-3" type={pending ? 'warning' : 'info'} showIcon
+      title={<span className="font-semibold">ความปวดล่าสุด (ส่งเวร): {fmt(last)}</span>}
+      description={
+        <div className="text-sm space-y-1">
+          {after && <div>ประเมินซ้ำหลังจัดการ: <b>{after.v}</b> ({PAIN_RANK_TH[painRank(after)]})</div>}
+          {pending && <div className="font-semibold text-red-700">ปวดปานกลางขึ้นไป ยังไม่มีคะแนนประเมินซ้ำหลังจัดการ — เวรถัดไปติดตามและประเมินซ้ำ</div>}
+          <div className="text-xs text-gray-600">
+            ย้อนหลัง: {recent.map(e => `${dayjs(e.at).format('DD/MM HH:mm')} ${isCpot(e) ? `C${e.v}` : e.v}${e.reassess !== null ? `→R${e.reassess}` : ''}`).join(' · ')}
+          </div>
+        </div>
+      } />
   );
 }
 
