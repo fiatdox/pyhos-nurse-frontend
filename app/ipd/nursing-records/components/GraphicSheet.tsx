@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Checkbox, DatePicker, Drawer, Form, Input, InputNumber, Segmented, Select, Slider, Space, Spin, message } from 'antd';
 import axios from 'axios';
 import dayjs, { type Dayjs } from 'dayjs';
-import { PiCaretLeftBold, PiCaretRightBold, PiChartLineBold, PiMinusBold, PiPencilSimpleBold, PiPlusBold, PiPrinterBold } from 'react-icons/pi';
+import { PiCaretLeftBold, PiCaretRightBold, PiChartLineBold, PiMinusBold, PiPencilSimpleBold, PiPlusBold, PiPrinterBold, PiThermometerBold } from 'react-icons/pi';
 import Navbar from '../../../components/Navbar';
 
 /**
@@ -22,6 +22,7 @@ interface Vital {
   spo2: number | null; o2_therapy: string | null; o2_device: string | null; o2_flow: number | null;
   pain_score: number | null; news2_score: number | null;
 }
+interface PainRec { at: string; pain_score: number; reassess_score: number | null; location: string | null; assessment_tool?: string | null }
 interface Med { at: string; medication_name: string; prn: boolean; dose_given: string | null }
 interface ShiftRow {
   record_date: string; shift: string;
@@ -37,7 +38,7 @@ interface DailyRow {
   updated_by_name?: string | null; updated_at?: string | null;
 }
 interface Sheet {
-  from: string; vitals: Vital[]; meds: Med[]; shifts: ShiftRow[]; daily: DailyRow[]; op_dates: string[]; storage_ready: boolean;
+  from: string; vitals: Vital[]; meds: Med[]; pains?: PainRec[]; shifts: ShiftRow[]; daily: DailyRow[]; op_dates: string[]; storage_ready: boolean;
 }
 interface Patient {
   hn?: string; ptname?: string; name?: string; patient_name?: string; bedno?: string; bed?: string;
@@ -93,7 +94,8 @@ function T({ x, y, children, size = 9, anchor = 'middle', weight, color = INK }:
   return <text x={x} y={y} fontSize={size} textAnchor={anchor} fontWeight={weight} fill={color} dominantBaseline="middle">{children}</text>;
 }
 
-function SheetSvg({ sheet, start, admitDate, patient }: {
+function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
+  onPainClick?: () => void;
   sheet: Sheet; start: Dayjs; admitDate: Dayjs | null; patient: Patient | null;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => start.add(i, 'day'));
@@ -108,6 +110,16 @@ function SheetSvg({ sheet, start, admitDate, patient }: {
     }
     return m;
   }, [sheet.vitals]);
+  /* ความปวด: รวมคะแนนจากสัญญาณชีพกับแบบประเมินความปวด ช่องละค่าเดียว ใช้ครั้งล่าสุด */
+  const painCell = useMemo(() => {
+    const m = new Map<string, { at: string; v: number; note: string }>();
+    const all = [
+      ...sheet.vitals.filter(v => v.pain_score !== null && v.pain_score !== undefined).map(v => ({ at: v.at, v: v.pain_score as number, note: 'จากสัญญาณชีพ' })),
+      ...(sheet.pains ?? []).map(x => ({ at: x.at, v: x.pain_score, note: [x.assessment_tool === 'CPOT' ? `CPOT ${x.pain_score}/8` : `แบบประเมินความปวด ${x.assessment_tool ?? ''}`.trim(), x.location, x.reassess_score !== null ? `ประเมินซ้ำ ${x.reassess_score}` : ''].filter(Boolean).join(' · ') })),
+    ].sort((a, b) => a.at.localeCompare(b.at));
+    for (const x of all) { const at = dayjs(x.at); m.set(`${at.format('YYYY-MM-DD')}|${slotOf(at)}`, x); }
+    return m;
+  }, [sheet.vitals, sheet.pains]);
   const medsAt = useMemo(() => {
     const m = new Map<string, Med[]>();
     for (const x of sheet.meds) {
@@ -168,7 +180,11 @@ function SheetSvg({ sheet, start, admitDate, patient }: {
   };
   const temps = points(v => v.t, tY);
   const pulses = points(v => v.p, p => tY(pulseToT(p)));
-  const pains = points(v => v.pain_score, painY);
+  const pains: { x: number; y: number; v: number; note: string }[] = [];
+  days.forEach((d, di) => SLOTS.forEach((_, si) => {
+    const c = painCell.get(`${dayKey(d)}|${si}`);
+    if (c) pains.push({ x: slotX(di, si), y: painY(c.v), v: c.v, note: c.note });
+  }));
   const path = (ps: { x: number; y: number }[]) => ps.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
   const opDates = sheet.op_dates.map(d => dayjs(d));
@@ -310,8 +326,13 @@ function SheetSvg({ sheet, start, admitDate, patient }: {
           {s > 0 && s < 10 && <T x={XD - 6} y={painY(s)} size={7.5} anchor="end">{s}</T>}
         </g>
       ))}
+      {onPainClick && (
+        <rect x={X0} y={yPain} width={XR - X0} height={PAIN_H} fill="transparent" className="cursor-pointer print:hidden" onClick={onPainClick}>
+          <title>คลิกเพื่อลงรายละเอียดความปวด (เปิดหน้าต่างใหม่)</title>
+        </rect>
+      )}
       {pains.length > 1 && <path d={path(pains)} fill="none" stroke={INK} strokeWidth={0.9} />}
-      {pains.map((p, i) => <circle key={`pa${i}`} cx={p.x} cy={p.y} r={2.6} fill={INK}><title>{`Pain ${p.v}`}</title></circle>)}
+      {pains.map((p, i) => <circle key={`pa${i}`} cx={p.x} cy={p.y} r={2.6} fill={INK}><title>{`Pain ${p.v} (${p.note})`}</title></circle>)}
 
       {/* ───── ยา ───── */}
       {label(yMedH, 'Medication')}
@@ -478,6 +499,17 @@ export default function GraphicSheet({ an }: { an: string }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดใบใหม่เมื่อเลื่อนสัปดาห์
   useEffect(() => { void load(); }, [load]);
 
+  /* รายละเอียดความปวด (ตำแหน่ง ลักษณะ การจัดการ ประเมินซ้ำ) ลงในหน้าแบบประเมินความปวด เปิดเป็นหน้าต่างใหม่
+     กลับมาที่ใบนี้เมื่อไหร่ก็โหลดใหม่ จุดในกราฟจะขึ้นทันที */
+  const openPain = useCallback(() => {
+    window.open(`/ipd/nursing-records/pain/${encodeURIComponent(an)}`, `pain-${an}`, 'width=1100,height=900');
+  }, [an]);
+  useEffect(() => {
+    const onFocus = () => { void load(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [load]);
+
   const name = patient?.ptname || patient?.name || patient?.patient_name || '-';
 
   return (
@@ -504,8 +536,9 @@ export default function GraphicSheet({ an }: { an: string }) {
             <Button disabled={!start} onClick={() => setStart(s => s?.add(7, 'day') ?? s)}>7 วันถัดไป <PiCaretRightBold className="inline" /></Button>
           </Space.Compact>
           <Button type="primary" icon={<PiPencilSimpleBold />} onClick={() => setEditOpen(true)} disabled={!sheet}>บันทึก I/O / รายวัน</Button>
+          <Button icon={<PiThermometerBold />} onClick={openPain}>ประเมินความปวด</Button>
           <Button icon={<PiPrinterBold />} onClick={() => window.print()} disabled={!sheet}>พิมพ์</Button>
-          <span className="text-xs text-gray-500">สัญญาณชีพ ความปวด และยา ดึงจากหน้าสัญญาณชีพและ MAR อัตโนมัติ</span>
+          <span className="text-xs text-gray-500">สัญญาณชีพ ความปวด และยา ดึงจากหน้าสัญญาณชีพ แบบประเมินความปวด และ MAR อัตโนมัติ · คลิกที่กราฟความปวดเพื่อลงรายละเอียด</span>
         </div>
 
         {sheet && !sheet.storage_ready && (
@@ -521,7 +554,7 @@ export default function GraphicSheet({ an }: { an: string }) {
               <div className="py-24 text-center"><Spin /></div>
             ) : (
               <Spin spinning={loading}>
-                <SheetSvg sheet={sheet} start={start} admitDate={admitDate} patient={patient} />
+                <SheetSvg sheet={sheet} start={start} admitDate={admitDate} patient={patient} onPainClick={openPain} />
               </Spin>
             )}
           </div>

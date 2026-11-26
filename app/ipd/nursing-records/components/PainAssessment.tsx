@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Form, Select, DatePicker, Button, Row, Col, Tag, Table, Popconfirm, Tabs, Segmented } from 'antd';
+import { Card, Form, Select, DatePicker, Button, Row, Col, Tag, Table, Popconfirm, Tabs, Segmented, Radio, Alert } from 'antd';
 import { FormSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import Input from 'antd/es/input';
@@ -49,7 +49,63 @@ interface PainRecord {
   reassess_score?: number;
   reassess_time?: string;
   nurse_name?: string;
+  tool_items?: CpotItems | null;
 }
+
+interface CpotItems { facial?: number; body?: number; muscle?: number; airway_mode?: 'ventilator' | 'vocal'; airway?: number }
+
+/**
+ * CPOT ฉบับภาษาไทย (งานการพยาบาล ศิริราช 2564) — ผู้ป่วยที่บอกคะแนนความปวดเองไม่ได้
+ * ประเมินจากพฤติกรรม 4 ด้าน ด้านละ 0-2 รวม 0-8 · 0-2 mild · 3-5 moderate · >5 severe
+ * ข้อความแต่ละระดับใช้ตามเอกสาร ไม่แต่งเพิ่ม
+ */
+const CPOT_ITEMS: { key: 'facial' | 'body' | 'muscle'; title: string; hint?: string; levels: string[] }[] = [
+  {
+    key: 'facial', title: '1. การแสดงออกทางสีหน้า (Facial expression)', levels: [
+      'สีหน้าเรียบเฉย ไม่มีความตึงเครียดที่สังเกตได้บนใบหน้าผู้ป่วย (Relaxed, neutral)',
+      'หน้านิ่ว คิ้วขมวด แสดงความเครียด (Tense)',
+      'หน้าตาบูดเบี้ยว ปิดตาแน่น (Grimacing)',
+    ],
+  },
+  {
+    key: 'body', title: '2. การเคลื่อนไหวร่างกาย (Body movements)', levels: [
+      'ผู้ป่วยไม่เคลื่อนไหว หรืออยู่ในท่าทางปกติ (Absence of movements)',
+      'ผู้ป่วยจะเคลื่อนไหวช้าและระมัดระวัง พยายามที่จะเอื้อมมือไปสัมผัสตำแหน่งที่รู้สึกเจ็บปวด (Protection)',
+      'ผู้ป่วยจะกระสับกระส่าย นอนพักไม่ได้ (Restlessness)',
+    ],
+  },
+  {
+    key: 'muscle', title: '3. ความตึงตัวของกล้ามเนื้อ (Muscle tension)', hint: 'ประเมินจากการงอและเหยียดแขนผู้ป่วย', levels: [
+      'ไม่มีการต่อต้านในระหว่างการช่วยผู้ป่วยเคลื่อนไหว หรือพลิกตัว (Relaxed)',
+      'มีการต่อต้านในระหว่างการเคลื่อนไหว หรือเปลี่ยนท่า (Tense, rigid)',
+      'การต่อต้านของผู้ป่วยมีกำลังมากขึ้น ต้านแรงผู้ประเมินมาก (Very tense or rigid)',
+    ],
+  },
+];
+const CPOT_AIRWAY = {
+  ventilator: {
+    title: '4. การยอมตามเครื่องช่วยหายใจ (Compliance with the ventilator)', levels: [
+      'ไม่มีสัญญาณเตือนของเครื่องดังขึ้น (Tolerating ventilator)',
+      'ผู้ป่วยอาจมีอาการไอหรือสัญญาณเตือนของเครื่องดังขึ้น แต่หยุดเองโดยไม่ต้องเข้าไปแก้ไข (Coughing but tolerating)',
+      'ผู้ป่วยจะต่อสู้ในการใช้เครื่องช่วยหายใจ สัญญาณเตือนของเครื่องดังขึ้นไม่หยุด ต้องเข้าไปแก้ไขเพื่อให้ผู้ป่วยสงบ (Fighting ventilator)',
+    ],
+  },
+  vocal: {
+    title: '4. การออกเสียง (Vocalization) : ผู้ป่วยที่ไม่ได้ใส่ท่อช่วยหายใจ', levels: [
+      'พูดด้วยน้ำเสียงปกติ หรือไม่มีเสียง (Talking in normal tone or no sound)',
+      'มีการถอนหายใจ หรือร้องครางเบาๆ (Sighing, moaning)',
+      'มีการร้องไห้ หรือร้องโวยวาย (Crying out, sobbing)',
+    ],
+  },
+} as const;
+const cpotLevel = (total: number) => (total <= 2 ? 'mild' : total <= 5 ? 'moderate' : 'severe');
+const cpotLevelLabel: Record<string, string> = {
+  mild: 'ปวดเล็กน้อย (CPOT 0-2 · mild)',
+  moderate: 'ปวดปานกลาง (CPOT 3-5 · moderate) ต้องได้รับการจัดการ',
+  severe: 'ปวดมาก (CPOT > 5 · severe) ต้องได้รับการจัดการ',
+};
+/** คะแนนเต็มและเกณฑ์ระดับขึ้นกับเครื่องมือ — CPOT เต็ม 8 ใช้เกณฑ์ของ CPOT */
+const maxOf = (tool?: string) => (tool === 'CPOT' ? 8 : 10);
 
 const painScaleColors: Record<string, { color: string; bg: string; border: string; text: string }> = {
   no_pain: { color: 'green', bg: '#86efac', border: '#16a34a', text: 'text-green-700' },
@@ -66,6 +122,8 @@ const getPainLevel = (score: number): string => {
   if (score <= 9) return 'severe';
   return 'worst';
 };
+const levelOfRecord = (r: { assessment_tool?: string; pain_score: number }) =>
+  r.assessment_tool === 'CPOT' ? cpotLevel(r.pain_score) : getPainLevel(r.pain_score);
 
 const painLevelLabel: Record<string, string> = {
   no_pain: 'ไม่ปวด (0)',
@@ -126,6 +184,7 @@ interface PainFormValues {
   reassess_score?: number;
   reassess_time?: string;
   nurse_name?: string;
+  cpot?: CpotItems;
 }
 
 export default function PainAssessment({ an }: { an: string }) {
@@ -136,6 +195,14 @@ export default function PainAssessment({ an }: { an: string }) {
   const [records, setRecords] = useState<PainRecord[]>([]);
   const [rightTab, setRightTab] = useState('trend');
   const [liveScore, setLiveScore] = useState(0);
+  const tool = Form.useWatch('assessment_tool', form) as string | undefined;
+  const cpotVals = Form.useWatch('cpot', form) as CpotItems | undefined;
+  const isCpot = tool === 'CPOT';
+  const airwayMode = cpotVals?.airway_mode ?? 'ventilator';
+  const cpotFilled = (['facial', 'body', 'muscle', 'airway'] as const).filter(k => typeof cpotVals?.[k] === 'number').length;
+  const cpotTotal = (cpotVals?.facial ?? 0) + (cpotVals?.body ?? 0) + (cpotVals?.muscle ?? 0) + (cpotVals?.airway ?? 0);
+  const cpotLv = cpotLevel(cpotTotal);
+  const needsManagement = isCpot && cpotFilled === 4 && cpotTotal >= 3;
 
   const getHeaders = useCallback(() => {
     const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
@@ -177,7 +244,9 @@ export default function PainAssessment({ an }: { an: string }) {
   const onFinish = async (raw: unknown) => {
     setSaving(true);
     const values = raw as PainFormValues;
-    const painLevel = getPainLevel(values.pain_score ?? 0);
+    const cpot = values.assessment_tool === 'CPOT' ? values.cpot : undefined;
+    const score = cpot ? (cpot.facial ?? 0) + (cpot.body ?? 0) + (cpot.muscle ?? 0) + (cpot.airway ?? 0) : (values.pain_score ?? 0);
+    const painLevel = cpot ? cpotLevel(score) : getPainLevel(score);
 
     try {
       const headers = getHeaders();
@@ -189,8 +258,9 @@ export default function PainAssessment({ an }: { an: string }) {
         record_datetime: values.record_datetime ? dayjs(values.record_datetime).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss'),
         shift: values.shift || null,
         assessment_tool: values.assessment_tool || 'NRS',
-        pain_score: values.pain_score ?? 0,
+        pain_score: score,
         pain_level: painLevel,
+        tool_items: cpot ?? null,
         location: values.location || null,
         character: values.character || null,
         onset: values.onset || null,
@@ -206,7 +276,7 @@ export default function PainAssessment({ an }: { an: string }) {
       await axios.post('/api/v1/nursing-records/pain', payload, { headers });
       Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
       form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
+      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: values.assessment_tool || 'NRS', pain_score: 0, cpot: { airway_mode: cpot?.airway_mode ?? 'ventilator' }, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
       setLiveScore(0);
       await fetchRecords();
     } catch (error) {
@@ -244,9 +314,9 @@ export default function PainAssessment({ an }: { an: string }) {
     { title: 'เครื่องมือ', dataIndex: 'assessment_tool', key: 'assessment_tool', width: 70, align: 'center' },
     {
       title: 'คะแนน', dataIndex: 'pain_score', key: 'pain_score', width: 70, align: 'center',
-      render: (v) => {
-        const level = getPainLevel(v);
-        return <Tag color={painScaleColors[level]?.color} className="m-0 font-bold text-lg">{v}</Tag>;
+      render: (v, r) => {
+        const level = levelOfRecord(r);
+        return <Tag color={painScaleColors[level]?.color} className="m-0 font-bold text-lg">{v}<span className="text-xs font-normal">/{maxOf(r.assessment_tool)}</span></Tag>;
       },
     },
     { title: 'ตำแหน่ง', dataIndex: 'location', key: 'location', width: 100 },
@@ -284,7 +354,7 @@ export default function PainAssessment({ an }: { an: string }) {
           background: var(--pain-color);
         }
         .pain-seg .ant-segmented-item { padding: 0; }
-        .pain-seg .ant-segmented-item-label { padding-inline: 0; }
+        .pain-seg .ant-segmented-item-label { padding-inline: 0; text-overflow: clip; }
       `}</style>
       <Navbar />
       <div className="p-4 max-w-7xl mx-auto">
@@ -307,9 +377,9 @@ export default function PainAssessment({ an }: { an: string }) {
           </div>
           <div className="flex items-center gap-3">
             {latestRecord && (
-              <div className={`rounded-lg px-4 py-1.5 text-center ${latestRecord.pain_score >= 7 ? 'bg-red-500/30' : latestRecord.pain_score >= 4 ? 'bg-orange-400/30' : 'bg-green-500/30'}`}>
+              <div className={`rounded-lg px-4 py-1.5 text-center ${['severe', 'worst'].includes(levelOfRecord(latestRecord)) ? 'bg-red-500/30' : levelOfRecord(latestRecord) === 'moderate' ? 'bg-orange-400/30' : 'bg-green-500/30'}`}>
                 <div className="text-white/70 text-xs">ล่าสุด</div>
-                <div className="text-white font-bold text-lg">{latestRecord.pain_score}/10</div>
+                <div className="text-white font-bold text-lg">{latestRecord.pain_score}/{maxOf(latestRecord.assessment_tool)}{latestRecord.assessment_tool === 'CPOT' ? ' CPOT' : ''}</div>
               </div>
             )}
           </div>
@@ -323,7 +393,7 @@ export default function PainAssessment({ an }: { an: string }) {
             <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
               title={<span className="text-rose-600 font-bold text-sm">ประเมินความปวด</span>}>
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
+                initialValues={{ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, cpot: { airway_mode: 'ventilator' }, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>
@@ -343,32 +413,65 @@ export default function PainAssessment({ an }: { an: string }) {
                   </Col>
                 </Row>
 
-                <Form.Item label="เครื่องมือประเมิน" name="assessment_tool" rules={[{ required: true }]}>
+                <Form.Item label="เครื่องมือประเมิน" name="assessment_tool" rules={[{ required: true }]}
+                  extra="บอกคะแนนเองได้ ใช้ self report (เชื่อถือได้มากกว่า) · บอกเองไม่ได้ ใช้ CPOT">
                   <Select>
-                    <Option value="NRS">Numeric Rating Scale (NRS 0-10)</Option>
-                    <Option value="VAS">Visual Analog Scale (VAS)</Option>
-                    <Option value="Wong-Baker">Wong-Baker FACES</Option>
-                    <Option value="FLACC">FLACC (เด็กเล็ก)</Option>
-                    <Option value="BPS">BPS (ผู้ป่วยใส่ท่อช่วยหายใจ)</Option>
+                    <Select.OptGroup label="ผู้ป่วยบอกคะแนนความปวดได้ด้วยตัวเอง (Self report)">
+                      <Option value="NRS">Numeric Rating Scale (NRS 0-10)</Option>
+                      <Option value="Wong-Baker">Face scale (Wong-Baker FACES)</Option>
+                      <Option value="VAS">Visual Analog Scale (VAS)</Option>
+                    </Select.OptGroup>
+                    <Select.OptGroup label="ผู้ป่วยบอกคะแนนเองไม่ได้ (สังเกตพฤติกรรม)">
+                      <Option value="CPOT">CPOT (Critical-Care Pain Observation Tool 0-8)</Option>
+                      <Option value="BPS">BPS (Behavioral Pain Scale)</Option>
+                      <Option value="FLACC">FLACC (เด็กเล็ก)</Option>
+                    </Select.OptGroup>
                   </Select>
                 </Form.Item>
 
-                {/* Pain Score Visual Selector */}
-                <div className="bg-rose-50 rounded-lg px-3 pt-2 pb-2 mb-2 border border-rose-100">
-                  <div className="text-xs text-rose-600 font-bold mb-2">ระดับความปวด (Pain Score)</div>
-                  <Form.Item name="pain_score" className="mb-0!">
-                    <Segmented
-                      block
-                      size="large"
-                      className="pain-seg"
-                      options={painScoreOptions(liveScore)}
-                      onChange={(v) => setLiveScore(Number(v))}
-                      // ตัวเลื่อนที่เลือกอยู่เปลี่ยนสีตามระดับความปวด ผ่านตัวแปร CSS ด้านล่าง
-                      style={{ '--pain-color': livePainCfg.border } as React.CSSProperties}
-                    />
+                {/* CPOT: 4 ด้าน ด้านละ 0-2 · ฟิลด์อยู่ในฟอร์มตลอด (hidden) ค่าไม่หายเมื่อสลับเครื่องมือไปมา */}
+                <div hidden={!isCpot} className="bg-rose-50 rounded-lg px-3 pt-2 pb-2 mb-2 border border-rose-100 [&_.ant-form-item-label_label]:h-auto! [&_.ant-form-item-label_label]:whitespace-normal! [&_.ant-form-item-label_label]:leading-snug!">
+                  <div className="text-xs text-rose-600 font-bold mb-1">CPOT · ประเมินจากพฤติกรรม 4 ด้าน ด้านละ 0-2</div>
+                  {CPOT_ITEMS.map(it => (
+                    <Form.Item key={it.key} name={['cpot', it.key]} label={it.title} extra={it.hint}
+                      rules={isCpot ? [{ required: true, message: 'กรุณาให้คะแนนด้านนี้' }] : []}>
+                      <Radio.Group className="score-options flex! flex-col gap-1">
+                        {it.levels.map((t, i) => <Radio key={i} value={i}><b className="mr-1">{i}</b>{t}</Radio>)}
+                      </Radio.Group>
+                    </Form.Item>
+                  ))}
+                  <Form.Item name={['cpot', 'airway_mode']} label="ผู้ป่วยใส่ท่อช่วยหายใจหรือไม่ (เลือกหัวข้อของด้านที่ 4)">
+                    <Segmented block options={[{ value: 'ventilator', label: 'ใส่ท่อช่วยหายใจ' }, { value: 'vocal', label: 'ไม่ได้ใส่ท่อ' }]} />
                   </Form.Item>
-                  <div className={`text-center mt-2 font-bold text-sm ${livePainCfg.text}`}>
-                    {painLevelLabel[livePainLevel]}
+                  <Form.Item name={['cpot', 'airway']} label={CPOT_AIRWAY[airwayMode].title}
+                    rules={isCpot ? [{ required: true, message: 'กรุณาให้คะแนนด้านนี้' }] : []}>
+                    <Radio.Group className="score-options flex! flex-col gap-1">
+                      {CPOT_AIRWAY[airwayMode].levels.map((t, i) => <Radio key={i} value={i}><b className="mr-1">{i}</b>{t}</Radio>)}
+                    </Radio.Group>
+                  </Form.Item>
+                  <div className={`text-center mt-1 font-bold text-sm ${cpotFilled === 4 ? painScaleColors[cpotLv].text : 'text-gray-500'}`}>
+                    {cpotFilled === 4 ? <>CPOT {cpotTotal}/8 · {cpotLevelLabel[cpotLv]}</> : <>ให้คะแนนแล้ว {cpotFilled}/4 ด้าน</>}
+                  </div>
+                </div>
+
+                <div hidden={isCpot}>
+                  {/* Pain Score Visual Selector */}
+                  <div className="bg-rose-50 rounded-lg px-3 pt-2 pb-2 mb-2 border border-rose-100">
+                    <div className="text-xs text-rose-600 font-bold mb-2">ระดับความปวด (Pain Score)</div>
+                    <Form.Item name="pain_score" className="mb-0!">
+                      <Segmented
+                        block
+                        size="large"
+                        className="pain-seg"
+                        options={painScoreOptions(liveScore)}
+                        onChange={(v) => setLiveScore(Number(v))}
+                        // ตัวเลื่อนที่เลือกอยู่เปลี่ยนสีตามระดับความปวด ผ่านตัวแปร CSS ด้านล่าง
+                        style={{ '--pain-color': livePainCfg.border } as React.CSSProperties}
+                      />
+                    </Form.Item>
+                    <div className={`text-center mt-2 font-bold text-sm ${livePainCfg.text}`}>
+                      {painLevelLabel[livePainLevel]}
+                    </div>
                   </div>
                 </div>
 
@@ -408,14 +511,18 @@ export default function PainAssessment({ an }: { an: string }) {
                 {/* Intervention section */}
                 <div className="bg-blue-50 rounded-lg px-3 pt-2 pb-1 mb-2 border border-blue-100">
                   <div className="text-xs text-blue-600 font-bold mb-2">การจัดการความปวด</div>
-                  <Form.Item label="การจัดการ/การพยาบาล" name="intervention">
+                  {needsManagement && (
+                    <Alert type="warning" showIcon className="mb-2!" title="ความปวดระดับ moderate / severe ต้องได้รับการจัดการ แล้วประเมินซ้ำ" />
+                  )}
+                  <Form.Item label="การจัดการ/การพยาบาล" name="intervention"
+                    rules={needsManagement ? [{ required: true, message: 'CPOT ตั้งแต่ 3 ต้องระบุการจัดการความปวด' }] : []}>
                     <TextArea rows={2} placeholder="เช่น ให้ยาแก้ปวด จัดท่า ประคบเย็น" />
                   </Form.Item>
                   <Row gutter={8}>
                     <Col span={12}>
                       <Form.Item label="คะแนนหลัง Reassess" name="reassess_score">
                         <Select placeholder="คะแนน" allowClear>
-                          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => <Option key={s} value={s}>{s}</Option>)}
+                          {Array.from({ length: maxOf(tool) + 1 }, (_, s) => <Option key={s} value={s}>{s}</Option>)}
                         </Select>
                       </Form.Item>
                     </Col>
@@ -462,8 +569,8 @@ export default function PainAssessment({ an }: { an: string }) {
                             <div className="text-xs font-bold text-gray-500 mb-3">แนวโน้ม Pain Score</div>
                             <div className="flex items-end gap-1 h-32">
                               {[...sortedRecords].reverse().map((rec) => {
-                                const heightPct = Math.max((rec.pain_score / 10) * 100, 5);
-                                const level = getPainLevel(rec.pain_score);
+                                const heightPct = Math.max((rec.pain_score / maxOf(rec.assessment_tool)) * 100, 5);
+                                const level = levelOfRecord(rec);
                                 const cfg = painScaleColors[level];
                                 return (
                                   <div key={rec.id} className="flex-1 flex flex-col items-center gap-1">
@@ -484,7 +591,7 @@ export default function PainAssessment({ an }: { an: string }) {
                         )}
 
                         {sortedRecords.map(rec => {
-                          const level = getPainLevel(rec.pain_score);
+                          const level = levelOfRecord(rec);
                           const cfg = painScaleColors[level];
                           return (
                             <div key={rec.id} className="bg-white border-l-4 rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow"
@@ -497,10 +604,15 @@ export default function PainAssessment({ an }: { an: string }) {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className={`text-3xl font-bold ${cfg.text}`}>{rec.pain_score}</span>
-                                  <span className="text-gray-400">/10</span>
+                                  <span className="text-gray-400">/{maxOf(rec.assessment_tool)}</span>
                                 </div>
                               </div>
 
+                              {rec.assessment_tool === 'CPOT' && rec.tool_items && (
+                                <div className="text-xs text-gray-500 mb-2">
+                                  สีหน้า {rec.tool_items.facial ?? '-'} · การเคลื่อนไหว {rec.tool_items.body ?? '-'} · กล้ามเนื้อ {rec.tool_items.muscle ?? '-'} · {rec.tool_items.airway_mode === 'vocal' ? 'การออกเสียง' : 'การยอมตามเครื่องช่วยหายใจ'} {rec.tool_items.airway ?? '-'}
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-1 mb-2">
                                 {rec.location && <Tag color="blue" className="m-0 text-xs">{rec.location}</Tag>}
                                 {rec.character && <Tag color="purple" className="m-0 text-xs">{rec.character}</Tag>}
@@ -515,7 +627,7 @@ export default function PainAssessment({ an }: { an: string }) {
 
                               {rec.reassess_score !== null && rec.reassess_score !== undefined && (
                                 <div className="bg-green-50 rounded-lg px-3 py-1.5 text-xs text-green-700">
-                                  <span className="font-bold">Reassess:</span> {rec.reassess_score}/10 {rec.reassess_time ? `(${rec.reassess_time})` : ''}
+                                  <span className="font-bold">Reassess:</span> {rec.reassess_score}/{maxOf(rec.assessment_tool)} {rec.reassess_time ? `(${rec.reassess_time})` : ''}
                                 </div>
                               )}
 
