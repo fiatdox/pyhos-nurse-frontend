@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, Form, Select, DatePicker, Button, Row, Col, Tag, Table, Popconfirm, Tabs, Segmented, Radio, Alert } from 'antd';
 import { FormSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import Input from 'antd/es/input';
 import axios from 'axios';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
 import { getUserProfile } from '../../../lib/auth';
 import { VscSave, VscTrash } from 'react-icons/vsc';
-import { PiHeartbeatBold, PiListBulletsBold, PiChartLineUpBold } from 'react-icons/pi';
+import { PiHeartbeatBold, PiListBulletsBold, PiChartLineUpBold, PiPencilSimpleBold, PiPlusBold } from 'react-icons/pi';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -187,8 +187,47 @@ interface PainFormValues {
   cpot?: CpotItems;
 }
 
-export default function PainAssessment({ an }: { an: string }) {
+const shiftOfTime = (d: Dayjs) => (d.hour() < 8 ? 'ดึก' : d.hour() < 16 ? 'เช้า' : 'บ่าย');
+const defaultNurse = () => (getUserProfile()?.fullname || getUserProfile()?.name) || '';
+/** ช่องเวลาของฟอร์มปรอท (ช่องละ 4 ชม.) — ใช้หารายการที่อยู่ช่องเดียวกับที่คลิก */
+const sameSlot = (a: Dayjs, b: Dayjs) => a.isSame(b, 'day') && Math.floor(a.hour() / 4) === Math.floor(b.hour() / 4);
+/**
+ * ค่าของทั้งฟอร์มจากรายการเดิม (แก้ไข) หรือค่าตั้งต้น (ลงใหม่) — ระบุครบทุกช่องเสมอ
+ * ไม่งั้นค่าจากรายการที่เปิดแก้ก่อนหน้าจะค้างในช่องที่ไม่ได้ระบุ
+ */
+const toFormValues = (rec: PainRecord | null, at: Dayjs, withShift: boolean, tool = 'NRS'): PainFormValues => ({
+  record_datetime: rec ? dayjs(rec.record_datetime) : at,
+  shift: rec ? (rec.shift ?? shiftOfTime(dayjs(rec.record_datetime))) : (withShift ? shiftOfTime(at) : undefined),
+  assessment_tool: rec?.assessment_tool ?? tool,
+  pain_score: rec && rec.assessment_tool !== 'CPOT' ? rec.pain_score : 0,
+  cpot: {
+    airway_mode: rec?.tool_items?.airway_mode ?? 'ventilator',
+    facial: rec?.tool_items?.facial, body: rec?.tool_items?.body, muscle: rec?.tool_items?.muscle, airway: rec?.tool_items?.airway,
+  },
+  location: rec?.location ?? undefined,
+  character: rec?.character ?? undefined,
+  onset: rec?.onset ?? undefined,
+  duration: rec?.duration ?? undefined,
+  aggravating: rec?.aggravating ?? undefined,
+  alleviating: rec?.alleviating ?? undefined,
+  intervention: rec?.intervention ?? undefined,
+  reassess_score: rec?.reassess_score ?? undefined,
+  reassess_time: rec?.reassess_time ?? undefined,
+  nurse_name: rec?.nurse_name || defaultNurse(),
+});
+
+/**
+ * embedded = เปิดอยู่ในลิ้นชักของหน้าอื่น (เช่น ฟอร์มปรอท) ไม่มี Navbar/หัวหน้า และจัดสองคอลัมน์ตามความกว้างลิ้นชัก ไม่ใช่ความกว้างจอ
+ * onSaved = แจ้งหน้าที่เปิดลิ้นชักให้โหลดใหม่หลังบันทึก/ลบ (กราฟความปวดในใบปรอทขึ้นทันที)
+ * initialAt = เวลาเริ่มต้นของฟอร์ม (คลิกช่องเวลาในใบปรอท) ไม่ส่ง = เวลาปัจจุบัน · เวรคิดจากเวลานี้ให้ด้วย
+ *   ถ้าช่องนั้นมีการประเมินอยู่แล้ว เปิดรายการล่าสุดของช่องมาให้แก้ทันที (ลงใหม่ได้จากปุ่ม "ลงรายการใหม่")
+ */
+export default function PainAssessment({ an, embedded = false, onSaved, initialAt }: { an: string; embedded?: boolean; onSaved?: () => void; initialAt?: Dayjs }) {
+  const startAt = initialAt ?? dayjs();
   const [form] = Form.useForm();
+  /** รายการที่กำลังแก้ (null = ลงรายการใหม่) */
+  const [editing, setEditing] = useState<PainRecord | null>(null);
+  const formTop = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [patient, setPatient] = useState<PatientInfo | null>(null);
@@ -213,11 +252,14 @@ export default function PainAssessment({ an }: { an: string }) {
     try {
       const headers = getHeaders();
       const res = await axios.get(`/api/v1/nursing-records/pain/${an}`, { headers });
-      if (res.data?.success) setRecords(res.data.data || []);
+      const rows: PainRecord[] = res.data?.success ? (res.data.data || []) : [];
+      setRecords(rows);
+      return rows;
     } catch (error) {
       // ไม่ใส่ข้อมูลตัวอย่างแทน เพราะบันทึกทางการพยาบาลต้องแยกออกว่าอันไหนของจริง
       console.error('Error fetching pain records:', error);
       setRecords([]);
+      return [];
     }
   }, [an, getHeaders]);
 
@@ -231,7 +273,17 @@ export default function PainAssessment({ an }: { an: string }) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
         }
-        await fetchRecords();
+        const rows = await fetchRecords();
+        // เปิดจากช่องเวลาในใบปรอท: ช่องนั้นมีการประเมินแล้ว → เปิดรายการล่าสุดของช่องมาให้ดู/แก้
+        // (ตั้งก่อน setLoading(false) ใน tick เดียวกัน ฟอร์มจึงขึ้นมาพร้อมค่าของรายการนั้นเลย)
+        if (initialAt) {
+          const hit = rows.filter(r => sameSlot(dayjs(r.record_datetime), initialAt))
+            .sort((a, b) => dayjs(b.record_datetime).valueOf() - dayjs(a.record_datetime).valueOf())[0];
+          if (hit) {
+            setEditing(hit);
+            setLiveScore(hit.assessment_tool === 'CPOT' ? 0 : hit.pain_score);
+          }
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -239,7 +291,26 @@ export default function PainAssessment({ an }: { an: string }) {
       }
     };
     fetchData();
-  }, [an, getHeaders, fetchRecords]);
+  }, [an, getHeaders, fetchRecords, initialAt]);
+
+  /** เปิดรายการเดิมมาแก้ (จากช่องในใบปรอท การ์ดแนวโน้ม หรือตาราง) */
+  const startEdit = (rec: PainRecord) => {
+    setEditing(rec);
+    form.resetFields();
+    form.setFieldsValue(toFormValues(rec, startAt, true));
+    setLiveScore(rec.assessment_tool === 'CPOT' ? 0 : rec.pain_score);
+    formTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  /** กลับเป็นลงรายการใหม่ (คงเครื่องมือเดิมไว้ เวลาเป็นช่องที่คลิกหรือเวลาปัจจุบัน) */
+  const startNew = (tool?: string) => {
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue(toFormValues(null, initialAt ?? dayjs(), !!initialAt, tool));
+    setLiveScore(0);
+  };
+  const slotRecords = initialAt
+    ? records.filter(r => sameSlot(dayjs(r.record_datetime), initialAt)).sort((a, b) => dayjs(a.record_datetime).valueOf() - dayjs(b.record_datetime).valueOf())
+    : [];
 
   const onFinish = async (raw: unknown) => {
     setSaving(true);
@@ -273,12 +344,12 @@ export default function PainAssessment({ an }: { an: string }) {
         // คอลัมน์นี้เป็น NOT NULL — ถ้าผู้ใช้ลบชื่อออก ให้ย้อนกลับไปใช้ชื่อผู้ที่ล็อกอินอยู่
         nurse_name: values.nurse_name || (getUserProfile()?.fullname || getUserProfile()?.name) || '',
       };
-      await axios.post('/api/v1/nursing-records/pain', payload, { headers });
-      Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
-      form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), assessment_tool: values.assessment_tool || 'NRS', pain_score: 0, cpot: { airway_mode: cpot?.airway_mode ?? 'ventilator' }, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
-      setLiveScore(0);
+      if (editing) await axios.put(`/api/v1/nursing-records/pain/${editing.id}`, payload, { headers });
+      else await axios.post('/api/v1/nursing-records/pain', payload, { headers });
+      Swal.fire({ icon: 'success', title: 'สำเร็จ', text: editing ? 'แก้ไขการประเมินสำเร็จ' : 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      startNew(values.assessment_tool || 'NRS');
       await fetchRecords();
+      onSaved?.();
     } catch (error) {
       const status = axios.isAxiosError(error) ? error.response?.status : undefined;
       // แสดงเหตุผลจริงจาก server เพื่อให้แก้ที่ต้นเหตุได้ ไม่ใช่บอกแค่ว่าผิดพลาด
@@ -296,7 +367,9 @@ export default function PainAssessment({ an }: { an: string }) {
       const headers = getHeaders();
       await axios.delete(`/api/v1/nursing-records/pain/${id}`, { headers });
       Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      if (editing?.id === id) startNew();
       await fetchRecords();
+      onSaved?.();
     } catch {
       Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
     }
@@ -328,11 +401,14 @@ export default function PainAssessment({ an }: { an: string }) {
     },
     { title: 'พยาบาล', dataIndex: 'nurse_name', key: 'nurse_name', width: 100 },
     {
-      title: '', key: 'action', width: 50, align: 'center',
+      title: '', key: 'action', width: 80, align: 'center',
       render: (_, r) => (
+        <span className="inline-flex">
+        <Button type="text" size="small" icon={<PiPencilSimpleBold />} aria-label="แก้ไข" onClick={() => startEdit(r)} />
         <Popconfirm title="ยืนยันลบ?" onConfirm={() => handleDelete(r.id)} okText="ลบ" cancelText="ยกเลิก" okButtonProps={{ danger: true }}>
-          <Button type="text" danger size="small" icon={<VscTrash />} />
+          <Button type="text" danger size="small" icon={<VscTrash />} aria-label="ลบ" />
         </Popconfirm>
+        </span>
       ),
     },
   ];
@@ -342,7 +418,7 @@ export default function PainAssessment({ an }: { an: string }) {
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans">
+    <div className={embedded ? 'font-sans @container' : 'bg-slate-50 min-h-screen font-sans'}>
       {/*
         antd ไม่มี token สำหรับสีของแถบที่เลือกใน Segmented แบบรายตัวเลือก
         จึงกำหนดด้วย CSS โดยรับสีจากตัวแปร --pain-color ที่ตั้งไว้ที่ตัว Segmented
@@ -356,10 +432,10 @@ export default function PainAssessment({ an }: { an: string }) {
         .pain-seg .ant-segmented-item { padding: 0; }
         .pain-seg .ant-segmented-item-label { padding-inline: 0; text-overflow: clip; }
       `}</style>
-      <Navbar />
-      <div className="p-4 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      {!embedded && <Navbar />}
+      <div className={embedded ? '' : 'p-4 max-w-7xl mx-auto'}>
+        {/* Header (ในลิ้นชักใช้หัวของลิ้นชักแทน) */}
+        <div hidden={embedded} className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiHeartbeatBold className="text-white text-xl" />
@@ -388,12 +464,33 @@ export default function PainAssessment({ an }: { an: string }) {
         {loading ? (
           <FormSkeleton />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className={embedded ? 'grid grid-cols-1 @3xl:grid-cols-5 gap-4' : 'grid grid-cols-1 lg:grid-cols-5 gap-4'}>
             {/* Form - Left 2 cols */}
-            <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
-              title={<span className="text-rose-600 font-bold text-sm">ประเมินความปวด</span>}>
+            <Card size="small" className={`shadow-sm rounded-xl border border-gray-100 ${embedded ? '@3xl:col-span-2' : 'lg:col-span-2'}`}
+              title={<span ref={formTop} className={`font-bold text-sm ${editing ? 'text-blue-700' : 'text-rose-600'}`}>{editing ? 'แก้ไขการประเมินความปวด' : 'ประเมินความปวด'}</span>}>
+              {/* รายการในช่องเวลาที่คลิกมาจากใบปรอท — กดเพื่อเปิดดู/แก้ */}
+              {slotRecords.length > 0 && (
+                <div className="mb-2 rounded-md border border-gray-200 bg-gray-50 p-2">
+                  <div className="text-xs font-semibold text-gray-600 mb-1">
+                    ช่อง {String(Math.floor(initialAt!.hour() / 4) * 4).padStart(2, '0')}:00–{String(Math.floor(initialAt!.hour() / 4) * 4 + 3).padStart(2, '0')}:59 น. มี {slotRecords.length} รายการ (กดเพื่อดู/แก้)
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {slotRecords.map(r => (
+                      <Button key={r.id} size="small" type={editing?.id === r.id ? 'primary' : 'default'} onClick={() => startEdit(r)}>
+                        {dayjs(r.record_datetime).format('HH:mm')} · {r.assessment_tool === 'CPOT' ? `CPOT ${r.pain_score}/8` : `${r.pain_score}/10`}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {editing && (
+                <Alert type="info" showIcon className="mb-2!"
+                  title={<span className="text-sm">กำลังแก้รายการ <b>{dayjs(editing.record_datetime).format('DD/MM HH:mm')} น.</b> · บันทึกจะทับรายการเดิม</span>}
+                  description={<span className="text-xs text-gray-600">ประเมินครั้งใหม่ (เช่น ประเมินซ้ำรอบถัดไป) ให้กด ลงรายการใหม่</span>}
+                  action={<Button size="small" icon={<PiPlusBold />} onClick={() => startNew(form.getFieldValue('assessment_tool'))}>ลงรายการใหม่</Button>} />
+              )}
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
-                initialValues={{ record_datetime: dayjs(), assessment_tool: 'NRS', pain_score: 0, cpot: { airway_mode: 'ventilator' }, nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' }}
+                initialValues={toFormValues(editing, startAt, !!initialAt)}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
                 <Row gutter={8}>
@@ -542,14 +639,14 @@ export default function PainAssessment({ an }: { an: string }) {
                 <div className="sticky bottom-0 z-10 -mx-3 px-3 pt-2 pb-3 bg-white border-t border-gray-100">
                   <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
                     className="bg-rose-500 hover:bg-rose-600 w-full shadow-md" size="middle">
-                    บันทึกการประเมิน
+                    {editing ? 'บันทึกการแก้ไข' : 'บันทึกการประเมิน'}
                   </Button>
                 </div>
               </Form>
             </Card>
 
             {/* Trend + Table - Right 3 cols */}
-            <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-3 [&_.ant-card-body]:p-0">
+            <Card size="small" className={`shadow-sm rounded-xl border border-gray-100 [&_.ant-card-body]:p-0 ${embedded ? '@3xl:col-span-3' : 'lg:col-span-3'}`}>
               <Tabs activeKey={rightTab} onChange={setRightTab} type="card"
                 className="[&_.ant-tabs-nav]:mb-0 [&_.ant-tabs-nav]:px-3 [&_.ant-tabs-nav]:pt-2 [&_.ant-tabs-tab-active]:bg-rose-500! [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-white! [&_.ant-tabs-tab]:font-semibold [&_.ant-tabs-tab]:text-sm"
                 items={[
@@ -594,7 +691,7 @@ export default function PainAssessment({ an }: { an: string }) {
                           const level = levelOfRecord(rec);
                           const cfg = painScaleColors[level];
                           return (
-                            <div key={rec.id} className="bg-white border-l-4 rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow"
+                            <div key={rec.id} className={`bg-white border-l-4 rounded-xl p-4 border hover:shadow-md transition-shadow ${editing?.id === rec.id ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-100'}`}
                               style={{ borderLeftColor: cfg.border }}>
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
@@ -631,7 +728,10 @@ export default function PainAssessment({ an }: { an: string }) {
                                 </div>
                               )}
 
-                              <div className="mt-2 pt-2 border-t border-gray-50 flex justify-end">
+                              <div className="mt-2 pt-2 border-t border-gray-50 flex items-center justify-between gap-2">
+                                <Button size="small" icon={<PiPencilSimpleBold />} onClick={() => startEdit(rec)} disabled={editing?.id === rec.id}>
+                                  {editing?.id === rec.id ? 'กำลังแก้' : 'แก้ไข'}
+                                </Button>
                                 <span className="text-xs text-gray-400">ประเมินโดย: <span className="font-semibold text-gray-600">{rec.nurse_name || '-'}</span></span>
                               </div>
                             </div>

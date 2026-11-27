@@ -10,6 +10,8 @@ export interface WardPatient {
     ptname: string;
     an: string | null;
     ward_name: string | null;
+    /** เตียงจาก HIS (iptadm) — รายการเรียงตามเตียงน้อยไปมากจากเซิร์ฟเวอร์ */
+    bedno?: string | null;
     admission: 'admitted_here' | 'admitted' | 'discharged' | 'none';
     discharged_at: string | null;
     in_ward: boolean;
@@ -65,7 +67,8 @@ export default function RxWardPatientPicker({ open, ward, wardName, thumb, onPic
     const shown = useMemo(() => {
         const s = q.trim().toLowerCase();
         if (!s) return list;
-        return list.filter(p => p.ptname.toLowerCase().includes(s) || p.hn.includes(s) || (p.an ?? '').includes(s));
+        return list.filter(p => p.ptname.toLowerCase().includes(s) || p.hn.includes(s) || (p.an ?? '').includes(s)
+            || (p.bedno ?? '').toLowerCase().includes(s));
     }, [list, q]);
 
     return (
@@ -92,7 +95,7 @@ export default function RxWardPatientPicker({ open, ward, wardName, thumb, onPic
                         autoFocus
                         allowClear
                         prefix={<PiMagnifyingGlassBold />}
-                        placeholder="ค้นชื่อ / HN / AN"
+                        placeholder="ค้นเตียง / ชื่อ / HN / AN"
                         value={q}
                         onChange={e => setQ(e.target.value)}
                         onPressEnter={() => { if (shown.length === 1) onPick(shown[0]); }}
@@ -118,6 +121,12 @@ export default function RxWardPatientPicker({ open, ward, wardName, thumb, onPic
                                     hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-[#162312] transition-colors"
                             >
                                 <div className="flex items-center gap-2">
+                                    {/* เตียงนำหน้าชื่อ: ช่องกว้างเท่ากันทุกแถว ไล่ตาลงมาดูเตียงได้เป็นแนวเดียว */}
+                                    <span className={`shrink-0 w-20 rounded px-1.5 py-0.5 text-center text-sm font-bold tabular-nums
+                                        ${p.bedno ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                            : 'bg-gray-50 text-gray-400 border border-gray-200'}`}>
+                                        {p.bedno ? `เตียง ${p.bedno}` : 'ไม่มีเตียง'}
+                                    </span>
                                     <span className="font-semibold truncate">{p.ptname || 'ไม่มีชื่อในทะเบียน'}</span>
                                     {p.admission === 'discharged' && (
                                         <Tag color="orange" className="m-0! ml-auto! text-[11px]!">
@@ -125,7 +134,7 @@ export default function RxWardPatientPicker({ open, ward, wardName, thumb, onPic
                                         </Tag>
                                     )}
                                 </div>
-                                <div className="text-xs text-gray-500 tabular-nums">
+                                <div className="text-xs text-gray-500 tabular-nums pl-22">
                                     HN {p.hn}{p.an ? ` · AN ${p.an}` : ''}
                                 </div>
                             </button>

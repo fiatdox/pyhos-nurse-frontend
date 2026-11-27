@@ -22,7 +22,7 @@ import {
 import { useThemeMode } from '../../../lib/theme';
 import { registerNurseDark, chartThemeName } from '../../../lib/echartsTheme';
 import { VscSave, VscTrash, VscWarning, VscCheck } from 'react-icons/vsc';
-import { PiHeartbeatBold, PiChartLineBold, PiTableBold, PiGaugeBold, PiClockClockwiseBold, PiUserBold } from 'react-icons/pi';
+import { PiHeartbeatBold, PiChartLineBold, PiTableBold, PiGaugeBold, PiClockClockwiseBold, PiUserBold, PiPencilSimpleBold, PiPlusBold } from 'react-icons/pi';
 
 // ---------- ชนิดข้อมูล ----------
 
@@ -456,10 +456,52 @@ interface FormValues {
   late_entry_reason?: string;
 }
 
+/** ช่องเวลาของฟอร์มปรอท (ช่องละ 4 ชม.) — ใช้หารายการที่อยู่ช่องเดียวกับที่คลิก */
+const sameSlot = (a: Dayjs, b: Dayjs) => a.isSame(b, 'day') && Math.floor(a.hour() / 4) === Math.floor(b.hour() / 4);
+const numOrUndef = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v));
+const strOrUndef = <T extends string>(v: T | null | undefined) => (v === null || v === undefined || v === '' ? undefined : v);
+/**
+ * ค่าของทั้งฟอร์มจากรายการเดิม (แก้ไข) หรือค่าตั้งต้น (ลงใหม่) — ระบุครบทุกช่องเสมอ
+ * ไม่งั้นค่าจากรายการที่เปิดแก้ก่อนหน้าจะค้างในช่องที่ไม่ได้ระบุ
+ */
+const toFormValues = (r: VitalRecord | null, at: Dayjs): FormValues => r ? {
+  record_datetime: dayjs(r.record_datetime),
+  vital_t: numOrUndef(r.vital_t), temp_route: strOrUndef(r.temp_route) ?? DEFAULTS.temp_route,
+  vital_p: numOrUndef(r.vital_p), pulse_rhythm: strOrUndef(r.pulse_rhythm) ?? DEFAULTS.pulse_rhythm, pulse_site: strOrUndef(r.pulse_site) ?? DEFAULTS.pulse_site,
+  vital_r: numOrUndef(r.vital_r), resp_pattern: strOrUndef(r.resp_pattern) ?? DEFAULTS.resp_pattern,
+  vital_bp_s: numOrUndef(r.vital_bp_s), vital_bp_d: numOrUndef(r.vital_bp_d),
+  bp_position: strOrUndef(r.bp_position) ?? DEFAULTS.bp_position, bp_site: strOrUndef(r.bp_site) ?? DEFAULTS.bp_site,
+  bp_cuff_size: strOrUndef(r.bp_cuff_size) ?? DEFAULTS.bp_cuff_size, bp_method: strOrUndef(r.bp_method) ?? DEFAULTS.bp_method,
+  vital_o2sat: numOrUndef(r.vital_o2sat), o2_therapy: strOrUndef(r.o2_therapy) ?? DEFAULTS.o2_therapy,
+  o2_device: strOrUndef(r.o2_device), o2_flow: numOrUndef(r.o2_flow), fio2: numOrUndef(r.fio2),
+  pain_score: numOrUndef(r.pain_score), pain_scale: strOrUndef(r.pain_scale) ?? DEFAULTS.pain_scale, avpu: r.avpu ?? undefined,
+  gcs_e: numOrUndef(r.gcs_e), gcs_v: numOrUndef(r.gcs_v), gcs_m: numOrUndef(r.gcs_m),
+  blood_glucose: numOrUndef(r.blood_glucose), glucose_timing: strOrUndef(r.glucose_timing), urine_output_ml: numOrUndef(r.urine_output_ml),
+  entry_method: strOrUndef(r.entry_method) ?? DEFAULTS.entry_method, device_id: strOrUndef(r.device_id),
+  late_entry_reason: strOrUndef(r.late_entry_reason),
+} : {
+  ...DEFAULTS,
+  record_datetime: at,
+  vital_t: undefined, vital_p: undefined, vital_r: undefined, vital_bp_s: undefined, vital_bp_d: undefined,
+  vital_o2sat: undefined, o2_device: undefined, o2_flow: undefined, fio2: undefined, pain_score: undefined,
+  gcs_e: undefined, gcs_v: undefined, gcs_m: undefined, blood_glucose: undefined, glucose_timing: undefined,
+  urine_output_ml: undefined, device_id: undefined, late_entry_reason: undefined,
+};
+
 // ---------- คอมโพเนนต์หลัก ----------
 
-export default function VitalSignsRecord({ an }: { an: string }) {
+/**
+ * embedded = เปิดอยู่ในลิ้นชักของหน้าอื่น (ฟอร์มปรอท) ไม่มี Navbar/หัวหน้า
+ * onSaved = แจ้งหน้าที่เปิดลิ้นชักให้โหลดใหม่หลังบันทึก/แก้/ลบ (กราฟในใบปรอทขึ้นทันที)
+ * initialAt = เวลาเริ่มต้นของฟอร์ม (คลิกช่องเวลาในใบปรอท) · ถ้าช่องนั้นมีบันทึกแล้ว เปิดรายการล่าสุดของช่องมาให้แก้ทันที
+ */
+export default function VitalSignsRecord({ an, embedded = false, onSaved, initialAt }: {
+  an: string; embedded?: boolean; onSaved?: () => void; initialAt?: Dayjs;
+}) {
   const [form] = Form.useForm<FormValues>();
+  /** รายการที่กำลังแก้ (null = ลงรายการใหม่) */
+  const [editing, setEditing] = useState<VitalRecord | null>(null);
+  const formTop = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -486,16 +528,20 @@ export default function VitalSignsRecord({ an }: { an: string }) {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, []);
 
-  const fetchRecords = useCallback(async () => {
+  const fetchRecords = useCallback(async (): Promise<VitalRecord[]> => {
     try {
       const res = await axios.get(`/api/v1/nursing-records/vital/${an}`, { headers: getHeaders() });
       if (res.data?.success) {
-        setRecords(res.data.data || []);
+        const rows: VitalRecord[] = res.data.data || [];
+        setRecords(rows);
         if (res.data.patient) setMeta(res.data.patient);
+        return rows;
       }
+      return [];
     } catch (error) {
       console.error('โหลดสัญญาณชีพไม่สำเร็จ:', error);
       setRecords([]);
+      return [];
     }
   }, [an, getHeaders]);
 
@@ -508,7 +554,17 @@ export default function VitalSignsRecord({ an }: { an: string }) {
           const p = Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
           setPatient(p ?? null);
         }
-        await fetchRecords();
+        const rows = await fetchRecords();
+        // เปิดจากช่องเวลาในใบปรอท: ช่องนั้นมีบันทึกแล้ว → เปิดรายการล่าสุดของช่องมาให้ดู/แก้
+        // (ตั้งก่อน setLoading(false) ใน tick เดียวกัน ฟอร์มจึงขึ้นมาพร้อมค่าของรายการนั้นเลย)
+        if (initialAt) {
+          const hit = rows.filter(r => sameSlot(dayjs(r.record_datetime), initialAt))
+            .sort((a, b) => dayjs(b.record_datetime).valueOf() - dayjs(a.record_datetime).valueOf())[0];
+          if (hit) {
+            setEditing(hit);
+            setNews2Scale(hit.news2_scale === 2 ? 2 : 1);
+          }
+        }
       } catch (error) {
         console.error('โหลดข้อมูลผู้ป่วยไม่สำเร็จ:', error);
       } finally {
@@ -516,7 +572,28 @@ export default function VitalSignsRecord({ an }: { an: string }) {
       }
     };
     run();
-  }, [an, getHeaders, fetchRecords]);
+  }, [an, getHeaders, fetchRecords, initialAt]);
+
+  /** เปิดรายการเดิมมาแก้ (จากช่องในใบปรอท หรือปุ่มแก้ในตาราง) */
+  const startEdit = (r: VitalRecord) => {
+    setEditing(r);
+    setNews2Scale(r.news2_scale === 2 ? 2 : 1);
+    form.resetFields();
+    form.setFieldsValue(toFormValues(r, dayjs()));
+    formTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  /** กลับเป็นลงรายการใหม่ — เวลาเป็นช่องที่คลิกมา หรือเวลาปัจจุบัน */
+  const startNew = () => {
+    setEditing(null);
+    requestId.current = newRequestId();
+    form.resetFields();
+    form.setFieldsValue(toFormValues(null, initialAt ?? dayjs()));
+  };
+  const slotRecords = initialAt
+    ? records.filter(r => sameSlot(dayjs(r.record_datetime), initialAt))
+      .sort((a, b) => dayjs(a.record_datetime).valueOf() - dayjs(b.record_datetime).valueOf())
+    : [];
+  const slotFrom = initialAt ? Math.floor(initialAt.hour() / 4) * 4 : 0;
 
   // ---------- คำนวณสดขณะพิมพ์ ----------
 
@@ -548,7 +625,8 @@ export default function VitalSignsRecord({ an }: { an: string }) {
       : null;
 
   // เวลาที่วัดกับเวลาที่บันทึกต่างกันเกิน 1 ชม. ถือเป็นการลงย้อนหลัง มีผลทางกฎหมาย
-  const backdatedHours = w.record_datetime ? dayjs().diff(w.record_datetime, 'hour', true) : 0;
+  const enteredRef = editing ? dayjs(editing.entered_at ?? editing.record_datetime) : dayjs();
+  const backdatedHours = w.record_datetime ? enteredRef.diff(w.record_datetime, 'hour', true) : 0;
   const isLateEntry = backdatedHours > 1;
   const reasonRequired = backdatedHours > 24;
 
@@ -575,7 +653,9 @@ export default function VitalSignsRecord({ an }: { an: string }) {
         request_id: requestId.current,
         record_datetime: dayjs(values.record_datetime ?? dayjs()).format('YYYY-MM-DD HH:mm:ss'),
       };
-      const res = await axios.post('/api/v1/nursing-records/vital', payload, { headers: getHeaders() });
+      const res = editing
+        ? await axios.put(`/api/v1/nursing-records/vital/${editing.id}`, payload, { headers: getHeaders() })
+        : await axios.post('/api/v1/nursing-records/vital', payload, { headers: getHeaders() });
 
       // เริ่มนับถอยหลังทันทีที่ server ตอบ ไม่รอให้ปิดกล่องข้อความ
       setCooldown(SAVE_COOLDOWN_SECONDS);
@@ -598,7 +678,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
         const needsAttention = saved?.risk === 'high' || saved?.risk === 'medium' || saved?.hasSingleThree;
         await Swal.fire({
           icon: needsAttention ? 'warning' : 'success',
-          title: 'บันทึกสัญญาณชีพสำเร็จ',
+          title: editing ? 'แก้ไขสัญญาณชีพสำเร็จ' : 'บันทึกสัญญาณชีพสำเร็จ',
           html: saved?.score !== null && saved?.score !== undefined
             ? `<div style="font-size:14px">NEWS2 = <b style="color:${risk?.color}">${saved.score}</b> (${risk?.label})<br/>
                <span style="color:var(--color-slate-500)">วัดซ้ำ ${saved.monitorFreq}</span></div>`
@@ -611,13 +691,9 @@ export default function VitalSignsRecord({ an }: { an: string }) {
       }
 
       // ขึ้นใบใหม่ การกรอกครั้งถัดไปคือคนละรายการ
-      requestId.current = newRequestId();
-      form.resetFields();
-      form.setFieldsValue({
-        ...DEFAULTS,
-        record_datetime: dayjs(),
-      });
+      startNew();
       await fetchRecords();
+      onSaved?.();
     } catch (error) {
       const err = error as { response?: { status?: number; data?: { message?: string } } };
       const status = err.response?.status;
@@ -638,7 +714,9 @@ export default function VitalSignsRecord({ an }: { an: string }) {
     try {
       await axios.delete(`/api/v1/nursing-records/vital/${id}`, { headers: getHeaders() });
       Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      if (editing?.id === id) startNew();
       await fetchRecords();
+      onSaved?.();
     } catch {
       Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
     }
@@ -790,12 +868,17 @@ export default function VitalSignsRecord({ an }: { an: string }) {
       ),
     },
     {
-      title: '', key: 'action', width: 46, align: 'center', fixed: 'right',
+      title: '', key: 'action', width: 76, align: 'center', fixed: 'right',
       render: (_, r) => (
-        <Popconfirm title="ยืนยันลบรายการนี้?" description="ระบบจะเก็บแถวไว้เพื่อการตรวจสอบ"
-          onConfirm={() => handleDelete(r.id)} okText="ลบ" cancelText="ยกเลิก" okButtonProps={{ danger: true }}>
-          <Button type="text" danger size="small" icon={<VscTrash />} />
-        </Popconfirm>
+        <span className="inline-flex">
+          <Tooltip title="แก้ไข">
+            <Button type="text" size="small" icon={<PiPencilSimpleBold />} aria-label="แก้ไข" onClick={() => startEdit(r)} />
+          </Tooltip>
+          <Popconfirm title="ยืนยันลบรายการนี้?" description="ระบบจะเก็บแถวไว้เพื่อการตรวจสอบ"
+            onConfirm={() => handleDelete(r.id)} okText="ลบ" cancelText="ยกเลิก" okButtonProps={{ danger: true }}>
+            <Button type="text" danger size="small" icon={<VscTrash />} aria-label="ลบ" />
+          </Popconfirm>
+        </span>
       ),
     },
   ];
@@ -804,8 +887,8 @@ export default function VitalSignsRecord({ an }: { an: string }) {
   const admitDate = patient?.regdate;
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans">
-      <Navbar />
+    <div className={embedded ? 'font-sans' : 'bg-slate-50 min-h-screen font-sans'}>
+      {!embedded && <Navbar />}
       {/* ทำให้ label ของฟอร์มนี้หนาทุกอัน อ่านเร็วขึ้นตอนกรอกงานเร่ง */}
       <style>{`
         .vital-form .ant-form-item-label > label { font-weight: 600; font-size: 13px; }
@@ -826,9 +909,9 @@ export default function VitalSignsRecord({ an }: { an: string }) {
         .vital-form .vs-line .ant-form-item-extra { min-height: 18px; }
       `}</style>
 
-      <div className="p-4 max-w-400 mx-auto">
-        {/* หัวเรื่อง */}
-        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div className={embedded ? '' : 'p-4 max-w-400 mx-auto'}>
+        {/* หัวเรื่อง (ในลิ้นชักใช้หัวของลิ้นชักแทน) */}
+        <div hidden={embedded} className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiHeartbeatBold className="text-white text-xl" />
@@ -860,16 +943,36 @@ export default function VitalSignsRecord({ an }: { an: string }) {
           <Row gutter={16}>
             {/* ---------- ฟอร์ม ---------- */}
             <Col xs={24} xl={10}>
+              <div ref={formTop} />
+              {slotRecords.length > 0 && (
+                <div className="mb-3 rounded-lg border border-gray-200 bg-white p-2">
+                  <div className="text-xs font-semibold text-gray-600 mb-1">
+                    ช่อง {String(slotFrom).padStart(2, '0')}:00–{String(slotFrom + 3).padStart(2, '0')}:59 น. มี {slotRecords.length} รายการ (กดเพื่อดู/แก้)
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {slotRecords.map(r => (
+                      <Button key={r.id} size="small" type={editing?.id === r.id ? 'primary' : 'default'} onClick={() => startEdit(r)}>
+                        {dayjs(r.record_datetime).format('HH:mm')}
+                        {r.vital_t !== null && r.vital_t !== undefined ? ` · T ${r.vital_t}` : ''}
+                        {r.vital_p ? ` · P ${r.vital_p}` : ''}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {editing && (
+                <Alert type="info" showIcon className="mb-3!"
+                  title={<span className="text-sm">กำลังแก้รายการ <b>{dayjs(editing.record_datetime).format('DD/MM HH:mm')} น.</b> · บันทึกจะทับรายการเดิม</span>}
+                  description={<span className="text-xs text-gray-600">ผู้วัด {editing.nurse_name || '-'} (คงเดิม) · ชื่อคุณจะถูกบันทึกเป็นผู้แก้ไข · วัดครั้งใหม่ให้กด ลงรายการใหม่</span>}
+                  action={<Button size="small" icon={<PiPlusBold />} onClick={startNew}>ลงรายการใหม่</Button>} />
+              )}
               <Form
                 form={form}
                 layout="vertical"
                 size="large"
                 className="vital-form"
                 onFinish={onFinish}
-                initialValues={{
-                  ...DEFAULTS,
-                  record_datetime: dayjs(),
-                }}
+                initialValues={toFormValues(editing, initialAt ?? dayjs())}
               >
                 <SectionCard title="เวลาและวิธีบันทึก" accent="#64748b">
                   <Row gutter={8}>
@@ -1153,7 +1256,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
                     ? 'กำลังบันทึก...'
                     : cooldown > 0
                       ? `บันทึกแล้ว · เปิดให้บันทึกอีกครั้งใน ${cooldown} วินาที`
-                      : 'บันทึกสัญญาณชีพ'}
+                      : editing ? 'บันทึกการแก้ไข' : 'บันทึกสัญญาณชีพ'}
                 </Button>
                 <div className="text-[11px] text-gray-400 text-center mb-4 h-4">
                   {cooldown > 0 && 'ข้อมูลเข้าระบบแล้ว ไม่ต้องกดซ้ำ'}
@@ -1245,7 +1348,7 @@ export default function VitalSignsRecord({ an }: { an: string }) {
                             pagination={{ pageSize: 20, size: 'small', showSizeChanger: false }}
                             scroll={{ x: 1250 }}
                             locale={{ emptyText: 'ยังไม่มีข้อมูลสัญญาณชีพ' }}
-                            rowClassName={r => (r.news2_risk === 'high' ? 'bg-red-50/60' : r.news2_risk === 'medium' ? 'bg-orange-50/50' : '')}
+                            rowClassName={r => (r.id === editing?.id ? 'bg-blue-50' : r.news2_risk === 'high' ? 'bg-red-50/60' : r.news2_risk === 'medium' ? 'bg-orange-50/50' : '')}
                             className="[&_.ant-table-thead_.ant-table-cell]:bg-red-50! [&_.ant-table-thead_.ant-table-cell]:text-red-700! [&_.ant-table-thead_.ant-table-cell]:font-semibold! [&_.ant-table-thead_.ant-table-cell]:text-xs!"
                           />
                           <div className="text-[11px] text-gray-400 mt-2 flex items-center gap-1.5">

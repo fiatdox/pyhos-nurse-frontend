@@ -437,14 +437,24 @@ function AdminModal({ target, onClose, onSaved, patient, an }: {
 
 /* ───────────────────────── หน้า ───────────────────────── */
 
-export default function MedicationRecord({ an }: { an: string }) {
+/**
+ * embedded = เปิดในลิ้นชักของฟอร์มปรอท (ไม่มี Navbar/หัวหน้า) · initialDate = วันที่คลิกมาจากใบ
+ * onSaved = ให้ใบโหลดใหม่หลังบันทึก/แก้ไข/ลบ (แถว continuous / prn dose ขึ้นทันที)
+ * กติกาการให้ยาเหมือนหน้า MAR ทุกอย่าง (มื้อที่ยังไม่ถึงกดไม่ได้, PRN ให้ได้เฉพาะวันนี้, ต้องผ่านการตรวจทาน)
+ */
+export default function MedicationRecord({ an, embedded = false, initialDate, onSaved }: {
+  an: string; embedded?: boolean; initialDate?: Dayjs; onSaved?: () => void;
+}) {
   const [loading, setLoading] = useState(true);
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [codes, setCodes] = useState<Codes | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [date, setDate] = useState<Dayjs>(dayjs());
+  const [date, setDate] = useState<Dayjs>(() => {
+    const d = (initialDate ?? dayjs()).startOf('day');
+    return d.isAfter(dayjs(), 'day') ? dayjs() : d;
+  });
   /*
     โหลดคำสั่งยาไม่ได้ต้องบอกตรงๆ และห้ามบันทึก
     เดิมหน้านี้ใส่รายการยาตัวอย่างแทน (Ceftriaxone, Morphine ฯลฯ) ทำให้ผู้ป่วยทุกคนเห็นยาที่ไม่ได้สั่งจริง
@@ -489,16 +499,18 @@ export default function MedicationRecord({ an }: { an: string }) {
     init();
   }, [an]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลด MAR ใหม่เมื่อเปลี่ยนวัน
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const refresh = async () => {
     setOrderModal({ open: false, order: null });
     setAdminTarget(null);
     await fetchData();
+    onSaved?.();
   };
 
   const act = async (fn: () => Promise<unknown>, done: string) => {
-    try { await fn(); await fetchData(); toast(done); } catch (e) { alertErr(e); }
+    try { await fn(); await fetchData(); onSaved?.(); toast(done); } catch (e) { alertErr(e); }
   };
 
   const verify = (o: Order) => act(() => axios.post(`/api/v1/nursing-records/mar/orders/${o.id}/verify`, {}, { headers: headersOf() }), 'ตรวจทานคำสั่งยาแล้ว');
@@ -657,10 +669,11 @@ export default function MedicationRecord({ an }: { an: string }) {
   const formattedAdmitDate = patient?.regdate ? dayjs(patient.regdate).format('DD/MM/YYYY HH:mm') : '-';
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans">
-      <Navbar />
-      <div className="p-4 max-w-7xl mx-auto">
-        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div className={embedded ? 'font-sans' : 'bg-slate-50 min-h-screen font-sans'}>
+      {!embedded && <Navbar />}
+      <div className={embedded ? '' : 'p-4 max-w-7xl mx-auto'}>
+        {/* หัวเรื่อง (ในลิ้นชักใช้หัวของลิ้นชักแทน) */}
+        <div hidden={embedded} className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiPillBold className="text-white text-xl" />

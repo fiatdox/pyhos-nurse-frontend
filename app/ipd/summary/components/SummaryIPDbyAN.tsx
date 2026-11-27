@@ -12,7 +12,9 @@ import {
   PDFViewer,
 } from '@react-pdf/renderer';
 import axios from 'axios';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
+import type { Sheet as GraphicSheetData } from '../../nursing-records/components/GraphicSheet';
+import { renderGraphicSheetPng } from '../../nursing-records/components/graphicSheetImage';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import {
@@ -36,24 +38,31 @@ Font.register({
 });
 
 /**
- * หัวกระดาษของโรงพยาบาล
- *
- * รวมไว้ที่เดียวเพราะใบนี้พิมพ์ออกไปเก็บในแฟ้มเวชระเบียน ถ้าที่อยู่หรือเบอร์เปลี่ยน
- * ต้องแก้จุดเดียวแล้วทุกหน้าทั้งสิบใบเปลี่ยนตาม ไม่ใช่ไล่แก้ทีละหน้าแล้วตกหล่น
- *
- * !! ที่อยู่กับเบอร์โทรด้านล่างยังไม่ได้ยืนยันกับงานเวชระเบียน !!
- * กรุณาตรวจให้ตรงกับหัวกระดาษของฟอร์มจริงก่อนนำไปใช้ เพราะเอกสารนี้เป็นส่วนหนึ่ง
- * ของเวชระเบียน ข้อมูลติดต่อที่ผิดบนเอกสารที่ส่งต่อให้หน่วยงานอื่นแก้ย้อนหลังไม่ได้
+ * หัวกระดาษของโรงพยาบาล — รูปแบบเดียวกับ "ใบรายงานผลการตรวจสุขภาพ" (pyhosweb lib/checkup-results/pdf.tsx)
+ * ชื่อ สังกัด ที่อยู่ และเบอร์โทร ใช้ชุดเดียวกับใบนั้น ให้เอกสารของโรงพยาบาลหน้าตาเดียวกัน
+ * รวมไว้ที่เดียว ถ้าที่อยู่หรือเบอร์เปลี่ยน แก้จุดเดียวแล้วทุกหน้าเปลี่ยนตาม
  */
 const HOSPITAL = {
     nameTh: 'โรงพยาบาลพะเยา',
     nameEn: 'Phayao Hospital',
-    address: '269 หมู่ 11 ถนนพหลโยธิน ตำบลบ้านต๋อม อำเภอเมืองพะเยา จังหวัดพะเยา 56000',
-    phone: 'โทร. 0-5440-9300',
+    affiliation: 'สำนักงานปลัดกระทรวงสาธารณสุข',
+    address: '269 หมู่ 11 ต.บ้านต๋อม อ.เมืองพะเยา จ.พะเยา 56000',
+    phone: 'โทร 054-409-300',
+    docTitle: 'สรุปเวชระเบียนผู้ป่วยใน',
+    docTitleEn: 'IPD NURSING RECORD SUMMARY',
     /* ไฟล์อยู่ที่ public/assets/images/ Next เสิร์ฟโฟลเดอร์ public ที่รากของเว็บ
        เขียนตามชื่อไฟล์จริงรวมช่องว่าง เบราว์เซอร์เข้ารหัสให้เองตอนร้องขอ */
     logo: '/assets/images/logo MOPH.png',
 };
+
+/**
+ * สระอำ → นิคหิต + สระอา (วิธีเดียวกับ pyhosweb prepThai)
+ * ฟอนต์แยกสระอำเป็นสองรูปตอนวาด react-pdf นับตัวอักษรไม่ตรงแล้วตัวท้ายบรรทัดหาย ("สาธารณสุข" เหลือ "สาธารณสุ")
+ */
+const prepThai = (text: string) => text.replace(/([่-๋]?)ำ/g, 'ํ$1า');
+
+/** สีของหัวกระดาษ — ชุดเดียวกับใบรายงานผลการตรวจสุขภาพ */
+const C = { brand: '#0b6b37', brandDark: '#143d26', brandLight: '#eefaf2', muted: '#5f6b66', line: '#cfdad3' };
 
 // 2. Styles
 const styles = StyleSheet.create({
@@ -62,8 +71,8 @@ const styles = StyleSheet.create({
     ตัวเนื้อหาต้องเว้นที่ด้านบนล่างให้พอ ไม่งั้นบรรทัดแรกจะพิมพ์ทับหัวกระดาษ
   */
   page: {
-    paddingTop: 96,
-    paddingBottom: 38,
+    paddingTop: 104,
+    paddingBottom: 42,
     paddingHorizontal: 28,
     fontFamily: 'Sarabun',
     fontSize: 8,
@@ -94,19 +103,19 @@ const styles = StyleSheet.create({
   formHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 42,
+    height: 46,
     borderBottomWidth: 1.5,
-    borderBottomColor: '#006b5f',
+    borderBottomColor: C.brand,
     borderBottomStyle: 'solid',
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
   logo: { width: 40, height: 40, marginRight: 9 },
-  /* ชื่อไทยกับอังกฤษอยู่บรรทัดเดียวกันด้วย Text ซ้อนใน Text ไม่ต้องเปลืองอีกบรรทัด */
-  hospitalTh: { fontSize: 12.5, fontWeight: 'bold', color: '#006b5f', lineHeight: 1.25 },
-  hospitalEn: { fontSize: 7.5, fontWeight: 'normal', color: '#6b7a78' },
-  hospitalMeta: { fontSize: 6.5, color: '#6b7a78', lineHeight: 1.35 },
-  headerRight: { width: 100, alignItems: 'flex-end' },
-  docCode: { fontSize: 6.5, color: '#8a9795', lineHeight: 1.4 },
+  hospitalTh: { fontSize: 14, fontWeight: 'bold', color: C.brand, lineHeight: 1.25, marginBottom: 1 },
+  hospitalMeta: { fontSize: 7.5, color: C.muted, lineHeight: 1.45 },
+  headerRight: { width: 170, alignItems: 'flex-end' },
+  docTitle: { fontSize: 12.5, fontWeight: 'bold', color: C.brandDark, textAlign: 'right', marginBottom: 4 },
+  docTitleEn: { fontSize: 7.5, color: C.muted, textAlign: 'right', letterSpacing: 1 },
+  docCode: { fontSize: 6.5, color: C.muted, lineHeight: 1.4 },
   /*
     ชื่อฟอร์มเป็นแถบชิดซ้าย มีขีดเขียวนำหน้า
     แบบฟอร์มกระดาษของโรงพยาบาลวางชื่อฟอร์มชิดซ้ายเหมือนกัน
@@ -120,22 +129,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 17,
     marginTop: 6,
-    backgroundColor: '#eef6f5',
+    backgroundColor: C.brandLight,
   },
-  titleBar: { width: 3, height: 17, backgroundColor: '#006b5f', marginRight: 7 },
-  titleText: { fontSize: 10.5, fontWeight: 'bold', color: '#00564d' },
+  titleBar: { width: 3, height: 17, backgroundColor: C.brand, marginRight: 7 },
+  titleText: { fontSize: 10.5, fontWeight: 'bold', color: C.brandDark, flexGrow: 1 },
+  /* ผู้ป่วยบนแถบชื่อฟอร์มทุกหน้า — หน้าที่ล้นต่อไม่มีบล็อกผู้ป่วย แผ่นที่หลุดจากแฟ้มต้องรู้ว่าของใคร */
+  titlePatient: { fontSize: 7, color: C.muted, paddingRight: 6 },
   /* ล็อกความสูงด้วยเหตุผลเดียวกับหัวกระดาษ */
   formFooter: {
     position: 'absolute',
-    bottom: 18,
+    bottom: 14,
     left: 28,
     width: 539.28,
-    height: 12,
+    height: 20,
     flexDirection: 'row',
     fontSize: 6.5,
-    color: '#888',
-    borderTopWidth: 0.5,
-    borderTopColor: '#ccc',
+    color: C.muted,
+    borderTopWidth: 0.6,
+    borderTopColor: C.line,
     borderTopStyle: 'solid',
     paddingTop: 3,
   },
@@ -440,32 +451,31 @@ const Line = ({ label: l, value }: { label: string; value: string }) => (
  * ถ้าไม่ซ้ำ หน้าที่สองของตารางจะเป็นกระดาษเปล่าไม่มีชื่อโรงพยาบาล
  * ซึ่งใช้เป็นเอกสารในแฟ้มเวชระเบียนไม่ได้ เพราะแผ่นที่หลุดออกมาจะไม่รู้ว่าของที่ไหน
  */
-const FormHeader = ({ title, docCode }: { title: string; docCode?: string }) => (
+const FormHeader = ({ title, docCode, patient }: { title: string; docCode?: string; patient?: PatientData }) => (
   <View style={styles.formHeader} fixed>
     <View style={styles.formHeaderRow}>
       {/* Image ตัวนี้ของ @react-pdf ไม่ใช่ <img> ของ HTML จึงไม่มี prop alt ให้ใส่ */}
       {/* eslint-disable-next-line jsx-a11y/alt-text */}
       <Image src={HOSPITAL.logo} style={styles.logo} />
       <View style={styles.flex1}>
-        <Text style={styles.hospitalTh}>
-          {HOSPITAL.nameTh}
-          <Text style={styles.hospitalEn}>  ·  {HOSPITAL.nameEn}</Text>
-        </Text>
-        <Text style={styles.hospitalMeta}>{HOSPITAL.address}</Text>
-        <Text style={styles.hospitalMeta}>{HOSPITAL.phone}</Text>
+        <Text style={styles.hospitalTh}>{HOSPITAL.nameTh}</Text>
+        <Text style={styles.hospitalMeta}>{prepThai(`${HOSPITAL.nameEn} · ${HOSPITAL.affiliation}`)}</Text>
+        <Text style={styles.hospitalMeta}>{prepThai(`${HOSPITAL.address} · ${HOSPITAL.phone}`)}</Text>
       </View>
       <View style={styles.headerRight}>
-        {!!docCode && <Text style={styles.docCode}>{docCode}</Text>}
-        {/* เลขหน้าอยู่บนหัวกระดาษด้วย เวลาแฟ้มกระจายจะเรียงกลับได้โดยไม่ต้องพลิกดูท้ายแผ่น */}
-        <Text
-          style={styles.docCode}
-          render={({ pageNumber, totalPages }) => `หน้า ${pageNumber} / ${totalPages}`}
-        />
+        <Text style={styles.docTitle}>{HOSPITAL.docTitle}</Text>
+        <Text style={styles.docTitleEn}>{HOSPITAL.docTitleEn}</Text>
+        {/* เลขหน้าแบบ render ของ react-pdf 4.3 ไม่วาดออกมา (4.9 ใช้ในเบราว์เซอร์ไม่ได้) — ผู้ป่วยและชื่อฟอร์มอยู่บนแถบทุกหน้าแทน */}
       </View>
     </View>
     <View style={styles.titleBand}>
       <View style={styles.titleBar} />
-      <Text style={styles.titleText}>{title}</Text>
+      <Text style={styles.titleText}>{prepThai(title)}</Text>
+      {(!!patient || !!docCode) && (
+        <Text style={styles.titlePatient}>
+          {patient ? `${patient.name} · HN ${patient.hn} · AN ${patient.an}` : ''}{docCode ? `${patient ? '  ·  ' : ''}${docCode}` : ''}
+        </Text>
+      )}
     </View>
   </View>
 );
@@ -479,8 +489,10 @@ const FormHeader = ({ title, docCode }: { title: string; docCode?: string }) => 
 */
 const FormFooter = () => (
   <View style={styles.formFooter} fixed>
-    <Text style={styles.flex1}>{HOSPITAL.nameTh} · สรุปเวชระเบียนผู้ป่วยใน</Text>
-    <Text style={{ textAlign: 'right' }}>พิมพ์เมื่อ {dayjs().format('D MMM BBBB HH:mm')} น.</Text>
+    <View style={styles.flex1}>
+      <Text>เอกสารพิมพ์จากระบบบันทึกทางการพยาบาล {HOSPITAL.nameTh} · เป็นส่วนหนึ่งของเวชระเบียน · ข้อมูลส่วนบุคคล</Text>
+      <Text>พิมพ์เมื่อ {dayjs().format('D MMMM BBBB HH:mm')} น.</Text>
+    </View>
   </View>
 );
 
@@ -511,7 +523,7 @@ const PatientHeader = ({ patientData }: { patientData: PatientData }) => (
 const AdmissionPage = ({ patientData, admit }: { patientData: PatientData; admit: AdmitRecord | null }) => (
   <Page size="A4" style={styles.page} wrap>
     {/* ชื่อตรงกับฟอร์มกระดาษ SD-IM-003.019 เพื่อให้เทียบกับแฟ้มเวชระเบียนได้ */}
-    <FormHeader title="1. ใบบันทึกการรวบรวมข้อมูลแรกรับ (Admission Record)" docCode="SD-IM-003.019" />
+    <FormHeader patient={patientData} title="1. ใบบันทึกการรวบรวมข้อมูลแรกรับ (Admission Record)" docCode="SD-IM-003.019" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
 
@@ -876,7 +888,7 @@ const VitalSignsPage = ({ patientData, vitals, vitalMeta }: {
 
   return (
     <Page size="A4" style={styles.page} wrap>
-      <FormHeader title="2. แบบบันทึกสัญญาณชีพ (Vital Signs Record)" />
+      <FormHeader patient={patientData} title="2. แบบบันทึกสัญญาณชีพ (Vital Signs Record)" />
     <FormFooter />
       <PatientHeader patientData={patientData} />
 
@@ -1039,7 +1051,7 @@ const VitalSignsPage = ({ patientData, vitals, vitalMeta }: {
 // ===================== Page 3 =====================
 const ProgressNotesPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <FormHeader title="3. บันทึกทางการพยาบาล (Nursing Progress Notes)" />
+    <FormHeader patient={patientData} title="3. บันทึกทางการพยาบาล (Nursing Progress Notes)" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
@@ -1108,7 +1120,7 @@ const CarePlanPage = ({ patientData, plans }: { patientData: PatientData; plans:
 
   return (
     <Page size="A4" style={styles.page} wrap>
-      <FormHeader title="4. แผนการพยาบาล (Nursing Care Plan)" />
+      <FormHeader patient={patientData} title="4. แผนการพยาบาล (Nursing Care Plan)" />
       <FormFooter />
       <PatientHeader patientData={patientData} />
 
@@ -1205,10 +1217,32 @@ const CarePlanPage = ({ patientData, plans }: { patientData: PatientData; plans:
 // ===================== Page 5 =====================
 // หน้า I/O เดิม (ตัวเลขตัวอย่าง) เอาออกแล้ว — I/O จริงอยู่ในฟอร์มปรอท
 
+// ===================== ฟอร์มปรอท (Graphic sheet) =====================
+/** ฟอร์มปรอทหนึ่งใบ (7 วัน) ต่อหนึ่งหน้า — ภาพวาดจากตัววาดเดียวกับหน้าจอ */
+export interface GraphicSheetImage { start: string; dataUrl: string; width: number; height: number }
+/* พื้นที่เนื้อหา A4: กว้าง 539.28 · สูง 841.89 - 104 - 42 */
+const SHEET_BOX = { w: 539.28, h: 841.89 - 104 - 42 };
+const GraphicSheetPages = ({ patientData, sheets }: { patientData: PatientData; sheets: GraphicSheetImage[] }) => (
+  <>
+    {sheets.map(g => {
+      const k = Math.min(SHEET_BOX.w / g.width, SHEET_BOX.h / g.height);
+      return (
+        <Page key={g.start} size="A4" style={styles.page}>
+          <FormHeader patient={patientData}
+            title={`5. ฟอร์มปรอท (Graphic sheet) ${dayjs(g.start).format('D MMM BB')} – ${dayjs(g.start).add(6, 'day').format('D MMM BB')}`} />
+          <FormFooter />
+          {/* eslint-disable-next-line jsx-a11y/alt-text */}
+          <Image src={g.dataUrl} style={{ width: g.width * k, height: g.height * k, alignSelf: 'center' }} />
+        </Page>
+      );
+    })}
+  </>
+);
+
 // ===================== Page 6 =====================
 const MARPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <FormHeader title="6. บันทึกการให้ยา (MAR)" />
+    <FormHeader patient={patientData} title="6. บันทึกการให้ยา (MAR)" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
@@ -1237,7 +1271,7 @@ const MARPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 7 =====================
 const SpecialCarePage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <FormHeader title="7. บันทึกการดูแลพิเศษ (Special Care Records)" />
+    <FormHeader patient={patientData} title="7. บันทึกการดูแลพิเศษ (Special Care Records)" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
     
@@ -1262,7 +1296,7 @@ const SpecialCarePage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 8 =====================
 const EducationPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <FormHeader title="8. บันทึกการศึกษาและให้ความรู้ (Patient Education)" />
+    <FormHeader patient={patientData} title="8. บันทึกการศึกษาและให้ความรู้ (Patient Education)" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
     <View style={styles.table}>
@@ -1285,7 +1319,7 @@ const EducationPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 9 =====================
 const HandoverPage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <FormHeader title="9. บันทึกการส่งเวร (Nursing Handover / SBAR)" />
+    <FormHeader patient={patientData} title="9. บันทึกการส่งเวร (Nursing Handover / SBAR)" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
     <Text style={styles.subHeader}>เวรเช้า ส่งต่อ เวรบ่าย (วันที่ 26/10/66)</Text>
@@ -1313,7 +1347,7 @@ const HandoverPage = ({ patientData }: { patientData: PatientData }) => (
 // ===================== Page 10 =====================
 const DischargePage = ({ patientData }: { patientData: PatientData }) => (
   <Page size="A4" style={styles.page}>
-    <FormHeader title="10. บันทึกการจำหน่าย (Discharge Record)" />
+    <FormHeader patient={patientData} title="10. บันทึกการจำหน่าย (Discharge Record)" />
     <FormFooter />
     <PatientHeader patientData={patientData} />
     
@@ -1337,18 +1371,20 @@ const DischargePage = ({ patientData }: { patientData: PatientData }) => (
 );
 
 // ===================== Main Document =====================
-const FullMedicalReport = ({ patientData, admit, vitals, vitalMeta, plans }: {
+const FullMedicalReport = ({ patientData, admit, vitals, vitalMeta, plans, sheets }: {
   patientData: PatientData;
   admit: AdmitRecord | null;
   vitals: VitalRow[];
   vitalMeta: VitalMeta;
   plans: FocusRecord[];
+  sheets: GraphicSheetImage[];
 }) => (
-  <Document>
+  <Document title={`${HOSPITAL.docTitle} AN ${patientData.an}`}>
     <AdmissionPage patientData={patientData} admit={admit} />
     <VitalSignsPage patientData={patientData} vitals={vitals} vitalMeta={vitalMeta} />
     <ProgressNotesPage patientData={patientData} />
     <CarePlanPage patientData={patientData} plans={plans} />
+    <GraphicSheetPages patientData={patientData} sheets={sheets} />
     <MARPage patientData={patientData} />
     <SpecialCarePage patientData={patientData} />
     <EducationPage patientData={patientData} />
@@ -1363,6 +1399,7 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
   const [admit, setAdmit] = useState<AdmitRecord | null>(null);
   const [vitals, setVitals] = useState<VitalRow[]>([]);
   const [plans, setPlans] = useState<FocusRecord[]>([]);
+  const [sheets, setSheets] = useState<GraphicSheetImage[]>([]);
   const [vitalMeta, setVitalMeta] = useState<VitalMeta>({
     age_group: null, age_known: true, news2_applicable: true,
   });
@@ -1376,12 +1413,16 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
     const fetchData = async () => {
       setLoading(true);
       const headers = getHeaders();
+      let admitRaw: string | null = null;
+      let patientRow: PatientRow | null = null;
 
       try {
         const res = await axios.post('/api/v1/patients/patient-by-an', { an }, { headers });
         const raw = res.data?.data;
         const row = Array.isArray(raw) ? raw[0] : raw;
         setPatientData(toPatientData(row ?? null, an));
+        admitRaw = row?.regdate ?? null;
+        patientRow = row ?? null;
       } catch (error) {
         console.error('Error fetching patient:', error);
         setPatientData(toPatientData(null, an));
@@ -1413,6 +1454,32 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
         setPlans([]);
       }
 
+      /*
+        ฟอร์มปรอท: ใบละ 7 วันนับจากวันรับไว้ (เหมือนกระดาษ) จนถึงวันนี้ ไม่เกิน 12 ใบ
+        ใบแรกใส่เสมอ ใบถัดไปใส่เฉพาะที่มีข้อมูล — โหลดไม่ได้ก็ข้ามไป รายงานส่วนอื่นยังพิมพ์ได้
+      */
+      try {
+        const admitDay: Dayjs | null = admitRaw && dayjs(admitRaw).isValid() ? dayjs(admitRaw).startOf('day') : null;
+        const first = admitDay ?? dayjs().startOf('day').subtract(6, 'day');
+        const out: GraphicSheetImage[] = [];
+        for (let i = 0, st = first; i < 12 && !st.isAfter(dayjs(), 'day'); i++, st = st.add(7, 'day')) {
+          const res = await axios.get(`/api/v1/nursing-records/graphic/${an}`, { params: { from: st.format('YYYY-MM-DD') }, headers });
+          const sheet: GraphicSheetData = res.data.data;
+          const has = sheet.vitals.length || sheet.meds.length || (sheet.pains ?? []).length
+            || sheet.shifts.length || sheet.daily.length || (sheet.falls ?? []).length;
+          if (i > 0 && !has) continue;
+          const png = await renderGraphicSheetPng({
+            sheet, start: st, admitDate: admitDay,
+            patient: patientRow ? { hn: patientRow.hn, ptname: patientRow.ptname, bedno: patientRow.bedno, ward: patientRow.ward, ward_name: patientRow.ward_name, regdate: patientRow.regdate } : null,
+          });
+          out.push({ start: st.format('YYYY-MM-DD'), ...png });
+        }
+        setSheets(out);
+      } catch (error) {
+        console.error('Error rendering graphic sheets:', error);
+        setSheets([]);
+      }
+
       setLoading(false);
     };
     fetchData();
@@ -1432,7 +1499,7 @@ const SummaryIPDbyAN = ({ an }: { an: string }) => {
       <PDFViewer style={{ width: '100%', height: '100%', border: 'none' }}>
         <FullMedicalReport
           patientData={patientData} admit={admit}
-          vitals={vitals} vitalMeta={vitalMeta} plans={plans}
+          vitals={vitals} vitalMeta={vitalMeta} plans={plans} sheets={sheets}
         />
       </PDFViewer>
     </div>

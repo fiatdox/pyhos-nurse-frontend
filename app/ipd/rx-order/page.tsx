@@ -7,7 +7,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import {
-    Alert, App, Button, Card, Checkbox, DatePicker, Empty, Image, Input, Modal, Radio, Segmented, Select, Spin,
+    Alert, App, Button, Card, Checkbox, DatePicker, Empty, Image, Input, Modal, Segmented, Select, Spin,
     Table, Tag, TimePicker, Tooltip, Typography, Upload,
 } from 'antd';
 import { tableLoading } from '@/app/components/Skeletons';
@@ -23,7 +23,7 @@ import Navbar from '../../components/Navbar';
 import { useRxSocket, createBeeper } from '../../lib/rxSocket';
 import type { HnSource } from '../../lib/hnReader';
 import { SHIFTS, shiftRange, type ShiftKey } from '../../lib/rxShifts';
-import { PRIORITY, PriorityDot, type RxPriority } from '../../lib/rxPriority';
+import { PRIORITY, PriorityDot, PrioritySelect, type RxPriority } from '../../lib/rxPriority';
 import { TubeFeedTag } from '../../lib/rxTubeFeed';
 import { PurgedNotice, PurgedTag, useRxRetention } from '../../lib/rxRetention';
 import { RxDay, byTime } from '../../lib/rxDate';
@@ -40,6 +40,17 @@ dayjs.locale('th');
 const { Text } = Typography;
 const { TextArea } = Input;
 
+/**
+ * ป้ายเตียงหน้าชื่อผู้ป่วย — พยาบาลจำผู้ป่วยตามเตียงได้เร็วกว่าชื่อ ใช้เทียบกับใบได้ทันที
+ * ไม่ใส่ dark: เพราะโหมดมืดของโปรเจกต์พลิกชุดสีให้เอง (globals.css) — 50 กลายเป็นพื้นเข้ม 800 กลายเป็นตัวหนังสือสว่าง
+ */
+const BedBadge = ({ bed, className = '' }: { bed: string; className?: string }) => (
+    <span className={`inline-flex items-center shrink-0 rounded px-1.5 py-px text-[11px] font-bold tabular-nums leading-4
+        bg-emerald-50 text-emerald-800 border border-emerald-200 ${className}`}>
+        เตียง {bed}
+    </span>
+);
+
 interface Ward { ward: number; ward_name: string }
 
 /**
@@ -53,6 +64,8 @@ interface HnMatch {
     hn: string;
     ptname: string;
     an: string | null;
+    /** เตียง (มีเฉพาะคนที่นอนหอนี้ เหมือนชื่อ) */
+    bedno?: string | null;
     ward_name: string | null;
     admission: Admission;
     /** วันจำหน่าย YYYY-MM-DD มีเฉพาะ discharged */
@@ -116,6 +129,7 @@ interface Entry {
     patient: {
         ptname: string;
         an: string | null;
+        bedno?: string | null;
         admission?: Admission;
         ward_name?: string | null;
         discharged_at?: string | null;
@@ -168,6 +182,8 @@ interface RxOrder {
     ward_name: string | null;
     hn: string | null;
     an: string | null;
+    /** เตียงปัจจุบันจาก HIS (เซิร์ฟเวอร์เติมให้ตอนดึงรายการ ไม่ได้เก็บไว้กับใบ) */
+    bedno?: string | null;
     patient_name: string | null;
     hn_source: string;
     his_verified: boolean;
@@ -260,7 +276,7 @@ export default function RxOrderPage() {
       ตัว static ถูกสร้างนอกต้นไม้ของ React จึงไม่เห็น ConfigProvider
       กล่องข้อความจะเป็นธีมสว่างทับหน้าจอโหมดมืด และฟอนต์กลับไปเป็นตัวสำรอง
     */
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
 
     const router = useRouter();
     const [wards, setWards] = useState<Ward[]>([]);
@@ -277,7 +293,12 @@ export default function RxOrderPage() {
         if (on) next.add(hn); else next.delete(hn);
         return next;
     });
-    const [note, setNote] = useState('');
+    /*
+      หมายเหตุถึงห้องยา รายใบ (ผูกกับ HN เหมือนสายยาง — ไฟล์หลายไฟล์ของคนเดียวกันรวมเป็นใบเดียว ใช้หมายเหตุเดียวกัน)
+      เดิมมีช่องเดียวใช้กับทุกใบที่ส่งพร้อมกัน หมายเหตุของคนหนึ่งจึงไปติดใบของอีกหลายคน
+    */
+    const [hnNotes, setHnNotes] = useState<Record<string, string>>({});
+    const setHnNote = (hn: string, v: string) => setHnNotes(prev => ({ ...prev, [hn]: v }));
     /** ไฟล์ที่รอส่ง แต่ละรายการมี HN ของตัวเอง */
     const [entries, setEntries] = useState<Entry[]>([]);
     /** uid ของไฟล์ที่รับไว้แล้ว กันรับซ้ำเมื่อ antd ส่งรายการเดิมมาหลายรอบ */
@@ -490,7 +511,7 @@ export default function RxOrderPage() {
 
             const fd = new FormData();
             if (prepared.image) fd.append('file', prepared.image, 'page1.jpg');
-            /* บริเวณที่ HN มักอยู่ (ล่างกลาง → ขวาล่าง) เซิร์ฟเวอร์อ่านก่อน แม่นและเร็วกว่าอ่านทั้งหน้า */
+            /* บริเวณที่ HN มักอยู่ (แถบล่างสุด + แถบบนสุด เต็มความกว้าง) เซิร์ฟเวอร์อ่านก่อน แม่นและเร็วกว่าอ่านทั้งหน้า */
             if (prepared.image && prepared.roi) fd.append('roi', prepared.roi, 'hn-region.jpg');
             if (candidates.length > 0) {
                 fd.append('candidates', candidates.join(','));
@@ -514,7 +535,7 @@ export default function RxOrderPage() {
                     ...e,
                     hn: auto.hn,
                     patient: {
-                        ptname: auto.ptname, an: auto.an,
+                        ptname: auto.ptname, an: auto.an, bedno: auto.bedno ?? null,
                         admission: auto.admission, ward_name: auto.ward_name, discharged_at: auto.discharged_at,
                         in_ward: auto.in_ward,
                     },
@@ -545,7 +566,7 @@ export default function RxOrderPage() {
         patchEntry(uid, {
             hn: m.hn,
             patient: {
-                ptname: m.ptname, an: m.an,
+                ptname: m.ptname, an: m.an, bedno: m.bedno ?? null,
                 admission: m.admission, ward_name: m.ward_name, discharged_at: m.discharged_at,
                 in_ward: m.in_ward,
             },
@@ -631,6 +652,8 @@ export default function RxOrderPage() {
      * จำนวน HN ที่ระบุได้จึงเท่ากับจำนวนหน้าโดยอัตโนมัติ ไม่ต้องมีกฎแยกไว้บังคับ
      */
     const onFiles = useCallback(async (list: UploadFile[]) => {
+        /* ยังไม่เลือกหอ ไม่รับไฟล์ — การอ่าน HN ต้องรู้หอเพื่อตรวจว่าผู้ป่วยนอนอยู่ที่นี่ (ช่องวางไฟล์ก็ปิดไว้แล้ว นี่กันอีกชั้น) */
+        if (!ward) return;
         for (const f of list) {
             const file = f.originFileObj as File | undefined;
             /*
@@ -678,7 +701,7 @@ export default function RxOrderPage() {
                 .catch(() => { /* ทำภาพตัวอย่างไม่ได้ ไม่ใช่เหตุให้ส่งใบไม่ได้ */ });
             void readEntry(entry.uid, file);
         }
-    }, [appendEntries, patchEntry, readEntry, message]);
+    }, [ward, appendEntries, patchEntry, readEntry, message]);
 
     const [closing, setClosing] = useState(false);
 
@@ -740,6 +763,8 @@ export default function RxOrderPage() {
         setPriority(r.priority);
         /* ใบเดิมติ๊กสายยางไว้ ฉบับแก้ต้องติดไปด้วย ไม่งั้นห้องยาเตรียมยาเม็ดตามปกติให้คนเดิม */
         setTubeHns(r.tube_feed && r.hn ? new Set([r.hn]) : new Set());
+        /* หมายเหตุเดิมติดมาให้แก้ต่อได้ */
+        setHnNotes(r.note && r.hn ? { [r.hn]: r.note } : {});
         /* ล้างไฟล์ที่ค้างอยู่ก่อน ไม่ให้ไฟล์ของคนอื่นติดไปกับฉบับแก้ */
         setEntries([]);
         seenUids.current.clear();
@@ -752,6 +777,7 @@ export default function RxOrderPage() {
         setResendOf(null);
         resendLock.current = null;
         setTubeHns(new Set());
+        setHnNotes({});
         setEntries([]);
         seenUids.current.clear();
     };
@@ -793,7 +819,7 @@ export default function RxOrderPage() {
         patchEntry(pickFor, {
             hn: p.hn,
             patient: {
-                ptname: p.ptname, an: p.an, admission: p.admission,
+                ptname: p.ptname, an: p.an, bedno: p.bedno ?? null, admission: p.admission,
                 ward_name: p.ward_name, discharged_at: p.discharged_at, in_ward: p.in_ward,
             },
             source: 'manual',
@@ -843,6 +869,30 @@ export default function RxOrderPage() {
         el?.focus({ preventScroll: true });
     };
 
+    /*
+      ล้างทั้งหมด: ไฟล์ HN หมายเหตุรายใบ สายยาง และความเร่งด่วน — ถามยืนยันก่อน เพราะ HN ที่กรอก/เลือกไว้จะหายหมด
+      หอที่เลือกไว้คงเดิม (เลือกหอใหม่ทุกครั้งที่เปิดหน้าอยู่แล้ว) · โหมดส่งซ้ำยังอยู่ ออกด้วยปุ่ม "ออกจากโหมดนี้" ของมันเอง
+    */
+    const clearAll = () => {
+        modal.confirm({
+            title: `ล้างไฟล์ที่แนบทั้งหมด ${entries.length} ไฟล์?`,
+            content: 'HN หมายเหตุ และการติ๊กสายยางที่กรอกไว้จะหายด้วย',
+            okText: 'ล้างทั้งหมด',
+            okButtonProps: { danger: true },
+            cancelText: 'ยกเลิก',
+            onOk: () => {
+                setEntries([]);
+                seenUids.current.clear();
+                /* โหมดส่งซ้ำ: ค่าของใบเดิม (หมายเหตุ สายยาง ความเร่งด่วน) คงไว้ ล้างแค่ไฟล์ */
+                if (!resendLock.current) {
+                    setHnNotes({});
+                    setTubeHns(new Set());
+                    setPriority('routine');
+                }
+            },
+        });
+    };
+
     const send = async () => {
         if (!ward) { message.warning('กรุณาเลือกหอผู้ป่วย'); return; }
         if (entries.length === 0) { message.warning('กรุณาแนบไฟล์ใบสั่งยา'); return; }
@@ -875,7 +925,8 @@ export default function RxOrderPage() {
             if (head.patient?.ptname) fd.append('patient_name', head.patient.ptname);
             fd.append('hn_source', head.source);
             fd.append('priority', priority);
-            if (note.trim()) fd.append('note', note.trim());
+            const orderNote = (hnNotes[head.hn.trim()] ?? '').trim();
+            if (orderNote) fd.append('note', orderNote);
             /* เซิร์ฟเวอร์ตรวจเองว่าใบนี้เป็นของหอนี้และถูกส่งกลับจริง แล้วปิดใบเดิมให้ */
             if (resendOf) fd.append('resend_of', resendOf.rx_order_id);
             if (head.hn.trim() && tubeHns.has(head.hn.trim())) fd.append('tube_feed', 'true');
@@ -905,7 +956,7 @@ export default function RxOrderPage() {
         }
 
         if (failed.length === 0) {
-            setEntries([]); setNote(''); setPriority('routine');
+            setEntries([]); setHnNotes({}); setPriority('routine');
             setTubeHns(new Set());
             seenUids.current.clear();
             setResendOf(null);
@@ -963,8 +1014,10 @@ export default function RxOrderPage() {
                             {r.files_purged && <PurgedTag />}
                         </div>
                     )}
-                    <div className="text-xs text-gray-500">
-                        HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}
+                    {/* เตียงอยู่แถวเดียวกับ HN · AN — กลุ่มตัวระบุผู้ป่วยอยู่ด้วยกัน */}
+                    <div className="text-xs text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                        {r.bedno && <BedBadge bed={r.bedno} />}
+                        <span>HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}</span>
                     </div>
                     {/* ห้องยาหรือหอบันทึกว่าโทรปรึกษาแพทย์แล้ว — เห็นข้อความทันที ไม่ต้องเปิดใบ */}
                     <ConsultNote className="mt-1" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
@@ -1050,9 +1103,26 @@ export default function RxOrderPage() {
     return (
         <div className="bg-slate-50 dark:bg-[#141414] min-h-screen font-sans">
             <Navbar />
-            <div className="p-4 max-w-7xl mx-auto flex flex-col gap-4">
+            <div className="p-4 w-full flex flex-col gap-4">
 
-                <Card size="small" title={resendOf ? 'ส่งใบสั่งยาอีกครั้ง (ฉบับแก้)' : 'ส่งใบสั่งยาให้ห้องยา'}>
+                <Card
+                    size="small"
+                    /*
+                      หัวการ์ดพื้นทึบสีแบรนด์ ตัวหนังสือขาว (ชุดเดียวกับแถบเมนูด้านบน) · โหมดส่งซ้ำเป็นส้ม ให้รู้ทันทีว่ากำลังส่งฉบับแก้
+                      ใส่ค่าสีตรง ๆ ไม่ใช้คลาสสีของ Tailwind เพราะโหมดมืดพลิกชุดสีทั้งหมด พื้นจะกลายเป็นสีอ่อน ตัวหนังสือขาวอ่านไม่ออก
+                    */
+                    classNames={{
+                        header: resendOf
+                            ? 'bg-[#c2410c]! border-b-0! rounded-t-lg! text-white!'
+                            : 'bg-[#006b5f]! border-b-0! rounded-t-lg! text-white!',
+                    }}
+                    title={
+                        <div className="flex items-center gap-2 text-white">
+                            <PiPaperPlaneTiltBold className="text-lg" />
+                            <span>{resendOf ? 'ส่งใบสั่งยาอีกครั้ง (ฉบับแก้)' : 'ส่งใบสั่งยาให้ห้องยา'}</span>
+                        </div>
+                    }
+                >
                     {/*
                       แถบนี้ต้องอยู่บนสุดและปิดไม่ได้ เพราะโหมดส่งซ้ำเปลี่ยนความหมายของทั้งฟอร์ม
                       ไฟล์ที่แนบจะถูกผูกกับผู้ป่วยคนเดิมโดยไม่ถามอีก ถ้าคนกดไม่รู้ว่าอยู่โหมดนี้
@@ -1085,8 +1155,13 @@ export default function RxOrderPage() {
                             }
                         />
                     )}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-3">
+                    {/*
+                      ซ้าย = แผงกรอก (กว้างคงที่ ติดอยู่ตอนเลื่อน) · ขวา = ไฟล์ที่แนบ (ยืดตามจำนวนไฟล์)
+                      เดิมแบ่งครึ่ง-ครึ่ง แนบหลายไฟล์แล้วฝั่งขวายาวลง ฝั่งซ้ายเหลือที่ว่างโล่ง
+                      ตอนนี้ทุกอย่างที่ต้องกรอกรวมอยู่ซ้ายและติดตามจอ รายการไฟล์ใช้พื้นที่ขวาเต็มที่ (จอกว้างเรียง 2 คอลัมน์)
+                    */}
+                    <div className="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)] gap-4 items-start">
+                        <div className="flex flex-col gap-3 lg:sticky lg:top-4">
                             {/*
                               หอผู้ป่วยอยู่ในฟอร์ม ไม่ใช่ตัวกรองของหน้า
                               เพราะค่านี้ถูกบันทึกติดไปกับใบสั่งยา ไม่ใช่แค่ใช้กรองสิ่งที่เห็น
@@ -1113,21 +1188,10 @@ export default function RxOrderPage() {
                                 )}
                             </div>
 
-                            <Alert
-                                type="info"
-                                showIcon
-                                title="HN ระบุทีละไฟล์"
-                                description="แนบไฟล์แล้วระบบจะอ่าน HN ของแต่ละไฟล์ให้ · ไฟล์ที่ HN เดียวกันจะถูกรวมเป็นใบเดียว"
-                            />
-
+                            {/* ความเร่งด่วนอยู่ถัดจากหอ: สองอย่างที่ต้องเลือกทุกครั้งอยู่ติดกัน */}
                             <div>
                                 <Text className="text-xs text-gray-500 block mb-1">ความเร่งด่วน</Text>
-                                <Radio.Group value={priority} onChange={e => setPriority(e.target.value)}
-                                    optionType="button" buttonStyle="solid">
-                                    <Radio.Button value="routine">ปกติ</Radio.Button>
-                                    <Radio.Button value="discharge">ยากลับบ้าน</Radio.Button>
-                                    <Radio.Button value="stat">STAT</Radio.Button>
-                                </Radio.Group>
+                                <PrioritySelect value={priority} onChange={setPriority} />
                                 {priority === 'discharge' && (
                                     <div className="text-xs text-orange-500 mt-1">
                                         ห้องยาจะเห็นว่ามีผู้ป่วยรออยู่ และจะขึ้นเตือนเมื่อค้างเกิน 10 นาที
@@ -1135,6 +1199,75 @@ export default function RxOrderPage() {
                                 )}
                             </div>
 
+                            <Alert
+                                type="info"
+                                showIcon
+                                className="text-xs!"
+                                title="HN ระบุทีละไฟล์"
+                                description="แนบไฟล์แล้วระบบจะอ่าน HN ของแต่ละไฟล์ให้ · ไฟล์ที่ HN เดียวกันจะถูกรวมเป็นใบเดียว"
+                            />
+
+                            {/* คำเตือนอยู่ในแผงที่ต้องกรอก ไม่พาดเต็มความกว้างใต้ทุกอย่าง (เคยถูกข้ามไปทุกครั้ง) */}
+                            <Alert
+                                type="warning"
+                                showIcon
+                                className="text-xs!"
+                                title="สแกนหนึ่งผู้ป่วยต่อหนึ่งใบ"
+                                description="หลายคนรวมไฟล์เดียว ห้องยาจะเห็นข้อมูลผู้ป่วยรายอื่น และตรวจย้อนหลังไม่ได้ · ตั้งเครื่องสแกน 300 dpi ขาวดำ"
+                            />
+
+                            {/* ปุ่มส่งอยู่ในแผงซ้าย (ติดจอตอนเลื่อน) ใต้คำเตือนการสแกน ไม่พาดเต็มความกว้างใต้รายการไฟล์ */}
+                            {/* สรุปว่าจะกลายเป็นกี่ใบ ก่อนกด ไม่ใช่รู้ตอนส่งไปแล้ว */}
+                            {entries.length > 0 && (
+                                <div className="text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <span className="font-semibold">
+                                        จะสร้าง {groups.length} ใบ จาก {entries.length} ไฟล์
+                                    </span>
+                                    {groups.filter(g => g.length > 1).map(g => (
+                                        <Tag key={g[0].uid} className="m-0!">
+                                            {g[0].hn} รวม {g.length} ไฟล์
+                                        </Tag>
+                                    ))}
+                                    {(() => {
+                                        const n = groups.filter(g => g[0].hn.trim() && tubeHns.has(g[0].hn.trim())).length;
+                                        return n > 0 && (
+                                            <span className="text-xs text-gray-500">
+                                                <TubeFeedTag compact /> {n} ใบ
+                                            </span>
+                                        );
+                                    })()}
+                                    {hnMissing.length > 0 && (
+                                        <button type="button" onClick={focusFirstMissing}
+                                            className="text-red-500 text-xs underline underline-offset-2">
+                                            ยังไม่ระบุ HN {hnMissing.length} ไฟล์ · ต้องใส่ HN ทุกไฟล์ก่อนส่ง
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            <Button
+                                type="primary" size="large" icon={<PiPaperPlaneTiltBold />}
+                                onClick={send} loading={sending}
+                                disabled={!ward || entries.length === 0 || hnMissing.length > 0 || hnPending || notInWard.length > 0}
+                                className="w-full"
+                            >
+                                {hnPending
+                                    ? 'กำลังอ่าน HN จากไฟล์…'
+                                    : hnMissing.length > 0
+                                        ? `ระบุ HN ให้ครบก่อนส่ง (ขาด ${hnMissing.length} ไฟล์)`
+                                        : notInWard.length > 0
+                                            ? `HN ไม่ใช่ผู้ป่วยของตึกนี้ ${notInWard.length} ไฟล์ — แก้ก่อนส่ง`
+                                        : `ส่งให้ห้องยา${entries.length > 0 ? ` (${groups.length} ใบ)` : ''}`}
+                            </Button>
+                            {/* ล้างไฟล์ที่แนบ HN หมายเหตุ สายยาง และความเร่งด่วน กลับเป็นค่าเริ่มต้น (หอที่เลือกไว้คงเดิม) */}
+                            <Button
+                                icon={<PiTrashBold />}
+                                onClick={clearAll}
+                                disabled={sending || entries.length === 0}
+                                className="w-full"
+                            >
+                                ล้างทั้งหมด
+                            </Button>
                         </div>
 
                         <div className="flex flex-col gap-3">
@@ -1150,10 +1283,24 @@ export default function RxOrderPage() {
                                 beforeUpload={() => false}
                                 onChange={info => { void onFiles(info.fileList); }}
                                 accept=".pdf,.jpg,.jpeg,.png"
+                                /*
+                                  ต้องเลือกหอก่อน: การอ่าน HN ใช้หอตรวจว่าผู้ป่วยนอนอยู่ที่นี่ และเติม HN ให้อัตโนมัติเฉพาะคนในหอ
+                                  แนบก่อนเลือกหอ ผลอ่านจะไม่มีใคร "นอนหอนี้" แล้วต้องแนบใหม่
+                                */
+                                disabled={!ward}
                             >
-                                <p className="text-3xl text-[#006b5f]"><PiUploadSimpleBold className="inline" /></p>
-                                <p className="font-semibold">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</p>
-                                <p className="text-xs text-gray-500">PDF / JPG / PNG ไม่เกิน 20 MB ต่อไฟล์ สูงสุด 10 ไฟล์</p>
+                                {/* มีไฟล์แล้ว ย่อช่องวางเหลือบรรทัดเดียว รายการไฟล์ขึ้นมาใกล้ ๆ */}
+                                {entries.length > 0 ? (
+                                    <p className="font-semibold text-sm m-0! flex items-center justify-center gap-2">
+                                        <PiUploadSimpleBold className="text-lg text-[#006b5f]" />
+                                        แนบไฟล์เพิ่ม · ลากมาวางหรือคลิก
+                                        <span className="text-xs font-normal text-gray-500">(สูงสุด 10 ไฟล์ ไฟล์ละไม่เกิน 20 MB)</span>
+                                    </p>
+                                ) : (<>
+                                    <p className={`text-3xl ${ward ? 'text-[#006b5f]' : 'text-gray-300'}`}><PiUploadSimpleBold className="inline" /></p>
+                                    <p className="font-semibold">{ward ? 'ลากไฟล์มาวาง หรือคลิกเพื่อเลือก' : 'เลือกหอผู้ป่วยก่อน จึงจะแนบไฟล์ได้'}</p>
+                                    <p className="text-xs text-gray-500">PDF / JPG / PNG ไม่เกิน 20 MB ต่อไฟล์ สูงสุด 10 ไฟล์</p>
+                                </>)}
                             </Upload.Dragger>
 
                             {/*
@@ -1169,6 +1316,7 @@ export default function RxOrderPage() {
                                         ไฟล์ที่จะส่ง {entries.length} ไฟล์ · กดที่ภาพเพื่อดูเต็มจอ
                                     </Text>
 
+                                    <div className="grid grid-cols-1 2xl:grid-cols-2 gap-2 items-start">
                                     <Image.PreviewGroup>
                                         {entries.map((e, i) => (
                                             <div
@@ -1230,9 +1378,12 @@ export default function RxOrderPage() {
                                                             onClick={() => { if (!e.reading) openPicker(e.uid); }}
                                                             onBlur={ev => { if (!picking.current) void lookupFor(e.uid, ev.target.value); }}
                                                             onPressEnter={ev => lookupFor(e.uid, (ev.target as HTMLInputElement).value)}
-                                                            placeholder={e.reading ? 'กำลังอ่าน HN…' : 'คลิกเลือกผู้ป่วย / พิมพ์ HN'}
+                                                            placeholder={e.reading ? 'กำลังอ่าน…' : 'เลือก / พิมพ์ HN'}
+                                                            title="คลิกเพื่อเลือกผู้ป่วยในหอ หรือพิมพ์ HN (ตัวเลขไม่เกิน 9 หลัก)"
                                                             inputMode="numeric"
-                                                            className="max-w-55"
+                                                            maxLength={9}
+                                                            /* กว้างพอดีเลข 9 หลัก + ปุ่มล้าง ไม่ยืดกินที่ชื่อผู้ป่วย */
+                                                            className="w-34! shrink-0 tabular-nums"
                                                             status={e.hn.trim() || e.reading ? undefined : 'error'}
                                                             allowClear
                                                         />
@@ -1247,10 +1398,16 @@ export default function RxOrderPage() {
                                                             const doubt = e.patient.admission === 'none';
                                                             return (
                                                                 <span className="flex items-center gap-1.5 min-w-0">
+                                                                    {e.patient.bedno && (e.source === 'manual' || e.patient.in_ward !== false) && (
+                                                                        <BedBadge bed={e.patient.bedno} />
+                                                                    )}
                                                                     <span className={`text-xs font-semibold truncate
                                                                         ${doubt ? 'text-orange-600' : 'text-emerald-600'}`}>
-                                                                        {e.patient.ptname || 'ไม่มีชื่อในทะเบียน'}
-                                                                        {e.patient.an ? ` · AN ${e.patient.an}` : ''}
+                                                                        {e.patient.ptname
+                                                                            || (e.source !== 'manual' && e.patient.in_ward === false
+                                                                                ? 'ไม่แสดงชื่อ (ไม่ได้นอนหอนี้)' : 'ไม่มีชื่อในทะเบียน')}
+                                                                        {e.patient.an && (e.source === 'manual' || e.patient.in_ward !== false)
+                                                                            ? ` · AN ${e.patient.an}` : ''}
                                                                     </span>
                                                                     {tag && (
                                                                         <Tag color={tag.color} className="m-0! text-[11px]! shrink-0">
@@ -1286,6 +1443,20 @@ export default function RxOrderPage() {
                                                         </Checkbox>
                                                     )}
 
+                                                    {/* หมายเหตุถึงห้องยา เฉพาะใบของผู้ป่วยคนนี้ (ไฟล์อื่นที่ HN เดียวกันใช้ช่องเดียวกัน) */}
+                                                    {e.patient && e.hn.trim() && (
+                                                        <Input
+                                                            size="small"
+                                                            allowClear
+                                                            maxLength={300}
+                                                            prefix={<PiNotePencilBold className="text-[#006b5f]" />}
+                                                            value={hnNotes[e.hn.trim()] ?? ''}
+                                                            onChange={ev => setHnNote(e.hn.trim(), ev.target.value)}
+                                                            placeholder="หมายเหตุถึงห้องยา (เฉพาะใบนี้ ไม่บังคับ) เช่น ขอด่วน รอกลับบ้าน"
+                                                            className="text-xs! max-w-md"
+                                                        />
+                                                    )}
+
                                                     {e.reading && (
                                                         <span className="text-xs text-gray-500">
                                                             <Spin size="small" /> กำลังอ่าน HN จากไฟล์นี้...
@@ -1316,9 +1487,15 @@ export default function RxOrderPage() {
                                                                         ${m.admission === 'none' && e.hn !== m.hn ? 'opacity-70 border-dashed' : ''}`}
                                                                 >
                                                                     <span className="tabular-nums">{m.hn}</span>
-                                                                    <span className="ml-1.5 opacity-80">
-                                                                        {m.ptname || 'ไม่มีชื่อในทะเบียน'}
-                                                                    </span>
+                                                                    {/* ไม่ได้นอนหอนี้ ไม่แสดงชื่อ (เซิร์ฟเวอร์ไม่ส่งชื่อมาด้วย) */}
+                                                                    {m.in_ward && m.bedno && <BedBadge bed={m.bedno} className="ml-1.5" />}
+                                                                    {m.in_ward ? (
+                                                                        <span className="ml-1.5 opacity-80">
+                                                                            {m.ptname || 'ไม่มีชื่อในทะเบียน'}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="ml-1.5 text-gray-400">ไม่แสดงชื่อ</span>
+                                                                    )}
                                                                     {(() => {
                                                                         const tag = admissionTag(m.admission, m.ward_name, m.discharged_at);
                                                                         return tag && (
@@ -1345,92 +1522,24 @@ export default function RxOrderPage() {
                                             </div>
                                         ))}
                                     </Image.PreviewGroup>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/*
-                      สองช่องนี้แยกกันคนละกล่อง เพราะเป็นคนละเรื่องกัน
-                      ซ้ายคือสิ่งที่ต้องกรอก ขวาคือสิ่งที่ต้องอ่าน
-                      เดิมคำเตือนพาดเต็มความกว้างใต้ทุกอย่าง จนกลายเป็นข้อความที่ถูกข้ามไปทุกครั้ง
-                    */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-                        <div className="rounded-lg border border-gray-200 p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                                <PiNotePencilBold className="text-[#006b5f]" />
-                                <Text className="font-semibold text-sm">หมายเหตุถึงห้องยา</Text>
-                                <Text className="text-xs text-gray-500">ไม่บังคับ</Text>
-                            </div>
-                            <TextArea
-                                rows={3}
-                                value={note}
-                                onChange={e => setNote(e.target.value)}
-                                placeholder="เช่น ขอด่วน ผู้ป่วยรอกลับบ้าน / ยาตัวที่สามเขียนทับ อ่านยาก"
-                                maxLength={300}
-                                showCount
-                            />
-                        </div>
-
-                        <Alert
-                            type="warning"
-                            showIcon
-                            title="สแกนหนึ่งผู้ป่วยต่อหนึ่งใบ"
-                            description="ถ้าสแกนหลายคนรวมไฟล์เดียว ห้องยาจะเห็นข้อมูลผู้ป่วยรายอื่นไปด้วย และตรวจสอบย้อนหลังว่าใบไหนของใครไม่ได้ · แนะนำตั้งเครื่องสแกน 300 dpi ขาวดำ"
-                        />
-                    </div>
-
-                    {/* สรุปว่าจะกลายเป็นกี่ใบ ก่อนกด ไม่ใช่รู้ตอนส่งไปแล้ว */}
-                    {entries.length > 0 && (
-                        <div className="mt-4 text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span className="font-semibold">
-                                จะสร้าง {groups.length} ใบ จาก {entries.length} ไฟล์
-                            </span>
-                            {groups.filter(g => g.length > 1).map(g => (
-                                <Tag key={g[0].uid} className="m-0!">
-                                    {g[0].hn} รวม {g.length} ไฟล์
-                                </Tag>
-                            ))}
-                            {(() => {
-                                const n = groups.filter(g => g[0].hn.trim() && tubeHns.has(g[0].hn.trim())).length;
-                                return n > 0 && (
-                                    <span className="text-xs text-gray-500">
-                                        <TubeFeedTag compact /> {n} ใบ
-                                    </span>
-                                );
-                            })()}
-                            {hnMissing.length > 0 && (
-                                <button type="button" onClick={focusFirstMissing}
-                                    className="text-red-500 text-xs underline underline-offset-2">
-                                    ยังไม่ระบุ HN {hnMissing.length} ไฟล์ · ต้องใส่ HN ทุกไฟล์ก่อนส่ง
-                                </button>
-                            )}
-                        </div>
-                    )}
-
-                    <Button
-                        type="primary" size="large" icon={<PiPaperPlaneTiltBold />}
-                        onClick={send} loading={sending}
-                        disabled={!ward || entries.length === 0 || hnMissing.length > 0 || hnPending || notInWard.length > 0}
-                        className="w-full mt-3"
-                    >
-                        {hnPending
-                            ? 'กำลังอ่าน HN จากไฟล์…'
-                            : hnMissing.length > 0
-                                ? `ระบุ HN ให้ครบก่อนส่ง (ขาด ${hnMissing.length} ไฟล์)`
-                                : notInWard.length > 0
-                                    ? `HN ไม่ใช่ผู้ป่วยของตึกนี้ ${notInWard.length} ไฟล์ — แก้ก่อนส่ง`
-                                : `ส่งให้ห้องยา${entries.length > 0 ? ` (${groups.length} ใบ)` : ''}`}
-                    </Button>
                 </Card>
 
                 <Card
                     size="small"
+                    /* หัวการ์ดพื้นทึบสีแบรนด์ ตัวหนังสือขาว เหมือนการ์ดส่งใบด้านบน (ค่าสีตรง ๆ ด้วยเหตุผลเดียวกัน) */
+                    classNames={{ header: 'bg-[#006b5f]! border-b-0! rounded-t-lg! text-white!' }}
                     title={
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-white">
+                            <PiPackageBold className="text-lg" />
                             <span>ใบที่ส่ง{listIsToday ? 'วันนี้' : 'ย้อนหลัง'}</span>
                             {ward && <Tag className="m-0!">{wards.find(w => w.ward === ward)?.ward_name}</Tag>}
-                            <span className="text-gray-500 font-normal">({rows.length})</span>
+                            <span className="text-white/80 font-normal">({rows.length})</span>
                         </div>
                     }
                     extra={
@@ -1583,8 +1692,10 @@ export default function RxOrderPage() {
                                         </div>
                                         {r.moved_from_name && <div className="mt-1"><MovedTag order={r} /></div>}
                                         {r.tube_feed && <TubeFeedTag compact className="mt-1" />}
-                                        <div className="text-xs text-gray-500 tabular-nums">
-                                            HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}
+                                        {/* เตียงอยู่แถวเดียวกับ HN · AN */}
+                                        <div className="text-xs text-gray-500 tabular-nums flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                            {r.bedno && <BedBadge bed={r.bedno} />}
+                                            <span>HN {r.hn || '-'}{r.an ? ` · AN ${r.an}` : ''}</span>
                                         </div>
                                         <ConsultNote className="mt-1.5" at={r.consult_at} note={r.consult_note} by={r.consult_by_name} count={r.consult_count} />
 
@@ -1679,6 +1790,11 @@ export default function RxOrderPage() {
                             </Tag>
                         )}
                         {viewing.tube_feed && <TubeFeedTag />}
+                        {(() => {
+                            /* รายละเอียดดึงจาก /orders/:id ซึ่งไม่มีเตียง ใช้เตียงจากแถวในรายการแทน */
+                            const bed = viewing.bedno ?? rows.find(x => x.rx_order_id === viewing.rx_order_id)?.bedno;
+                            return bed ? <BedBadge bed={bed} /> : null;
+                        })()}
                         <span className="font-semibold">{viewing.patient_name || 'ไม่ระบุชื่อ'}</span>
                         <span className="text-xs text-gray-500">
                             HN {viewing.hn || '-'}{viewing.an ? ` · AN ${viewing.an}` : ''}
@@ -1913,11 +2029,7 @@ function ResubmitTypePanel({ order, onDone }: { order: RxOrder; onDone: () => vo
                 <Text className="text-xs text-gray-500 block mb-1">
                     ความเร่งด่วน <span className="text-gray-400">(เดิม: {PRIORITY[order.priority].label})</span>
                 </Text>
-                <Radio.Group value={prio} onChange={e => setPrio(e.target.value)} optionType="button" buttonStyle="solid" size="small">
-                    <Radio.Button value="routine">ปกติ</Radio.Button>
-                    <Radio.Button value="discharge">ยากลับบ้าน</Radio.Button>
-                    <Radio.Button value="stat">STAT</Radio.Button>
-                </Radio.Group>
+                <PrioritySelect value={prio} onChange={setPrio} size="small" />
             </div>
             <Checkbox checked={tube} onChange={e => setTube(e.target.checked)}>
                 <span className="text-sm">ผู้ป่วยได้รับอาหารทางสายยาง (NG-Tube)</span>

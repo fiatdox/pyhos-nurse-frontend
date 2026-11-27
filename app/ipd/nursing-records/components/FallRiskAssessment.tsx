@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Form, Select, DatePicker, Button, Row, Col, Tag, Table, Popconfirm, Tabs, Radio } from 'antd';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Card, Form, Select, DatePicker, Button, Row, Col, Tag, Table, Popconfirm, Tabs, Radio, Alert } from 'antd';
 import { FormSkeleton } from '@/app/components/Skeletons';
 import type { ColumnsType } from 'antd/es/table';
 import Input from 'antd/es/input';
 import axios from 'axios';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import Navbar from '../../../components/Navbar';
 import Swal from 'sweetalert2';
 import { getUserProfile } from '../../../lib/auth';
 import { VscSave, VscTrash } from 'react-icons/vsc';
-import { PiWarningBold, PiListBulletsBold, PiChartLineUpBold } from 'react-icons/pi';
+import { PiWarningBold, PiListBulletsBold, PiChartLineUpBold, PiPencilSimpleBold } from 'react-icons/pi';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -48,6 +48,7 @@ interface FallRiskRecord {
   risk_level: 'low' | 'moderate' | 'high';
   interventions?: string;
   nurse_name?: string;
+  ward_code?: string;
 }
 
 // Morse Fall Scale scoring
@@ -128,60 +129,62 @@ const riskConfig: Record<string, { label: string; color: string; bgColor: string
   },
 };
 
-const mockRecords: FallRiskRecord[] = [
-  {
-    id: 1, an: '', record_datetime: dayjs().subtract(3, 'day').hour(9).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'เช้า', history_of_falling: 0, secondary_diagnosis: 15, ambulatory_aid: 0,
-    iv_heparin_lock: 20, gait: 10, mental_status: 0, total_score: 45, risk_level: 'high',
-    interventions: 'ยกไม้กั้นเตียงทั้ง 2 ข้าง ติดป้าย Fall Risk ปรับเตียงต่ำ ให้สวมรองเท้ากันลื่น',
-    nurse_name: 'พย.สมหญิง',
-  },
-  {
-    id: 2, an: '', record_datetime: dayjs().subtract(2, 'day').hour(9).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'เช้า', history_of_falling: 0, secondary_diagnosis: 15, ambulatory_aid: 0,
-    iv_heparin_lock: 20, gait: 10, mental_status: 0, total_score: 45, risk_level: 'high',
-    interventions: 'คงมาตรการเดิม ผู้ป่วยเข้าใจดี ไม่มีเหตุการณ์พลัดตกหกล้ม',
-    nurse_name: 'พย.สมหญิง',
-  },
-  {
-    id: 3, an: '', record_datetime: dayjs().subtract(1, 'day').hour(9).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'เช้า', history_of_falling: 0, secondary_diagnosis: 15, ambulatory_aid: 0,
-    iv_heparin_lock: 20, gait: 0, mental_status: 0, total_score: 35, risk_level: 'moderate',
-    interventions: 'ลด risk เนื่องจาก gait ดีขึ้น เดินได้มั่นคง คงมาตรการป้องกัน',
-    nurse_name: 'พย.วิภา',
-  },
-  {
-    id: 4, an: '', record_datetime: dayjs().hour(8).minute(30).format('YYYY-MM-DD HH:mm:ss'),
-    shift: 'เช้า', history_of_falling: 0, secondary_diagnosis: 15, ambulatory_aid: 0,
-    iv_heparin_lock: 0, gait: 0, mental_status: 0, total_score: 15, risk_level: 'low',
-    interventions: 'Off IV แล้ว เดินได้ดี ลด risk level เป็น Low สอนการป้องกันก่อนจำหน่าย',
-    nurse_name: 'พย.สมหญิง',
-  },
-];
-
 const shiftColor: Record<string, string> = { 'ดึก': 'purple', 'เช้า': 'blue', 'บ่าย': 'orange' };
+const MORSE_KEYS = ['history_of_falling', 'secondary_diagnosis', 'ambulatory_aid', 'iv_heparin_lock', 'gait', 'mental_status'] as const;
+const shiftOfTime = (d: Dayjs) => (d.hour() < 8 ? 'ดึก' : d.hour() < 16 ? 'เช้า' : 'บ่าย');
+const defaultNurse = () => (getUserProfile()?.fullname || getUserProfile()?.name) || '';
+/**
+ * ค่าของทั้งฟอร์มจากรายการเดิม (แก้ไข) หรือค่าตั้งต้น (ลงใหม่) — ระบุครบทุกช่องเสมอ
+ * ลงใหม่ไม่เลือกคำตอบไว้ให้ก่อน (กดบันทึกทันทีต้องไม่ได้ "เสี่ยงต่ำ" ทั้งที่ไม่ได้ประเมิน)
+ */
+const toFormValues = (r: FallRiskRecord | null, at: Dayjs) => ({
+  record_datetime: r ? dayjs(r.record_datetime) : at,
+  shift: r ? (r.shift ?? shiftOfTime(dayjs(r.record_datetime))) : shiftOfTime(at),
+  ...Object.fromEntries(MORSE_KEYS.map(k => [k, r ? r[k] : undefined])),
+  interventions: r?.interventions ?? undefined,
+  nurse_name: r?.nurse_name || defaultNurse(),
+});
 
-export default function FallRiskAssessment({ an }: { an: string }) {
+/**
+ * embedded = เปิดอยู่ในลิ้นชักของฟอร์มปรอท ไม่มี Navbar/หัวหน้า
+ * initialAt = วันที่คลิกมาจากฟอร์มปรอท (ประเมินวันละครั้ง) — วันนั้นมีการประเมินแล้ว เปิดรายการนั้นมาให้แก้
+ * onSaved = ให้ฟอร์มปรอทโหลดใหม่หลังบันทึก/แก้/ลบ
+ */
+export default function FallRiskAssessment({ an, embedded = false, onSaved, initialAt }: {
+  an: string; embedded?: boolean; onSaved?: () => void; initialAt?: Dayjs;
+}) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [patient, setPatient] = useState<PatientInfo | null>(null);
-  const [records, setRecords] = useState<FallRiskRecord[]>(mockRecords);
+  const [records, setRecords] = useState<FallRiskRecord[]>([]);
+  /** รายการที่กำลังแก้ (null = ลงรายการใหม่) */
+  const [editing, setEditing] = useState<FallRiskRecord | null>(null);
+  const formTop = useRef<HTMLSpanElement>(null);
   const [rightTab, setRightTab] = useState('trend');
   const [liveScore, setLiveScore] = useState(0);
+  const [complete, setComplete] = useState(false);
 
   const getHeaders = useCallback(() => {
     const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, []);
 
-  const fetchRecords = useCallback(async () => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const fetchRecords = useCallback(async (): Promise<FallRiskRecord[]> => {
     try {
       const headers = getHeaders();
       const res = await axios.get(`/api/v1/nursing-records/fall-risk/${an}`, { headers });
-      if (res.data?.success) setRecords(res.data.data || []);
-    } catch {
-      setRecords(mockRecords.map(r => ({ ...r, an })));
+      const rows: FallRiskRecord[] = res.data?.success ? (res.data.data || []) : [];
+      setRecords(rows);
+      setLoadError(null);
+      return rows;
+    } catch (error) {
+      // ไม่ใส่ข้อมูลตัวอย่างแทน — บันทึกทางการพยาบาลต้องแยกได้ว่าอันไหนของจริง
+      setRecords([]);
+      const msg = axios.isAxiosError(error) ? (error.response?.data as { message?: string })?.message : undefined;
+      setLoadError(msg ?? 'โหลดประวัติการประเมินไม่สำเร็จ');
+      return [];
     }
   }, [an, getHeaders]);
 
@@ -195,7 +198,16 @@ export default function FallRiskAssessment({ an }: { an: string }) {
           const p = Array.isArray(patientRes.data.data) ? patientRes.data.data[0] : patientRes.data.data;
           setPatient(p);
         }
-        await fetchRecords();
+        const rows = await fetchRecords();
+        // เปิดจากฟอร์มปรอท: วันนั้นประเมินแล้ว → เปิดรายการนั้นมาให้ดู/แก้ (ตั้งก่อน setLoading(false) ฟอร์มจึงขึ้นพร้อมค่า)
+        if (initialAt) {
+          const hit = rows.find(r => dayjs(r.record_datetime).isSame(initialAt, 'day'));
+          if (hit) {
+            setEditing(hit);
+            setComplete(true);
+            setLiveScore(hit.total_score);
+          }
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -203,10 +215,27 @@ export default function FallRiskAssessment({ an }: { an: string }) {
       }
     };
     fetchData();
-  }, [an, getHeaders, fetchRecords]);
+  }, [an, getHeaders, fetchRecords, initialAt]);
+
+  /** เปิดรายการเดิมมาแก้ */
+  const startEdit = (r: FallRiskRecord) => {
+    setEditing(r);
+    form.resetFields();
+    form.setFieldsValue(toFormValues(r, dayjs()));
+    setComplete(true);
+    setLiveScore(r.total_score);
+    formTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  /** ลงรายการใหม่ (วันที่คลิกมา หรือเวลาปัจจุบัน) */
+  const startNew = () => {
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue(toFormValues(null, initialAt ?? dayjs()));
+    setComplete(false);
+    setLiveScore(0);
+  };
 
   /* คะแนนรวมและระดับความเสี่ยงขึ้นเมื่อตอบครบ 6 ข้อ (คำตอบ 0 คะแนนนับว่าตอบแล้ว) */
-  const [complete, setComplete] = useState(false);
   const recalcScore = () => {
     const values = form.getFieldsValue();
     const keys = ['history_of_falling', 'secondary_diagnosis', 'ambulatory_aid', 'iv_heparin_lock', 'gait', 'mental_status'];
@@ -214,7 +243,7 @@ export default function FallRiskAssessment({ an }: { an: string }) {
     setLiveScore(keys.reduce((sum, k) => sum + (values[k] || 0), 0));
   };
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (values: { record_datetime?: Dayjs; shift?: string; interventions?: string; nurse_name?: string } & Partial<Record<typeof MORSE_KEYS[number], number>>) => {
     setSaving(true);
     const totalScore =
       (values.history_of_falling || 0) +
@@ -245,16 +274,31 @@ export default function FallRiskAssessment({ an }: { an: string }) {
         interventions: values.interventions || null,
         nurse_name: values.nurse_name || null,
       };
-      await axios.post('/api/v1/nursing-records/fall-risk', payload, { headers });
-      Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
-      form.resetFields();
-      form.setFieldsValue({ record_datetime: dayjs(), nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '' });
-      setLiveScore(0);
-      setComplete(false);
-      await fetchRecords();
-    } catch (error: any) {
-      const status = error?.response?.status;
-      Swal.fire({ icon: 'error', title: `ผิดพลาด (${status ?? 'Network Error'})`, text: 'เกิดข้อผิดพลาด', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      if (!payload.ward_code && editing?.ward_code) payload.ward_code = editing.ward_code;
+      if (editing) await axios.put(`/api/v1/nursing-records/fall-risk/${editing.id}`, payload, { headers });
+      else await axios.post('/api/v1/nursing-records/fall-risk', payload, { headers });
+      Swal.fire({ icon: 'success', title: 'สำเร็จ', text: editing ? 'แก้ไขการประเมินสำเร็จ' : 'บันทึกการประเมินสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      const rows = await fetchRecords();
+      // หลังบันทึก: เปิดรายการของวันนั้นค้างไว้ (วันละครั้ง ลงใหม่ซ้ำวันเดิมไม่ได้อยู่แล้ว)
+      const day = dayjs(payload.record_datetime);
+      const same = rows.find(r => dayjs(r.record_datetime).isSame(day, 'day'));
+      if (same) startEdit(same); else startNew();
+      onSaved?.();
+    } catch (error: unknown) {
+      const res = axios.isAxiosError(error) ? error.response : undefined;
+      const data = res?.data as { message?: string; existing_id?: number } | undefined;
+      if (res?.status === 409 && data?.existing_id) {
+        // วันนี้ประเมินแล้ว: เสนอให้เปิดรายการเดิมมาแก้แทน
+        const r = await Swal.fire({ icon: 'warning', title: 'วันนี้ประเมินแล้ว', text: data.message, showCancelButton: true,
+          confirmButtonText: 'เปิดรายการเดิมมาแก้', cancelButtonText: 'ปิด', confirmButtonColor: '#006b5f' });
+        if (r.isConfirmed) {
+          const rows = await fetchRecords();
+          const hit = rows.find(x => x.id === data.existing_id);
+          if (hit) startEdit(hit);
+        }
+      } else {
+        Swal.fire({ icon: 'error', title: `ผิดพลาด (${res?.status ?? 'Network Error'})`, text: data?.message ?? 'เกิดข้อผิดพลาด', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      }
     } finally {
       setSaving(false);
     }
@@ -265,7 +309,9 @@ export default function FallRiskAssessment({ an }: { an: string }) {
       const headers = getHeaders();
       await axios.delete(`/api/v1/nursing-records/fall-risk/${id}`, { headers });
       Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
+      if (editing?.id === id) startNew();
       await fetchRecords();
+      onSaved?.();
     } catch {
       Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', confirmButtonColor: '#006b5f', confirmButtonText: 'ตกลง' });
     }
@@ -296,11 +342,14 @@ export default function FallRiskAssessment({ an }: { an: string }) {
     },
     { title: 'พยาบาล', dataIndex: 'nurse_name', key: 'nurse_name', width: 100 },
     {
-      title: '', key: 'action', width: 50, align: 'center',
+      title: '', key: 'action', width: 80, align: 'center',
       render: (_, r) => (
-        <Popconfirm title="ยืนยันลบ?" onConfirm={() => handleDelete(r.id)} okText="ลบ" cancelText="ยกเลิก" okButtonProps={{ danger: true }}>
-          <Button type="text" danger size="small" icon={<VscTrash />} />
-        </Popconfirm>
+        <span className="inline-flex">
+          <Button type="text" size="small" icon={<PiPencilSimpleBold />} aria-label="แก้ไข" onClick={() => startEdit(r)} />
+          <Popconfirm title="ยืนยันลบ?" onConfirm={() => handleDelete(r.id)} okText="ลบ" cancelText="ยกเลิก" okButtonProps={{ danger: true }}>
+            <Button type="text" danger size="small" icon={<VscTrash />} aria-label="ลบ" />
+          </Popconfirm>
+        </span>
       ),
     },
   ];
@@ -310,11 +359,11 @@ export default function FallRiskAssessment({ an }: { an: string }) {
   const formattedAdmitDate = admitDate ? dayjs(admitDate).format('DD/MM/YYYY HH:mm') : '-';
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans">
-      <Navbar />
-      <div className="p-4 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div className={embedded ? 'font-sans @container' : 'bg-slate-50 min-h-screen font-sans'}>
+      {!embedded && <Navbar />}
+      <div className={embedded ? '' : 'p-4 max-w-7xl mx-auto'}>
+        {/* Header (ในลิ้นชักใช้หัวของลิ้นชักแทน) */}
+        <div hidden={embedded} className="bg-linear-to-r from-[#004d45] via-[#006b5f] to-[#00796b] rounded-xl shadow-md mb-4 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 shrink-0 bg-white/20 rounded-xl flex items-center justify-center">
               <PiWarningBold className="text-white text-xl" />
@@ -343,16 +392,21 @@ export default function FallRiskAssessment({ an }: { an: string }) {
         {loading ? (
           <FormSkeleton />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className={embedded ? 'grid grid-cols-1 @3xl:grid-cols-5 gap-4' : 'grid grid-cols-1 lg:grid-cols-5 gap-4'}>
             {/* Form - Left 2 cols */}
-            <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-2"
-              title={<span className="text-orange-600 font-bold text-sm">ประเมิน Morse Fall Scale</span>}>
+            <Card size="small" className={`shadow-sm rounded-xl border border-gray-100 ${embedded ? '@3xl:col-span-2' : 'lg:col-span-2'}`}
+              title={<span ref={formTop} className={`font-bold text-sm ${editing ? 'text-blue-700' : 'text-orange-600'}`}>{editing ? 'แก้ไขการประเมิน Morse Fall Scale' : 'ประเมิน Morse Fall Scale'}</span>}>
+              {loadError && <Alert type="error" showIcon className="mb-2!" title={loadError} />}
+              <div className="text-xs text-gray-500 mb-2">ประเมินวันละ 1 ครั้ง (แสดงในแถว Fall risk ท้ายฟอร์มปรอท) · วันเดิมให้แก้รายการเดิม</div>
+              {editing && (
+                <Alert type="info" showIcon className="mb-2!"
+                  title={<span className="text-sm">กำลังแก้การประเมินวันที่ <b>{dayjs(editing.record_datetime).format('DD/MM/YYYY')}</b> · บันทึกจะทับรายการเดิม</span>}
+                  description={<span className="text-xs text-gray-600">ประเมินล่าสุด {dayjs(editing.record_datetime).format('HH:mm')} น. โดย {editing.nurse_name || '-'}</span>}
+                  action={!initialAt ? <Button size="small" onClick={startNew}>ลงวันใหม่</Button> : undefined} />
+              )}
               <Form form={form} layout="vertical" onFinish={onFinish} size="small"
                 /* ไม่เลือกคำตอบไว้ให้ก่อน เดิมทุกข้อถูกตั้งเป็น "ไม่มี 0 คะแนน" กดบันทึกทันทีก็ได้ "เสี่ยงต่ำ" ทั้งที่ไม่ได้ประเมิน */
-                initialValues={{
-                  record_datetime: dayjs(),
-                  nurse_name: (getUserProfile()?.fullname || getUserProfile()?.name) || '',
-                }}
+                initialValues={toFormValues(editing, initialAt ?? dayjs())}
                 onValuesChange={recalcScore}
                 className="[&_.ant-form-item]:mb-2 [&_.ant-form-item-label]:pb-0 [&_.ant-form-item-label_label]:text-xs [&_.ant-form-item-label_label]:font-semibold [&_.ant-form-item-label_label]:text-gray-600"
               >
@@ -426,14 +480,14 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                   <div className="text-xs text-center mb-1.5 font-semibold text-gray-600">{complete ? `${liveScore} คะแนน · ${liveRiskCfg.label}` : 'ยังตอบไม่ครบ — คะแนนจะขึ้นเมื่อตอบครบทุกข้อ'}</div>
                   <Button type="primary" htmlType="submit" icon={<VscSave />} loading={saving}
                     className="bg-orange-500 hover:bg-orange-600 w-full shadow-md" size="middle">
-                    บันทึกการประเมิน
+                    {editing ? 'บันทึกการแก้ไข' : 'บันทึกการประเมิน'}
                   </Button>
                 </div>
               </Form>
             </Card>
 
             {/* Trend + Table - Right 3 cols */}
-            <Card size="small" className="shadow-sm rounded-xl border border-gray-100 lg:col-span-3 [&_.ant-card-body]:p-0">
+            <Card size="small" className={`shadow-sm rounded-xl border border-gray-100 [&_.ant-card-body]:p-0 ${embedded ? '@3xl:col-span-3' : 'lg:col-span-3'}`}>
               <Tabs activeKey={rightTab} onChange={setRightTab} type="card"
                 className="[&_.ant-tabs-nav]:mb-0 [&_.ant-tabs-nav]:px-3 [&_.ant-tabs-nav]:pt-2 [&_.ant-tabs-tab-active]:bg-orange-500! [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-white! [&_.ant-tabs-tab]:font-semibold [&_.ant-tabs-tab]:text-sm"
                 items={[
@@ -453,7 +507,7 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                           <div className="bg-white border border-gray-100 rounded-xl p-4">
                             <div className="text-xs font-bold text-gray-500 mb-3">แนวโน้มคะแนน Morse Fall Scale</div>
                             <div className="flex items-end gap-1 h-32">
-                              {[...sortedRecords].reverse().map((rec, idx) => {
+                              {[...sortedRecords].reverse().map((rec) => {
                                 const maxScore = 125;
                                 const heightPct = Math.max((rec.total_score / maxScore) * 100, 5);
                                 const cfg = riskConfig[rec.risk_level];
@@ -488,7 +542,7 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                         {sortedRecords.map(rec => {
                           const cfg = riskConfig[rec.risk_level];
                           return (
-                            <div key={rec.id} className={`bg-white border-l-4 rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow`}
+                            <div key={rec.id} className={`bg-white border-l-4 rounded-xl p-4 border hover:shadow-md transition-shadow ${editing?.id === rec.id ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-100'}`}
                               style={{ borderLeftColor: cfg.color === 'green' ? '#16a34a' : cfg.color === 'orange' ? '#ea580c' : '#dc2626' }}>
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
@@ -523,7 +577,10 @@ export default function FallRiskAssessment({ an }: { an: string }) {
                                 </div>
                               )}
 
-                              <div className="mt-2 pt-2 border-t border-gray-50 flex justify-end">
+                              <div className="mt-2 pt-2 border-t border-gray-50 flex items-center justify-between gap-2">
+                                <Button size="small" icon={<PiPencilSimpleBold />} onClick={() => startEdit(rec)} disabled={editing?.id === rec.id}>
+                                  {editing?.id === rec.id ? 'กำลังแก้' : 'แก้ไข'}
+                                </Button>
                                 <span className="text-xs text-gray-400">ประเมินโดย: <span className="font-semibold text-gray-600">{rec.nurse_name || '-'}</span></span>
                               </div>
                             </div>

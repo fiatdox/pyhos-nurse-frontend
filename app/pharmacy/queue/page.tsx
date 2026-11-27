@@ -7,7 +7,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import buddhistEra from 'dayjs/plugin/buddhistEra';
 import 'dayjs/locale/th';
 import {
-    Alert, App, Button, Card, DatePicker, Empty, Input, Modal, Radio, Segmented, Select,
+    Alert, App, Button, Card, DatePicker, Empty, Input, Modal, Radio, Segmented, Select, Spin,
     Table, Tag, TimePicker, Tooltip, Typography,
 } from 'antd';
 import { tableLoading } from '@/app/components/Skeletons';
@@ -101,7 +101,60 @@ interface RxEvent {
 }
 
 /** ข้อมูลเพิ่มที่มากับรายละเอียดใบ ไม่มีในรายการคิว */
-interface RxDetail { prev_reject_reason: string | null; prev_reject_category?: string | null; prev_reject_category_label?: string | null; prev_rejected_at: string | null }
+interface RxDetail {
+    prev_reject_reason: string | null; prev_reject_category?: string | null; prev_reject_category_label?: string | null; prev_rejected_at: string | null;
+    /** ประวัติแพ้ยาจาก HIS (opd_allergy) */
+    allergies?: RxAllergy[];
+    /** true = ถาม HIS ไม่ได้ (ไม่ใช่ "ไม่มีประวัติแพ้") */
+    allergy_error?: boolean;
+}
+
+interface RxAllergy { agent: string; symptom: string | null; seriousness: string | null; note: string | null; report_date: string | null }
+
+/**
+ * ประวัติแพ้ยา (ตัวหนังสือแดง) — อยู่บนสุดของแผงขวา ห้องยาต้องเห็นก่อนคีย์/จัดยา
+ * แยกสามสถานะให้ชัด: กำลังตรวจ · ถาม HIS ไม่ได้ (เตือนให้ไปดูใน HIS เอง) · ไม่มีประวัติ · มีประวัติ
+ * "ตรวจไม่ได้" ต้องไม่ดูเหมือน "ไม่มีประวัติ" ไม่งั้นจะเข้าใจว่าไม่แพ้แล้วจ่ายยาที่แพ้
+ */
+const AllergyPanel = ({ detail, hn }: { detail: RxDetail | null; hn: string | null }) => {
+    if (!hn) return (
+        <div className="text-xs text-gray-500">ไม่มี HN · ตรวจประวัติแพ้ยาไม่ได้</div>
+    );
+    if (!detail) return (
+        <div className="text-xs text-gray-500 flex items-center gap-1.5"><Spin size="small" /> กำลังตรวจประวัติแพ้ยา…</div>
+    );
+    if (detail.allergy_error) return (
+        <div className="rounded-md border border-red-300 bg-red-50 p-2 text-sm text-red-600 font-semibold flex gap-1.5">
+            <PiWarningBold className="text-lg shrink-0" />
+            <span>ตรวจประวัติแพ้ยาจาก HIS ไม่ได้ตอนนี้ — ตรวจใน HIS ก่อนจัดยา</span>
+        </div>
+    );
+    const list = detail.allergies ?? [];
+    if (list.length === 0) return (
+        <div className="text-xs text-gray-500">ไม่มีประวัติแพ้ยาใน HIS</div>
+    );
+    return (
+        <div className="rounded-md border border-red-300 bg-red-50 p-2">
+            <div className="text-sm text-red-600 font-bold flex items-center gap-1.5 mb-1">
+                <PiWarningBold className="text-lg shrink-0" /> แพ้ยา {list.length} รายการ
+            </div>
+            <ul className="list-none m-0 p-0 flex flex-col gap-1.5">
+                {list.map((a, i) => (
+                    <li key={`${a.agent}-${i}`} className="text-red-600 text-sm leading-snug">
+                        <span className="font-bold">{a.agent}</span>
+                        {a.symptom && <span> · {a.symptom}</span>}
+                        {(a.seriousness || a.note || a.report_date) && (
+                            <div className="text-xs text-red-500">
+                                {[a.seriousness, a.note, a.report_date ? `บันทึก ${dayjs(a.report_date).format('D MMM BBBB')}` : null]
+                                    .filter(Boolean).join(' · ')}
+                            </div>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+};
 
 /** เกินเท่านี้ถือว่าค้างผิดปกติ ต่างกันตามความด่วน */
 const STALE_SECONDS = { stat: 5 * 60, discharge: 10 * 60, routine: 20 * 60 };
@@ -1430,6 +1483,11 @@ export default function PharmacyQueuePage() {
                         <Tag className="m-0!">{open.ward_name}</Tag>
                         {open.moved_from_name && <Tag color="geekblue" className="m-0! font-semibold">ย้ายจาก {open.moved_from_name}</Tag>}
                         {!open.his_verified && <Tag color="red" className="m-0!">ยังไม่ยืนยันกับ HIS</Tag>}
+                        {/* ป้ายแพ้ยาบนหัว เห็นทันทีแม้แผงขวาเลื่อนอยู่ */}
+                        {(detail?.allergies?.length ?? 0) > 0 && (
+                            <Tag color="red" className="m-0! font-bold">แพ้ยา: {detail!.allergies!.map(a => a.agent).join(', ')}</Tag>
+                        )}
+                        {detail?.allergy_error && <Tag color="red" className="m-0! font-bold">ตรวจแพ้ยาไม่ได้</Tag>}
                     </div>
                 )}
             >
@@ -1451,6 +1509,8 @@ export default function PharmacyQueuePage() {
                                 {open.ward_move_pending && (
                                     <WardMoveBanner order={open} busy={wardAckBusy === open.rx_order_id} onAck={() => ackWard(open)} />
                                 )}
+                                {/* ประวัติแพ้ยาจาก HIS อยู่บนสุด ก่อนข้อมูลอื่นทั้งหมด */}
+                                <AllergyPanel detail={detail} hn={open.hn} />
                                 <div>
                                     <Text className="text-xs text-gray-500">ส่งโดย</Text>
                                     <div className="text-sm">{open.submitted_by_name}</div>

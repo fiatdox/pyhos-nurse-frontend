@@ -1,11 +1,16 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Checkbox, DatePicker, Drawer, Form, Input, InputNumber, Segmented, Select, Slider, Space, Spin, message } from 'antd';
+import { Alert, App, Button, Checkbox, DatePicker, Drawer, Form, Input, InputNumber, Segmented, Select, Slider, Space, Spin } from 'antd';
 import axios from 'axios';
 import dayjs, { type Dayjs } from 'dayjs';
-import { PiCaretLeftBold, PiCaretRightBold, PiChartLineBold, PiMinusBold, PiPencilSimpleBold, PiPlusBold, PiPrinterBold, PiThermometerBold } from 'react-icons/pi';
+import { PiCaretLeftBold, PiCaretRightBold, PiChartLineBold, PiHeartbeatBold, PiMinusBold, PiMoonBold, PiPencilSimpleBold, PiPersonSimpleWalkBold, PiPhoneCallBold, PiPillBold, PiPlusBold, PiPrinterBold, PiSunBold, PiSunHorizonBold, PiThermometerBold } from 'react-icons/pi';
 import Navbar from '../../../components/Navbar';
+import PainAssessment from './PainAssessment';
+import VitalSignsRecord from './VitalSignsRecord';
+import FallRiskAssessment from './FallRiskAssessment';
+import RrtRecord from './RrtRecord';
+import MedicationRecord from './MedicationRecord';
 
 /**
  * ฟอร์มปรอท (graphic sheet) โรงพยาบาลพะเยา — หนึ่งใบ 7 วัน × 6 เวลา (02 06 10 14 18 22)
@@ -23,6 +28,8 @@ interface Vital {
   pain_score: number | null; news2_score: number | null;
 }
 interface PainRec { at: string; pain_score: number; reassess_score: number | null; location: string | null; assessment_tool?: string | null }
+/** Morse Fall Scale วันละครั้ง (nursing_assessments) */
+interface FallRec { at: string; total_score: number; risk_level: 'low' | 'moderate' | 'high'; nurse_name: string | null }
 interface Med { at: string; medication_name: string; prn: boolean; dose_given: string | null }
 interface ShiftRow {
   record_date: string; shift: string;
@@ -37,15 +44,37 @@ interface DailyRow {
   weight_kg: number | null; height_cm: number | null; diet: string | null; is_operation_day: boolean; note: string | null;
   updated_by_name?: string | null; updated_at?: string | null;
 }
-interface Sheet {
-  from: string; vitals: Vital[]; meds: Med[]; pains?: PainRec[]; shifts: ShiftRow[]; daily: DailyRow[]; op_dates: string[]; storage_ready: boolean;
+export interface Sheet {
+  from: string; vitals: Vital[]; meds: Med[]; pains?: PainRec[]; falls?: FallRec[]; shifts: ShiftRow[]; daily: DailyRow[]; op_dates: string[]; storage_ready: boolean;
 }
-interface Patient {
+export interface Patient {
   hn?: string; ptname?: string; name?: string; patient_name?: string; bedno?: string; bed?: string;
   ward?: string; wardName?: string; ward_name?: string; regdate?: string; reg_datetime?: string; admitDateTimeIso?: string;
 }
 
 const SHIFTS = ['ดึก', 'เช้า', 'บ่าย'] as const;
+/** เกณฑ์ของโรงพยาบาล: NEWS2 ≥ 5 ต้องตาม RRT */
+const RRT_NEWS2 = 5;
+/** ระดับความเสี่ยงพลัดตกหกล้ม (Morse): ตัวย่อในช่อง · สี · คำอ่าน */
+const FALL_LV: Record<string, { short: string; color: string; th: string }> = {
+  low: { short: 'L', color: '#15803d', th: 'เสี่ยงต่ำ (0-24)' },
+  moderate: { short: 'M', color: '#c2410c', th: 'เสี่ยงปานกลาง (25-44)' },
+  high: { short: 'H', color: '#dc2626', th: 'เสี่ยงสูง (≥45)' },
+};
+/** ช่องที่จะบันทึก/แก้ในลิ้นชัก: แท็บ วัน และเวร (เวรใช้เฉพาะแท็บ I/O) */
+interface EditPos { tab: 'io' | 'daily'; date: string; shift: string }
+/** สีประจำเวร: ดึก ม่วง · เช้า เหลือง · บ่าย ส้ม — bg ตอนเลือก, fg ตัวอักษรบน bg (เหลืองใช้ตัวเข้มให้อ่านออก), soft พื้นอ่อนตอนไม่ได้เลือก */
+const SHIFT_COLOR: Record<string, { bg: string; fg: string; soft: string; ink: string }> = {
+  'ดึก': { bg: '#7c3aed', fg: '#ffffff', soft: '#f3e8ff', ink: '#6d28d9' },
+  'เช้า': { bg: '#facc15', fg: '#422006', soft: '#fef9c3', ink: '#854d0e' },
+  'บ่าย': { bg: '#f97316', fg: '#ffffff', soft: '#ffedd5', ink: '#c2410c' },
+};
+/** ไอคอนเวร (แสดงเฉพาะเวรที่เลือก): ดึก พระจันทร์ · เช้า ดวงอาทิตย์ · บ่าย อาทิตย์ตก */
+const SHIFT_ICON: Record<string, React.ReactNode> = {
+  'ดึก': <PiMoonBold aria-hidden />,
+  'เช้า': <PiSunBold aria-hidden />,
+  'บ่าย': <PiSunHorizonBold aria-hidden />,
+};
 const SLOTS = [2, 6, 10, 14, 18, 22];
 /** เวลาเหตุการณ์ → ช่องเวลาของฟอร์ม: 00–03 = 2, 04–07 = 6, ... 20–23 = 22 */
 const slotOf = (d: Dayjs) => Math.floor(d.hour() / 4);
@@ -114,8 +143,17 @@ function T({ x, y, children, size = 9, anchor = 'middle', weight, color = INK }:
   return <text x={x} y={y} fontSize={size} textAnchor={anchor} fontWeight={weight} fill={color} dominantBaseline="middle">{children}</text>;
 }
 
-function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
-  onPainClick?: () => void;
+export function SheetSvg({ sheet, start, admitDate, patient, onPainClick, onVitalClick, onFallClick, onMedClick, onCellClick }: {
+  /** คลิกช่องวันในแถว Fall risk → เปิดแบบประเมิน Morse ของวันนั้น */
+  onFallClick?: (day: Dayjs) => void;
+  /** คลิกแถวยา (continuous / prn dose) ของวันใด → เปิดบันทึกการให้ยา (MAR) ของวันนั้น */
+  onMedClick?: (day: Dayjs) => void;
+  /** คลิกช่องเวลาในแถวความปวด → เปิดแบบประเมินที่เวลาของช่องนั้น */
+  onPainClick?: (at: Dayjs) => void;
+  /** คลิกช่องเวลาในกราฟ T/P หรือแถว RR–O₂ therapy → เปิดแบบบันทึกสัญญาณชีพที่เวลาของช่องนั้น */
+  onVitalClick?: (at: Dayjs) => void;
+  /** คลิกช่อง I/O (วัน+เวร) หรือแถวรายวัน (Wt/Ht/Diet, Stool, Urine, ประเภทผู้ป่วย) เพื่อเปิดลิ้นชักไปที่ช่องนั้น */
+  onCellClick?: (pos: EditPos) => void;
   sheet: Sheet; start: Dayjs; admitDate: Dayjs | null; patient: Patient | null;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => start.add(i, 'day'));
@@ -180,6 +218,7 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
   const yStool = y; y += RH;
   const yUrine = y; y += RH;
   const yType = y; y += RH;
+  const yFall = y; y += RH;
   const yEnd = y; y += 8;
   const yLegend = y; y += 156;
   const H = y + 10;
@@ -334,7 +373,13 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
       {slotRow(yRR, v => v.r)}
       {slotRow(ySys, v => v.bp_s)}
       {slotRow(yDia, v => v.bp_d)}
-      {slotRow(yNews, v => v.news2_score)}
+      {days.flatMap((d, di) => SLOTS.map((_, si) => {
+        const v = cell.get(`${dayKey(d)}|${si}`);
+        const n = v?.news2_score;
+        if (n === null || n === undefined) return null;
+        const hit = n >= RRT_NEWS2;
+        return <T key={`nw-${di}-${si}`} x={slotX(di, si)} y={yNews + RH / 2} size={hit ? 8.5 : 7.5} weight={hit ? 700 : undefined} color={hit ? RED : INK}>{n}</T>;
+      }))}
       {slotRow(ySpo2, v => v.spo2)}
       {slotRow(yO2, v => (v.o2_therapy === 'on_oxygen'
         ? `${O2_SHORT[v.o2_device ?? ''] ?? 'O₂'}${v.o2_flow ? v.o2_flow : ''}`
@@ -349,11 +394,6 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
           {s > 0 && s < 10 && <T x={XD - 6} y={painY(s)} size={7.5} anchor="end">{s}</T>}
         </g>
       ))}
-      {onPainClick && (
-        <rect x={X0} y={yPain} width={XR - X0} height={PAIN_H} fill="transparent" className="cursor-pointer print:hidden" onClick={onPainClick}>
-          <title>คลิกเพื่อลงรายละเอียดความปวด (เปิดหน้าต่างใหม่)</title>
-        </rect>
-      )}
       {pains.length > 1 && <path d={path(pains)} fill="none" stroke={INK} strokeWidth={0.9} />}
       {pains.map((p, i) => {
         const care = needsCare(p.e);
@@ -383,6 +423,40 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
           </g>
         );
       })}
+      {/* ช่องคลิกประเมินความปวด (จอเท่านั้น): ชี้แล้วช่องสว่าง คลิกแล้วเปิดแบบประเมินที่เวลาของช่องนั้น
+          ช่องที่ยังไม่ถึงเวลาคลิกไม่ได้ — อยู่บนจุดกราฟ จึงรวมค่าที่ลงไว้ในช่องไว้ใน tooltip ด้วย */}
+      {onPainClick && days.map((d, di) => SLOTS.map((h, si) => {
+        const from = d.hour(si * 4);
+        if (from.isAfter(dayjs())) return null;
+        const list = painCell.get(`${dayKey(d)}|${si}`);
+        const at = d.hour(h);
+        return (
+          <rect key={`pc${di}-${si}`} x={XD + di * DAY_W + si * SLOT_W} y={yPain} width={SLOT_W} height={PAIN_H}
+            fill="transparent" className="cursor-pointer print:hidden hover:fill-rose-300/30 hover:stroke-rose-500"
+            onClick={() => onPainClick(at)}>
+            <title>{`ประเมินความปวด ${beShort(d)} ${String(h).padStart(2, '0')}:00 น. (ช่อง ${String(si * 4).padStart(2, '0')}:00–${String(si * 4 + 3).padStart(2, '0')}:59)${list ? `\nที่ลงไว้:\n${painTip(list)}` : ''}`}</title>
+          </rect>
+        );
+      }))}
+
+      {/* ช่องคลิกบันทึกสัญญาณชีพ (จอเท่านั้น): กราฟ T/P ถึงแถว O₂ therapy ทีละช่องเวลา
+          ชี้แล้วทั้งแถบตั้งสว่าง คลิกแล้วเปิดแบบบันทึกที่เวลาของช่อง · ช่องในอนาคตคลิกไม่ได้ */}
+      {onVitalClick && days.map((d, di) => SLOTS.map((h, si) => {
+        const from = d.hour(si * 4);
+        if (from.isAfter(dayjs())) return null;
+        const list = sheet.vitals.filter(v => { const t = dayjs(v.at); return t.isSame(d, 'day') && slotOf(t) === si; });
+        const tip = list.map(v => `${dayjs(v.at).format('HH:mm')}`
+          + `${v.t !== null ? ` T ${v.t}` : ''}${v.p !== null ? ` P ${v.p}` : ''}${v.r !== null ? ` R ${v.r}` : ''}`
+          + `${v.bp_s !== null && v.bp_d !== null ? ` BP ${v.bp_s}/${v.bp_d}` : ''}${v.spo2 !== null ? ` SpO₂ ${v.spo2}%` : ''}`
+          + `${v.news2_score !== null ? ` NEWS2 ${v.news2_score}` : ''}`).join('\n');
+        return (
+          <rect key={`vc${di}-${si}`} x={XD + di * DAY_W + si * SLOT_W} y={yGraph} width={SLOT_W} height={yPain - yGraph}
+            fill="transparent" className="cursor-pointer print:hidden hover:fill-sky-300/25 hover:stroke-sky-600"
+            onClick={() => onVitalClick(d.hour(h))}>
+            <title>{`${list.length ? 'แก้ไข' : 'บันทึก'}สัญญาณชีพ ${beShort(d)} ${String(h).padStart(2, '0')}:00 น. (ช่อง ${String(si * 4).padStart(2, '0')}:00–${String(si * 4 + 3).padStart(2, '0')}:59)${tip ? `\nที่ลงไว้:\n${tip}` : ''}`}</title>
+          </rect>
+        );
+      }))}
 
       {/* ───── ยา ───── */}
       {label(yMedH, 'Medication')}
@@ -451,10 +525,22 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
       })}
 
       {/* ───── รายวัน ───── */}
-      {[yUrine, yType].map(yy => <React.Fragment key={yy}>{hline(yy, X0, XR, 0.8)}</React.Fragment>)}
+      {[yUrine, yType, yFall].map(yy => <React.Fragment key={yy}>{hline(yy, X0, XR, 0.8)}</React.Fragment>)}
       {label(yStool, 'Stool')}
       {label(yUrine, 'Urine')}
       {label(yType, 'ประเภทผู้ป่วย')}
+      {label(yFall, 'Fall risk (Morse)')}
+      {/* ความเสี่ยงพลัดตกหกล้ม วันละครั้ง: คะแนน + ระดับ (L/M/H) — สีแดงเมื่อเสี่ยงสูง */}
+      {days.map((d, di) => {
+        const f = (sheet.falls ?? []).filter(x => dayjs(x.at).isSame(d, 'day')).pop();
+        if (!f) return null;
+        const lv = FALL_LV[f.risk_level] ?? FALL_LV.low;
+        return (
+          <T key={`fl${di}`} x={XD + di * DAY_W + DAY_W / 2} y={yFall + RH / 2} size={9.5} weight={700} color={lv.color}>
+            {`${f.total_score} ${lv.short}`}
+          </T>
+        );
+      })}
       {days.map((d, di) => {
         const r = dailyOf(d);
         const cx = XD + di * DAY_W + DAY_W / 2;
@@ -464,6 +550,56 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
             {r?.urine_count !== null && r?.urine_count !== undefined && <T x={cx} y={yUrine + RH / 2} size={9}>{r.urine_count}</T>}
             {r?.patient_type && <T x={cx} y={yType + RH / 2} size={9.5} weight={700}>{r.patient_type}</T>}
           </g>
+        );
+      })}
+
+      {/* แถวยา (Medication / continuous / prn dose) คลิกทีละวัน → บันทึกการให้ยา (MAR) ของวันนั้น · วันในอนาคตคลิกไม่ได้ */}
+      {onMedClick && days.map((d, di) => {
+        if (d.isAfter(dayjs(), 'day')) return null;
+        const given = sheet.meds.filter(m => dayjs(m.at).isSame(d, 'day'));
+        const line = (prn: boolean) => given.filter(m => m.prn === prn)
+          .map(m => `${dayjs(m.at).format('HH:mm')} ${m.medication_name}${m.dose_given ? ` ${m.dose_given}` : ''}`).join('\n');
+        const cont = line(false), prn = line(true);
+        return (
+          <rect key={`mc${di}`} x={XD + di * DAY_W} y={yMedH} width={DAY_W} height={yBlank - yMedH}
+            fill="transparent" className="cursor-pointer print:hidden hover:fill-violet-200/40 hover:stroke-violet-500"
+            onClick={() => onMedClick(d)}>
+            <title>{`บันทึกการให้ยา ${beShort(d)}${cont ? `\ncontinuous dose:\n${cont}` : ''}${prn ? `\nprn dose:\n${prn}` : ''}${!cont && !prn ? '\n(ยังไม่มีการให้ยาในวันนี้)' : ''}`}</title>
+          </rect>
+        );
+      })}
+
+      {/* ชั้นคลิกแก้ไข (จอเท่านั้น): I/O ทีละวัน+เวร, รายวันทีละวัน */}
+      {onCellClick && days.map((d, di) => (
+        <g key={`hit${di}`} className="print:hidden">
+          {SHIFTS.map((s, si) => (
+            <rect key={s} x={XD + di * DAY_W + si * SHIFT_W} y={yIn} width={SHIFT_W} height={yStool - yIn}
+              fill="transparent" className="cursor-pointer hover:fill-sky-200/40"
+              onClick={() => onCellClick({ tab: 'io', date: dayKey(d), shift: s })}>
+              <title>{`${shiftOf(d, s) ? 'แก้ไข' : 'บันทึก'} I/O ${beShort(d)} เวร${s}`}</title>
+            </rect>
+          ))}
+          {[[yWt, yIn], [yStool, yFall]].map(([a, b]) => (
+            <rect key={a} x={XD + di * DAY_W} y={a} width={DAY_W} height={b - a}
+              fill="transparent" className="cursor-pointer hover:fill-sky-200/40"
+              onClick={() => onCellClick({ tab: 'daily', date: dayKey(d), shift: SHIFTS[0] })}>
+              <title>{`${dailyOf(d) ? 'แก้ไข' : 'บันทึก'}ข้อมูลรายวัน ${beShort(d)}`}</title>
+            </rect>
+          ))}
+        </g>
+      ))}
+
+      {onFallClick && days.map((d, di) => {
+        if (d.isAfter(dayjs(), 'day')) return null;
+        const f = (sheet.falls ?? []).filter(x => dayjs(x.at).isSame(d, 'day')).pop();
+        return (
+          <rect key={`fc${di}`} x={XD + di * DAY_W} y={yFall} width={DAY_W} height={RH}
+            fill="transparent" className="cursor-pointer print:hidden hover:fill-orange-200/50 hover:stroke-orange-500"
+            onClick={() => onFallClick(d)}>
+            <title>{f
+              ? `แก้ไขการประเมินพลัดตกหกล้ม ${beShort(d)}\nMorse ${f.total_score} คะแนน · ${(FALL_LV[f.risk_level] ?? FALL_LV.low).th} · ${dayjs(f.at).format('HH:mm')} น.${f.nurse_name ? ` · ${f.nurse_name}` : ''}`
+              : `ประเมินความเสี่ยงพลัดตกหกล้ม ${beShort(d)} (วันละ 1 ครั้ง)`}</title>
+          </rect>
         );
       })}
 
@@ -487,6 +623,7 @@ function SheetSvg({ sheet, start, admitDate, patient, onPainClick }: {
       <T x={X0 + 746} y={yLegend + 40} size={9.5} anchor="start" color={BLUE}>● อุณหภูมิ   X ชีพจร</T>
       <T x={X0 + 746} y={yLegend + 58} size={9.5} anchor="start" color={BLUE}>O₂: RA ห้อง · C cannula · M mask</T>
       <T x={X0 + 746} y={yLegend + 76} size={9.5} anchor="start" color={BLUE}>HF HFNC · Vent เครื่องช่วยหายใจ</T>
+      <T x={X0 + 560} y={yLegend + 94} size={9} anchor="start" color={BLUE}>Fall risk: L &lt;25 · M 25-44 · H ≥45</T>
       {/* ความปวด: แถวล่างของกล่องคำอธิบาย เต็มความกว้าง */}
       <line x1={X0} x2={XR} y1={yLegend + 112} y2={yLegend + 112} stroke={BLUE} strokeWidth={1.2} />
       <T x={X0 + 18} y={yLegend + 128} size={10} anchor="start" color={BLUE} weight={700}>ความปวด :</T>
@@ -517,6 +654,19 @@ export default function GraphicSheet({ an }: { an: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [editPos, setEditPos] = useState<EditPos | null>(null);
+  /* ปุ่มบันทึก: เปิดที่วันนี้ เวรปัจจุบัน (ถ้าวันนี้อยู่ในใบ) — คลิกช่องในใบ: เปิดที่ช่องนั้น */
+  const openEdit = useCallback((pos?: EditPos) => {
+    if (!start) return;
+    const today = dayjs().startOf('day');
+    const h = dayjs().hour();
+    setEditPos(prev => pos ?? {
+      tab: prev?.tab ?? 'io',
+      date: (today.isBefore(start) || today.isAfter(start.add(6, 'day')) ? start : today).format('YYYY-MM-DD'),
+      shift: h < 8 ? 'ดึก' : h < 16 ? 'เช้า' : 'บ่าย',
+    });
+    setEditOpen(true);
+  }, [start]);
 
   const admitDate = useMemo(() => {
     const raw = patient?.admitDateTimeIso || patient?.reg_datetime || patient?.regdate;
@@ -546,9 +696,15 @@ export default function GraphicSheet({ an }: { an: string }) {
     })();
   }, [an]);
 
+  /* NEWS2 ≥ 5 ที่ยังไม่มีบันทึกการตาม RRT (72 ชม.) — เตือนบนใบ */
+  const [rrtPending, setRrtPending] = useState<{ id: number; record_datetime: string; news2_score: number; qsofa: { score: number } }[]>([]);
   const load = useCallback(async () => {
     if (!start) return;
     setLoading(true);
+    // ไม่ให้การโหลด RRT ล้มทำให้ใบไม่ขึ้น
+    void axios.get(`/api/v1/nursing-records/rrt/${encodeURIComponent(an)}`, { headers: authHeaders() })
+      .then(r => setRrtPending(r.data?.data?.pending ?? []))
+      .catch(() => setRrtPending([]));
     try {
       const res = await axios.get(`/api/v1/nursing-records/graphic/${an}`, { params: { from: start.format('YYYY-MM-DD') }, headers: authHeaders() });
       setSheet(res.data.data);
@@ -562,16 +718,30 @@ export default function GraphicSheet({ an }: { an: string }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดใบใหม่เมื่อเลื่อนสัปดาห์
   useEffect(() => { void load(); }, [load]);
 
-  /* รายละเอียดความปวด (ตำแหน่ง ลักษณะ การจัดการ ประเมินซ้ำ) ลงในหน้าแบบประเมินความปวด เปิดเป็นหน้าต่างใหม่
-     กลับมาที่ใบนี้เมื่อไหร่ก็โหลดใหม่ จุดในกราฟจะขึ้นทันที */
-  const openPain = useCallback(() => {
-    window.open(`/ipd/nursing-records/pain/${encodeURIComponent(an)}`, `pain-${an}`, 'width=1100,height=900');
-  }, [an]);
-  useEffect(() => {
-    const onFocus = () => { void load(); };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [load]);
+  /* รายละเอียดความปวด (ตำแหน่ง ลักษณะ การจัดการ ประเมินซ้ำ) ลงในลิ้นชักบนหน้านี้ ไม่เปิดแท็บใหม่ (ใช้บนแท็บเล็ตต่อเนื่อง)
+     บันทึก/ลบแล้วโหลดใบใหม่ จุดในกราฟขึ้นทันที */
+  const [painOpen, setPainOpen] = useState(false);
+  /* ปุ่มด้านบน = เวลาปัจจุบัน · คลิกช่องในกราฟ = เวลาของช่องนั้น */
+  const [painAt, setPainAt] = useState<Dayjs | null>(null);
+  const openPain = useCallback((at?: Dayjs) => { setPainAt(at ?? null); setPainOpen(true); }, []);
+  /* สัญญาณชีพ: แบบเดียวกับความปวด — ลิ้นชักบนหน้านี้ คลิกช่องในกราฟ = เปิดที่เวลาของช่อง (มีค่าแล้วเปิดมาให้แก้) */
+  const [vitalOpen, setVitalOpen] = useState(false);
+  const [vitalAt, setVitalAt] = useState<Dayjs | null>(null);
+  const openVital = useCallback((at?: Dayjs) => { setVitalAt(at ?? null); setVitalOpen(true); }, []);
+  /* บันทึกการให้ยา (MAR) — คลิกแถวยาของวันใด เปิด MAR วันนั้นในลิ้นชัก */
+  const [medOpen, setMedOpen] = useState(false);
+  const [medDay, setMedDay] = useState<Dayjs | null>(null);
+  const openMed = useCallback((day?: Dayjs) => { setMedDay((day ?? dayjs()).startOf('day')); setMedOpen(true); }, []);
+  /* การตาม RRT (NEWS2 ≥ 5) และคัดกรอง sepsis — ลิ้นชักบนหน้านี้ */
+  const [rrtOpen, setRrtOpen] = useState(false);
+  /* ความเสี่ยงพลัดตกหกล้ม: คลิกช่องวัน = เปิดแบบประเมินของวันนั้น (วันนี้ = เวลาปัจจุบัน, วันก่อน = 08:00) */
+  const [fallOpen, setFallOpen] = useState(false);
+  const [fallAt, setFallAt] = useState<Dayjs | null>(null);
+  const openFall = useCallback((day?: Dayjs) => {
+    const now = dayjs();
+    setFallAt(!day || day.isSame(now, 'day') ? now : day.startOf('day').hour(8));
+    setFallOpen(true);
+  }, []);
 
   const name = patient?.ptname || patient?.name || patient?.patient_name || '-';
 
@@ -598,10 +768,16 @@ export default function GraphicSheet({ an }: { an: string }) {
             <DatePicker value={start} format="DD/MM/YYYY" allowClear={false} onChange={d => d && setStart(d.startOf('day'))} />
             <Button disabled={!start} onClick={() => setStart(s => s?.add(7, 'day') ?? s)}>7 วันถัดไป <PiCaretRightBold className="inline" /></Button>
           </Space.Compact>
-          <Button type="primary" icon={<PiPencilSimpleBold />} onClick={() => setEditOpen(true)} disabled={!sheet}>บันทึก I/O / รายวัน</Button>
-          <Button icon={<PiThermometerBold />} onClick={openPain}>ประเมินความปวด</Button>
+          <Button type="primary" icon={<PiPencilSimpleBold />} onClick={() => openEdit()} disabled={!sheet}>บันทึก / แก้ไข I/O รายวัน</Button>
+          <Button icon={<PiHeartbeatBold />} onClick={() => openVital()}>บันทึกสัญญาณชีพ</Button>
+          <Button icon={<PiPillBold />} onClick={() => openMed()}>บันทึกการให้ยา</Button>
+          <Button icon={<PiThermometerBold />} onClick={() => openPain()}>ประเมินความปวด</Button>
+          <Button icon={<PiPersonSimpleWalkBold />} onClick={() => openFall()}>Fall risk</Button>
+          <Button icon={<PiPhoneCallBold />} danger={rrtPending.length > 0} onClick={() => setRrtOpen(true)}>
+            RRT{rrtPending.length > 0 ? ` (ค้าง ${rrtPending.length})` : ''}
+          </Button>
           <Button icon={<PiPrinterBold />} onClick={() => window.print()} disabled={!sheet}>พิมพ์</Button>
-          <span className="text-xs text-gray-500">สัญญาณชีพ ความปวด และยา ดึงจากหน้าสัญญาณชีพ แบบประเมินความปวด และ MAR อัตโนมัติ · คลิกที่กราฟความปวดเพื่อลงรายละเอียด</span>
+          <span className="text-xs text-gray-500">สัญญาณชีพ ความปวด และยา ดึงจากหน้าสัญญาณชีพ แบบประเมินความปวด และ MAR อัตโนมัติ · คลิกช่องเวลาในกราฟ T/P (ถึงแถว O₂) เพื่อบันทึก/แก้สัญญาณชีพ · คลิกช่องเวลาในแถวความปวดเพื่อประเมินที่เวลานั้น · คลิกช่อง I/O หรือแถวรายวันในใบเพื่อแก้ค่าที่ลงไว้ · แถวยา (continuous / prn dose) คลิกเพื่อบันทึกการให้ยาของวันนั้น · แถวสุดท้าย Fall risk คลิกเพื่อประเมิน (วันละครั้ง)</span>
         </div>
 
         {sheet && !sheet.storage_ready && (
@@ -609,6 +785,15 @@ export default function GraphicSheet({ an }: { an: string }) {
             description="เซิร์ฟเวอร์ยังไม่ได้สร้างตารางของฟอร์มปรอท (sql/2026-11-26_nursing_graphic_sheet.sql) ส่วนสัญญาณชีพยังแสดงได้ตามปกติ" />
         )}
         {error && <Alert className="print:hidden! mb-3" type="error" showIcon title={error} />}
+        {rrtPending.length > 0 && (
+          <Alert className="print:hidden! mb-3" type="error" showIcon
+            title={<b>NEWS2 ≥ {RRT_NEWS2} ยังไม่มีบันทึกการตาม RRT</b>}
+            description={<span className="text-sm">
+              {rrtPending.slice(0, 4).map(t => `${dayjs(t.record_datetime).format('DD/MM HH:mm')} NEWS2 ${t.news2_score}${t.qsofa.score >= 2 ? ` (qSOFA ${t.qsofa.score})` : ''}`).join(' · ')}
+              {rrtPending.length > 4 ? ` และอีก ${rrtPending.length - 4} ครั้ง` : ''}
+            </span>}
+            action={<Button size="small" danger type="primary" onClick={() => setRrtOpen(true)}>บันทึกการตาม RRT</Button>} />
+        )}
         {sheet && <PainHandover sheet={sheet} />}
 
         {/* ใบแคบกว่า 760px อ่านไม่ออก บนมือถือจึงเลื่อนซ้ายขวาแทนการย่อ */}
@@ -618,16 +803,46 @@ export default function GraphicSheet({ an }: { an: string }) {
               <div className="py-24 text-center"><Spin /></div>
             ) : (
               <Spin spinning={loading}>
-                <SheetSvg sheet={sheet} start={start} admitDate={admitDate} patient={patient} onPainClick={openPain} />
+                <SheetSvg sheet={sheet} start={start} admitDate={admitDate} patient={patient} onPainClick={openPain} onVitalClick={openVital} onFallClick={openFall} onMedClick={openMed} onCellClick={openEdit} />
               </Spin>
             )}
           </div>
         </div>
       </div>
 
-      {sheet && start && (
+      <Drawer open={painOpen} onClose={() => setPainOpen(false)} size="min(1100px, 100vw)" destroyOnHidden
+        title={<span>ประเมินความปวด <span className="font-normal text-gray-500 text-sm">· {name} · HN {patient?.hn ?? '-'} · AN {an}</span></span>}
+        styles={{ body: { background: '#f8fafc', padding: '12px 12px 0' } }}>
+        <PainAssessment key={painAt?.valueOf() ?? 'now'} an={an} embedded initialAt={painAt ?? undefined} onSaved={() => void load()} />
+      </Drawer>
+
+      <Drawer open={vitalOpen} onClose={() => setVitalOpen(false)} size="min(1100px, 100vw)" destroyOnHidden
+        title={<span>บันทึกสัญญาณชีพ <span className="font-normal text-gray-500 text-sm">· {name} · HN {patient?.hn ?? '-'} · AN {an}</span></span>}
+        styles={{ body: { background: '#f8fafc', padding: '12px 12px 0' } }}>
+        <VitalSignsRecord key={vitalAt?.valueOf() ?? 'now'} an={an} embedded initialAt={vitalAt ?? undefined} onSaved={() => void load()} />
+      </Drawer>
+
+      <Drawer open={medOpen} onClose={() => setMedOpen(false)} size="min(1200px, 100vw)" destroyOnHidden
+        title={<span>บันทึกการให้ยา (MAR){medDay ? ` · ${beShort(medDay)}` : ''} <span className="font-normal text-gray-500 text-sm">· {name} · HN {patient?.hn ?? '-'} · AN {an}</span></span>}
+        styles={{ body: { background: '#f8fafc', padding: 12 } }}>
+        {medDay && <MedicationRecord key={medDay.valueOf()} an={an} embedded initialDate={medDay} onSaved={() => void load()} />}
+      </Drawer>
+
+      <Drawer open={rrtOpen} onClose={() => setRrtOpen(false)} size="min(1100px, 100vw)" destroyOnHidden
+        title={<span>การตาม RRT (NEWS2 ≥ {RRT_NEWS2}) และคัดกรอง sepsis <span className="font-normal text-gray-500 text-sm">· {name} · HN {patient?.hn ?? '-'} · AN {an}</span></span>}
+        styles={{ body: { background: '#f8fafc', padding: '12px 12px 0' } }}>
+        <RrtRecord an={an} wardCode={patient?.ward ?? null} wardName={patient?.wardName ?? patient?.ward_name ?? null} onSaved={() => void load()} />
+      </Drawer>
+
+      <Drawer open={fallOpen} onClose={() => setFallOpen(false)} size="min(1100px, 100vw)" destroyOnHidden
+        title={<span>ประเมินความเสี่ยงพลัดตกหกล้ม (Morse){fallAt ? ` · ${beShort(fallAt)}` : ''} <span className="font-normal text-gray-500 text-sm">· {name} · HN {patient?.hn ?? '-'} · AN {an}</span></span>}
+        styles={{ body: { background: '#f8fafc', padding: '12px 12px 0' } }}>
+        {fallAt && <FallRiskAssessment key={fallAt.valueOf()} an={an} embedded initialAt={fallAt} onSaved={() => void load()} />}
+      </Drawer>
+
+      {sheet && start && editPos && (
         <EditDrawer open={editOpen} onClose={() => setEditOpen(false)} an={an} start={start} sheet={sheet}
-          patient={patient} onSaved={() => void load()} />
+          patient={patient} pos={editPos} onPos={setEditPos} onSaved={() => void load()} />
       )}
     </div>
   );
@@ -687,19 +902,24 @@ function VolumeInput({ value, onChange }: { value?: number | null; onChange?: (v
   );
 }
 
-function EditDrawer({ open, onClose, an, start, sheet, patient, onSaved }: {
-  open: boolean; onClose: () => void; an: string; start: Dayjs; sheet: Sheet; patient: Patient | null; onSaved: () => void;
+function EditDrawer({ open, onClose, an, start, sheet, patient, pos, onPos, onSaved }: {
+  open: boolean; onClose: () => void; an: string; start: Dayjs; sheet: Sheet; patient: Patient | null;
+  pos: EditPos; onPos: (p: EditPos) => void; onSaved: () => void;
 }) {
-  const [tab, setTab] = useState<'io' | 'daily'>('io');
-  const [date, setDate] = useState<Dayjs>(() => {
-    const today = dayjs().startOf('day');
-    return today.isBefore(start) || today.isAfter(start.add(6, 'day')) ? start : today;
-  });
-  const [shift, setShift] = useState<string>(() => (dayjs().hour() < 8 ? 'ดึก' : dayjs().hour() < 16 ? 'เช้า' : 'บ่าย'));
+  // message ต้องมาจาก App.useApp() (ThemeProvider ห่อ <App> ไว้แล้ว) ตัว static ไม่ได้รับธีม/context
+  const { message } = App.useApp();
+  const { tab, shift } = pos;
+  const key = pos.date;
+  const setTab = (t: 'io' | 'daily') => onPos({ ...pos, tab: t });
   const [saving, setSaving] = useState(false);
   const [ioForm] = Form.useForm();
   const [dayForm] = Form.useForm();
-  const key = date.format('YYYY-MM-DD');
+  const weekDays = Array.from({ length: 7 }, (_, i) => start.add(i, 'day').format('YYYY-MM-DD'));
+  const hasIo = (d: string, s: string) => sheet.shifts.some(x => x.record_date === d && x.shift === s);
+  const hasDaily = (d: string) => sheet.daily.some(x => x.record_date === d);
+  /* รายการที่ลงไว้ในใบนี้ เรียงตามวัน/เวร — กดเพื่อเปิดมาแก้ */
+  const ioDone = weekDays.flatMap(d => SHIFTS.filter(s => hasIo(d, s)).map(s => ({ d, s })));
+  const dailyDone = weekDays.filter(hasDaily);
 
   /* เปลี่ยนวันหรือเวร = ดึงค่าที่บันทึกไว้แล้วมาให้แก้ ไม่ใช่เริ่มว่างแล้วบันทึกทับ */
   useEffect(() => {
@@ -742,21 +962,73 @@ function EditDrawer({ open, onClose, an, start, sheet, patient, onSaved }: {
   const existing = tab === 'io'
     ? sheet.shifts.find(x => x.record_date === key && x.shift === shift)
     : sheet.daily.find(x => x.record_date === key);
+  const title = `${existing ? 'แก้ไข' : 'บันทึก'}${tab === 'io' ? ` I/O ${beShort(dayjs(key))} เวร${shift}` : `ข้อมูลรายวัน ${beShort(dayjs(key))}`}`;
 
   return (
-    <Drawer open={open} onClose={onClose} title="บันทึกฟอร์มปรอท" size={420} forceRender
-      footer={<Button type="primary" block loading={saving} disabled={!sheet.storage_ready} onClick={save}>บันทึก</Button>}>
+    <Drawer open={open} onClose={onClose} title={title} size={420} forceRender
+      footer={<Button type="primary" block loading={saving} disabled={!sheet.storage_ready} onClick={save}>{existing ? 'บันทึกการแก้ไข' : 'บันทึก'}</Button>}>
+      {/* แถบที่เลือกใน Segmented ไม่มี token รายตัวเลือก จึงทาสีด้วย CSS จากตัวแปร --shift-bg (เฉพาะ .shift-seg) */}
+      <style>{`
+        .shift-seg .ant-segmented-item-selected, .shift-seg .ant-segmented-thumb { background: var(--shift-bg); }
+        .shift-seg .ant-segmented-item { padding: 0 2px; }
+        .shift-seg .ant-segmented-item-label { padding-inline: 0; }
+      `}</style>
       <Segmented block value={tab} onChange={v => setTab(v as 'io' | 'daily')} className="mb-3"
         options={[{ value: 'io', label: 'I/O รายเวร' }, { value: 'daily', label: 'ข้อมูลรายวัน' }]} />
-      <div className="flex gap-2 mb-3">
-        <Select className="flex-1" value={key} onChange={v => setDate(dayjs(v))}
-          options={Array.from({ length: 7 }, (_, i) => start.add(i, 'day')).map(d => ({ value: d.format('YYYY-MM-DD'), label: `${beShort(d)} (${d.format('ddd')})` }))} />
+      <div className="flex flex-col gap-2 mb-3">
+        <Select className="w-full" value={key} onChange={v => onPos({ ...pos, date: v })}
+          options={weekDays.map(d => {
+            const done = tab === 'io' ? SHIFTS.filter(s => hasIo(d, s)).length : (hasDaily(d) ? 1 : 0);
+            return { value: d, label: `${beShort(dayjs(d))} (${dayjs(d).format('ddd')})${done ? (tab === 'io' ? ` · ลงแล้ว ${done}/3 เวร` : ' · ลงแล้ว') : ''}` };
+          })} />
         {tab === 'io' && (
-          <Segmented value={shift} onChange={v => setShift(String(v))} options={SHIFTS.map(s => ({ value: s, label: s }))} />
+          <Segmented block value={shift} onChange={v => onPos({ ...pos, shift: String(v) })}
+            className="shift-seg p-1!" style={{ '--shift-bg': SHIFT_COLOR[shift].bg } as React.CSSProperties}
+            options={SHIFTS.map(s => {
+              const c = SHIFT_COLOR[s];
+              const on = s === shift;
+              return {
+                value: s,
+                label: (
+                  <span className="block rounded font-semibold" style={{ color: on ? c.fg : c.ink, background: on ? 'transparent' : c.soft }}>
+                    <span className="inline-flex items-center justify-center gap-1">
+                      {on && SHIFT_ICON[s]}
+                      {hasIo(key, s) ? `${s} ✓` : s}
+                    </span>
+                  </span>
+                ),
+              };
+            })} />
+        )}
+      </div>
+
+      {/* ที่ลงไว้แล้วในใบนี้ — กดเพื่อเปิดค่ามาแก้ */}
+      <div className="mb-3 rounded-md border border-gray-200 bg-gray-50 p-2">
+        <div className="text-xs font-semibold text-gray-600 mb-1">ที่ลงไว้แล้วในใบนี้ (กดเพื่อแก้)</div>
+        {(tab === 'io' ? ioDone.length : dailyDone.length) === 0 ? (
+          <div className="text-xs text-gray-500">ยังไม่มี{tab === 'io' ? ' I/O' : 'ข้อมูลรายวัน'}ในสัปดาห์นี้</div>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {tab === 'io'
+              ? ioDone.map(({ d, s }) => (
+                <Button key={d + s} size="small" onClick={() => onPos({ ...pos, date: d, shift: s })}
+                  style={d === key && s === shift
+                    ? { background: SHIFT_COLOR[s].bg, color: SHIFT_COLOR[s].fg, borderColor: SHIFT_COLOR[s].bg, fontWeight: 600 }
+                    : { background: SHIFT_COLOR[s].soft, color: SHIFT_COLOR[s].ink, borderColor: SHIFT_COLOR[s].soft }}>
+                  {`${beShort(dayjs(d))} ${s}`}
+                </Button>
+              ))
+              : dailyDone.map(d => (
+                <Button key={d} size="small" type={d === key ? 'primary' : 'default'}
+                  onClick={() => onPos({ ...pos, date: d })}>{beShort(dayjs(d))}</Button>
+              ))}
+          </div>
         )}
       </div>
       {existing?.updated_by_name && (
-        <div className="text-xs text-gray-500 mb-2">บันทึกล่าสุด {existing.updated_at} · {existing.updated_by_name} — บันทึกอีกครั้งจะแก้ค่าเดิม</div>
+        <Alert className="mb-3!" type="info" showIcon
+          title={`กำลังแก้ค่าที่ลงไว้ · ล่าสุด ${existing.updated_at ? dayjs(existing.updated_at).format('DD/MM HH:mm') : ''} น. โดย ${existing.updated_by_name}`}
+          description="แก้ตัวเลขแล้วกดบันทึก จะทับค่าเดิมของช่องนี้" />
       )}
 
       {/* ทั้งสองฟอร์มอยู่ในหน้าเสมอ (ซ่อนอันที่ไม่ได้เลือก) ฟอร์มที่ถูกถอดออกจะเติมค่าเดิมกลับไม่ได้ */}

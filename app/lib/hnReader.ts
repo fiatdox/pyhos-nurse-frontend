@@ -31,33 +31,46 @@ export interface HnReadInput {
     /** เลขที่อ่านได้เองในเบราว์เซอร์ ว่าง = ต้องให้เซิร์ฟเวอร์ทำ OCR */
     candidates: string[];
     source: HnSource | null;
-    /** ภาพสำหรับส่งไปทำ OCR มีเฉพาะตอนที่สองชั้นแรกอ่านไม่ได้ */
+    /** ภาพสำหรับส่งไปทำ OCR — ไม่มีเฉพาะตอนอ่านจากชั้นข้อความของ PDF ได้ (เจอบาร์โค้ดก็ยังส่ง เพราะบาร์โค้ดอาจไม่ใช่ HN) */
     image: Blob | null;
-    /** ภาพเฉพาะบริเวณที่ HN มักอยู่ (ล่างกลาง → ขวาล่าง) เซิร์ฟเวอร์อ่านส่วนนี้ก่อน */
+    /** ภาพเฉพาะบริเวณที่ HN มักอยู่ (แถบล่างสุด + แถบบนสุด เต็มความกว้าง ต่อกันเป็นภาพเดียว) เซิร์ฟเวอร์อ่านส่วนนี้ก่อน */
     roi: Blob | null;
 }
 
 /**
- * บริเวณที่ HN มักอยู่บนใบ order ของที่นี่: มุมขวาล่าง แถวเดียวกับบรรทัดท้ายใบ (ล่าง 15% ของหน้า เริ่มที่ 15% ของความกว้าง)
- * แถบล่างแคบอ่านเร็วกว่าแถบ 40% ราวเท่าตัวหรือมากกว่า และไม่ติดตัวเลขกลางใบ (วันที่/เวลาที่เขียนท้ายรายการยา)
- * ใบที่ HN อยู่สูงกว่านี้ไม่ได้อ่านพลาด แค่ช้าลง เพราะเซิร์ฟเวอร์ถอยไปอ่านทั้งหน้าเอง
+ * บริเวณที่ HN มักอยู่บนใบ order ของที่นี่: แถบล่างสุดของใบ (ล่าง 15% ≈ 4.5 ซม.) และแถบบนสุด (บน 20% ≈ 6 ซม.) เต็มความกว้าง
+ * เต็มความกว้างเพื่อให้ใบที่ HN อยู่ซ้าย/กลาง/ขวาก็อ่านเจอในรอบแรก ไม่ต้องถอยไปอ่านทั้งหน้า
+ * ตัดสองแถบมาต่อกันเป็นภาพเดียว (แถบล่างไว้บน เพราะ HN อยู่ล่างบ่อยกว่า OCR อ่านจากบนลงล่าง เลขจากแถบล่างจึงได้ที่นั่งก่อน)
+ * คั่นด้วยแถบขาว ไม่ให้ OCR ต่อบรรทัดของสองแถบเข้าด้วยกัน
+ * ไม่อ่านส่วนกลางใบ (65%) ในรอบแรก จึงไม่ติดตัวเลขกลางใบ (วันที่/เวลาที่เขียนท้ายรายการยา) ใบที่ HN อยู่กลางใบไม่ได้อ่านพลาด แค่ช้าลง เพราะเซิร์ฟเวอร์ถอยไปอ่านทั้งหน้าเอง
  */
-const HN_REGION = { x: 0.15, y: 0.85, w: 0.85, h: 0.15 };
+const HN_REGIONS = [
+    { x: 0, y: 0.85, w: 1, h: 0.15 },   // ล่าง
+    { x: 0, y: 0, w: 1, h: 0.2 },       // บน (≈ 6 ซม. ของ A4 หัวใบบางแบบ HN อยู่ลึกกว่าแถบล่าง)
+];
 
 /** ตัวเลขเล็กเกินไป OCR อ่านพลาดง่าย ขยายภาพที่ตัดให้ด้านกว้างอย่างน้อยเท่านี้ */
 const ROI_MIN_WIDTH = 1800;
 
 const cropHnRegion = (src: HTMLCanvasElement): HTMLCanvasElement => {
-    const sx = src.width * HN_REGION.x;
-    const sy = src.height * HN_REGION.y;
-    const sw = src.width * HN_REGION.w;
-    const sh = src.height * HN_REGION.h;
+    const sw = src.width;
     const up = Math.min(2, Math.max(1, ROI_MIN_WIDTH / sw));
-    const out = canvasOf(sw * up, sh * up);
+    const gap = Math.round(40 * up);
+    const parts = HN_REGIONS.map(r => ({
+        sx: src.width * r.x, sy: src.height * r.y, sw: src.width * r.w, sh: src.height * r.h,
+    }));
+    const height = parts.reduce((t, p) => t + p.sh * up, 0) + gap * (parts.length - 1);
+    const out = canvasOf(sw * up, height);
     const ctx = out.getContext('2d');
     if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, out.width, out.height);
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, out.width, out.height);
+        let y = 0;
+        for (const p of parts) {
+            ctx.drawImage(src, p.sx, p.sy, p.sw, p.sh, 0, y, p.sw * up, p.sh * up);
+            y += p.sh * up + gap;
+        }
     }
     return out;
 };
@@ -132,6 +145,17 @@ const pdfFirstPage = async (file: File, maxSide = MAX_SIDE): Promise<{ text: str
 
 /** ถอดบาร์โค้ดจากภาพบนผืนผ้าใบ ไม่เจอถือว่าไม่มี ไม่ใช่ข้อผิดพลาด */
 const readBarcode = (canvas: HTMLCanvasElement): string[] => {
+    /*
+      @zxing/library 0.23 พิมพ์ console.warn "MultiFormatReader: non-ReaderException from reader: NotFoundException"
+      ทุกครั้งที่ตัวอ่านแต่ละแบบหาบาร์โค้ดไม่เจอ (NotFoundException ของมันเองไม่ผ่าน instanceof ReaderException)
+      ไม่ใช่ข้อผิดพลาด แต่ Next dev ส่งต่อไปขึ้นใน terminal ทุกไฟล์ที่แนบ จนกลบข้อความที่สำคัญจริง
+      จึงกรองเฉพาะข้อความนี้ระหว่างถอดบาร์โค้ด (decode ทำงานแบบ synchronous คืนค่าเดิมทันทีใน finally)
+    */
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => {
+        if (typeof args[0] === 'string' && args[0].startsWith('MultiFormatReader: non-ReaderException')) return;
+        warn(...args);
+    };
     try {
         const bitmap = new BinaryBitmap(new HybridBinarizer(new HTMLCanvasElementLuminanceSource(canvas)));
         /* ค้นให้ละเอียดขึ้น ยอมช้าได้ บาร์โค้ดบนใบสแกนมักเอียงและอยู่มุมใดมุมหนึ่งของหน้า */
@@ -140,6 +164,8 @@ const readBarcode = (canvas: HTMLCanvasElement): string[] => {
     } catch {
         // ไม่เจอบาร์โค้ดเป็นเรื่องปกติ ใบที่สแกนมาส่วนใหญ่ไม่มี ไม่ใช่ข้อผิดพลาด
         return [];
+    } finally {
+        console.warn = warn;
     }
 };
 
@@ -152,12 +178,18 @@ export const prepareHnRead = async (file: File): Promise<HnReadInput> => {
     const fromText = digitRuns(text);
     if (fromText.length > 0) return { candidates: fromText, source: 'pdf_text', image: null, roi: null };
 
-    const fromBarcode = readBarcode(canvas);
-    if (fromBarcode.length > 0) return { candidates: fromBarcode, source: 'barcode', image: null, roi: null };
-
     const toJpeg = (c: HTMLCanvasElement) => new Promise<Blob | null>(resolve =>
         c.toBlob(b => resolve(b), 'image/jpeg', 0.85));
     const [blob, roi] = await Promise.all([toJpeg(canvas), toJpeg(cropHnRegion(canvas))]);
+
+    /*
+      เจอบาร์โค้ดแล้วยังส่งภาพไปด้วย ไม่หยุดตรงนี้
+      บาร์โค้ดบนใบหลายแบบไม่ใช่ HN (เช่นเลขใบสั่ง 12 หลักเหนือชื่อผู้ป่วย) ส่วน HN พิมพ์ไว้อีกที่เป็น "HN 000XXXXXX"
+      เซิร์ฟเวอร์เช็กเลขบาร์โค้ดกับ HIS ก่อน ถ้าเป็นผู้ป่วยหอนี้ก็ไม่อ่านภาพ ไม่ใช่ค่อยอ่านแถบ HN ต่อ
+    */
+    const fromBarcode = readBarcode(canvas);
+    if (fromBarcode.length > 0) return { candidates: fromBarcode, source: 'barcode', image: blob, roi };
+
     return { candidates: [], source: null, image: blob, roi };
 };
 
