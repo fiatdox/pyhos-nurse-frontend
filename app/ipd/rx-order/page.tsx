@@ -1547,8 +1547,10 @@ export default function RxOrderPage() {
                             <Tooltip title={connected
                                 ? 'ต่อกับเซิร์ฟเวอร์อยู่ สถานะจากห้องยาจะขึ้นเองทันที'
                                 : 'สายหลุด กำลังถามเซิร์ฟเวอร์เป็นระยะแทน และต่อใหม่ให้อัตโนมัติ'}>
-                                <Tag color={connected ? 'green' : 'orange'} className="m-0! flex items-center gap-1">
-                                    {connected ? <PiBroadcastBold /> : <PiPlugsBold />}
+                                {/* ไอคอนกับคำอยู่แถวเดียวกันเสมอ (ไม่ตัดบรรทัดเมื่อหัวการ์ดแคบ) */}
+                                <Tag color={connected ? 'green' : 'orange'}
+                                    icon={connected ? <PiBroadcastBold /> : <PiPlugsBold />}
+                                    className="m-0! inline-flex! items-center gap-1 whitespace-nowrap shrink-0">
                                     {connected ? 'สด' : 'สายหลุด'}
                                 </Tag>
                             </Tooltip>

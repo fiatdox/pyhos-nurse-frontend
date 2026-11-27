@@ -1078,7 +1078,8 @@ export default function PharmacyQueuePage() {
                         : 'สายหลุด กำลังถามเซิร์ฟเวอร์ทุก 10 วินาทีแทน และต่อใหม่ให้อัตโนมัติ'}>
                         <Tag
                             color={connected ? 'green' : 'orange'}
-                            className="m-0! ml-auto flex items-center gap-1"
+                            /* ไอคอนกับคำอยู่แถวเดียวกันเสมอ ไม่ตัดบรรทัดเมื่อแถบเครื่องมือแคบ */
+                            className="m-0! ml-auto inline-flex! items-center gap-1 whitespace-nowrap shrink-0"
                             icon={connected ? <PiBroadcastBold /> : <PiPlugsBold />}
                         >
                             {connected ? 'เชื่อมต่อแล้ว' : 'สายหลุด · ใช้การถามเป็นระยะ'}
